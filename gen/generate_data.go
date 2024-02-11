@@ -77,6 +77,10 @@ func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch cha
 				row.Zip = gf.Zip()
 			case "Country":
 				row.Country = gf.Country()
+				if row.Country != "United States of America" {
+					row.State = ""
+					row.City = ""
+				}
 			default:
 				fmt.Printf("Unknown column: %s\n", col)
 			}
