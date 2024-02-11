@@ -50,9 +50,9 @@ func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch cha
 			case "Company":
 				row.Company = gf.Company()
 			case "Price":
-				row.Price = gf.Price(4.99, 399.99)
+				row.Price = gf.Price(1.99, 399.99)
 			case "Quantity":
-				row.Quantity = gf.Number(1, 50)
+				row.Quantity = gf.Number(1, 499)
 			case "Discount":
 				row.Discount = gf.Float64Range(0.0, 0.66)
 			case "TotalPrice":
@@ -80,6 +80,7 @@ func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch cha
 				if row.Country != "United States of America" {
 					row.State = ""
 					row.City = ""
+					row.Address = ""
 				}
 			default:
 				fmt.Printf("Unknown column: %s\n", col)
