@@ -33,10 +33,13 @@ type Row struct {
 func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch chan<- Row) {
 	defer wg.Done()
 
-	startTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	endTime := time.Now()
+	var timing = time.Now()
 
 	for i := 0; i < numRows; i++ {
+
+		startTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+		endTime := time.Now()
+
 		row := Row{}
 
 		for _, col := range selectedCols {
@@ -92,6 +95,6 @@ func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch cha
 
 	close(ch)
 
-	elapsedTime := time.Since(startTime)
+	elapsedTime := time.Since(timing)
 	fmt.Printf("Data generation took %s\n", elapsedTime)
 }
