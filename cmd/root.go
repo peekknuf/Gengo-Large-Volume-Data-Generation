@@ -11,11 +11,16 @@ var rootCmd = &cobra.Command{
 	Use:   "Data Gen",
 	Short: "A brief description of your application",
 	Long: `Welcome to Gengo.
-This tool is created for people to be able to create fake datasets quickly.`,
+Create fake datasets quickly.
+Just type in ./Gengo gen`,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println(logoStyle.Render(cmd.Long))
+		fmt.Printf("%s\n", logoStyle.Render(logo))
+	},
 }
 
 var generateCmd = &cobra.Command{
-	Use:   "generate",
+	Use:   "gen",
 	Short: "Generate e-commerce data",
 	Long:  `Generate e-commerce data based on predefine columns.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -30,7 +35,7 @@ var generateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(generateCmd)
-	
+
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 

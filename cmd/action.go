@@ -5,7 +5,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	lipgloss "github.com/charmbracelet/lipgloss"
 )
+
+var logoStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#8A2BE2")).
+	Italic(true).
+	Bold(true)
 
 var (
 	outputFilename string
@@ -91,3 +98,11 @@ func addUnderscores(n int) string {
 	}
 	return strings.Join(parts, "_")
 }
+
+const logo = `
+___          ___     
+/ __|___ _ _ / __|___ 
+| (_ / -_) ' \ (_ / _ \
+\___\___|_||_\___\___/
+					  
+`
