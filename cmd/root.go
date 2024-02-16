@@ -14,8 +14,8 @@ var rootCmd = &cobra.Command{
 Create fake datasets quickly.
 Just type in ./Gengo gen`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(logoStyle.Render(cmd.Long))
 		fmt.Printf("%s\n", logoStyle.Render(logo))
+		fmt.Println(logoStyle.Render(cmd.Long))
 	},
 }
 

@@ -1,11 +1,12 @@
-module github.com/peekknuf/go_cli
+module github.com/peekknuf/Gengo
 
 go 1.21.6
 
 require github.com/brianvoe/gofakeit/v6 v6.28.0
 
 require github.com/spf13/cobra v1.8.0
-require	github.com/charmbracelet/lipgloss v0.9.1 
+
+require github.com/charmbracelet/lipgloss v0.9.1
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

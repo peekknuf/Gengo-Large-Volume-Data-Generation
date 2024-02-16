@@ -1,6 +1,6 @@
 package main
 
-import "github.com/peekknuf/go_cli/cmd"
+import "github.com/peekknuf/Gengo/cmd"
 
 func main() {
 	cmd.Execute()
