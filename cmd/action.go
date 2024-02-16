@@ -14,7 +14,7 @@ var (
 )
 
 func GenerateData(numRows int, outputFilename string, selectedCols []string) {
-	ch := make(chan sc.Row, 1000)
+	ch := make(chan sc.Row, 100000)
 
 	var wg sync.WaitGroup
 

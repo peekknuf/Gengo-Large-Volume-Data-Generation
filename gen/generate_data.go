@@ -8,7 +8,6 @@ import (
 	gf "github.com/brianvoe/gofakeit/v6"
 )
 
-
 type Row struct {
 	ID          int
 	Timestamp   time.Time
@@ -94,6 +93,6 @@ func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch cha
 
 	close(ch)
 
-	elapsedTime := time.Since(timing)
-	fmt.Printf("Data generation took %s\n", elapsedTime)
+	elapsedTime := time.Since(timing).Seconds()
+	fmt.Printf("Data generation took %.2f s\n", elapsedTime)
 }

@@ -10,7 +10,8 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "Data Gen",
 	Short: "A brief description of your application",
-	Long:  `This tool is designed and created for people to be able to create fake datasets quickly.`,
+	Long:  `Welcome to Gengo.
+This tool is designed and created for people to be able to create fake datasets quickly.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
@@ -35,7 +36,7 @@ func Execute() {
 func init() {
 	rootCmd.AddCommand(generateCmd)
 
-	rootCmd.Flags().IntVarP(&numRows, "rows", "r", 3000000, "Number of rows to generate")
+	rootCmd.Flags().IntVarP(&numRows, "rows", "r", 1000000, "Number of rows to generate")
 	rootCmd.Flags().StringVarP(&outputFilename, "output", "o", "ecommerce_data.csv", "Output filename")
 	rootCmd.Flags().StringSliceVarP(&selectedCols, "columns", "c", []string{
 		"ID", "Timestamp", "ProductName", "Company", "Price", "Quantity", "Discount", "TotalPrice", "CustomerID", "FirstName", "LastName", "Email", "Address", "City", "State", "Zip", "Country"},
