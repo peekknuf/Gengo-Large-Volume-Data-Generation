@@ -1,4 +1,4 @@
-package gen
+package cmd
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ type Row struct {
 	Country     string
 }
 
-func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch chan<- Row) {
+func simulatingData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch chan<- Row) {
 	defer wg.Done()
 
 	var timing = time.Now()

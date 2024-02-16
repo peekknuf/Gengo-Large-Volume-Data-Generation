@@ -1,4 +1,4 @@
-package gen
+package cmd
 
 import (
 	"encoding/csv"

@@ -2,29 +2,92 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
-
-	sc "github.com/peekknuf/go_cli/gen"
 )
 
 var (
-	numRows        int
 	outputFilename string
-	selectedCols   []string
+	selectedCols   = []string{
+		"ID",
+		"Timestamp",
+		"ProductName",
+		"Company",
+		"Price",
+		"Quantity",
+		"Discount",
+		"TotalPrice",
+		"CustomerID",
+		"FirstName",
+		"LastName",
+		"Email",
+		"Address",
+		"City",
+		"State",
+		"Zip",
+		"Country",
+	}
 )
 
+func getUserInput() (int, string, error) {
+
+	var numRowsStr string
+	// parsing underscores in the input
+	// 0s are tricky and so writing it as 100_000_000 is far more comfortable.
+	fmt.Print("Enter the number of rows (preferably a big one): ")
+	if _, err := fmt.Scanln(&numRowsStr); err != nil {
+		return 0, "", err
+	}
+	numRowsStr = strings.ReplaceAll(numRowsStr, "_", "")
+
+	numRows, err := strconv.Atoi(numRowsStr)
+	if err != nil {
+		return 0, "", err
+	}
+
+	fmt.Print("Enter the output filename(without extension): ")
+	if _, err := fmt.Scanln(&outputFilename); err != nil {
+		return 0, "", err
+	}
+
+	outputFilename += ".csv"
+
+	return numRows, outputFilename, nil
+}
+
 func GenerateData(numRows int, outputFilename string, selectedCols []string) {
-	ch := make(chan sc.Row, 100000)
+	ch := make(chan Row, 1000)
 
 	var wg sync.WaitGroup
 
 	wg.Add(1)
-	go sc.GenerateData(numRows, selectedCols, &wg, ch)
+	go simulatingData(numRows, selectedCols, &wg, ch)
 
 	wg.Add(1)
-	go sc.WriteToCSV(outputFilename, ch, &wg, selectedCols)
+	go WriteToCSV(outputFilename, ch, &wg, selectedCols)
 
 	wg.Wait()
 
-	fmt.Printf("Generated %d rows of e-commerce data and saved to %s\n", numRows, outputFilename)
+	numRowsWithUnderscores := addUnderscores(numRows)
+
+	fmt.Printf("Generated %s rows of e-commerce data and saved to %s\n", numRowsWithUnderscores, outputFilename)
+}
+
+// ouput readability
+func addUnderscores(n int) string {
+	str := strconv.Itoa(n)
+	var parts []string
+	for len(str) > 3 {
+		parts = append(parts, str[len(str)-3:])
+		str = str[:len(str)-3]
+	}
+	if len(str) > 0 {
+		parts = append(parts, str)
+	}
+	for i := len(parts)/2 - 1; i >= 0; i-- {
+		opp := len(parts) - 1 - i
+		parts[i], parts[opp] = parts[opp], parts[i]
+	}
+	return strings.Join(parts, "_")
 }
