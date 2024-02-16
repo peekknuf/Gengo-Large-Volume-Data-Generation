@@ -15,7 +15,7 @@ Create fake datasets quickly.
 Just type in ./Gengo gen`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("%s\n", logoStyle.Render(logo))
-		fmt.Println(logoStyle.Render(cmd.Long))
+		fmt.Println(cmd.Long)
 	},
 }
 
