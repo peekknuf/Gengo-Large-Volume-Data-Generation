@@ -8,7 +8,7 @@ import (
 	gf "github.com/brianvoe/gofakeit/v6"
 )
 
-// Row represents a data row.
+
 type Row struct {
 	ID          int
 	Timestamp   time.Time
@@ -29,7 +29,6 @@ type Row struct {
 	Country     string
 }
 
-// GenerateData generates data and sends it to the provided channel.
 func GenerateData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch chan<- Row) {
 	defer wg.Done()
 
