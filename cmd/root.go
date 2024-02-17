@@ -12,7 +12,11 @@ var rootCmd = &cobra.Command{
 	Short: "A brief description of your application",
 	Long: `Welcome to Gengo.
 Create fake datasets quickly.
-Just type in ./Gengo gen`,
+
+Just type in: 
+go build
+./Gengo gen
+and follow through`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("%s\n", logoStyle.Render(logo))
 		fmt.Println(cmd.Long)
