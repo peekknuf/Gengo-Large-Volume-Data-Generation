@@ -57,7 +57,8 @@ func getUserInput() (int, string, error) {
 	if _, err := fmt.Scanln(&outputFilename); err != nil {
 		return 0, "", err
 	}
-
+	// as for now only csv is supported, in the future might add parquet as well
+	// it would make a lot of sense for analytical purposes and would greatly reduce size
 	outputFilename += ".csv"
 
 	return numRows, outputFilename, nil
@@ -75,7 +76,9 @@ func GenerateData(numRows int, outputFilename string, selectedCols []string) {
 	go WriteToCSV(outputFilename, ch, &wg, selectedCols)
 
 	wg.Wait()
-
+	// so as there's functionality for writing the input w the underscores
+	// the output is gonna be with underscores regardless of the input
+	//once again, better readability. 123123123 can be hard, but 123_123_123 is miles better.
 	numRowsWithUnderscores := addUnderscores(numRows)
 
 	fmt.Printf("Generated %s rows of e-commerce data and saved to %s\n", numRowsWithUnderscores, outputFilename)
