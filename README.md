@@ -21,8 +21,6 @@ go build
 ./Gengo gen
 ```
 
-The program will prompt you to enter the number of rows and the name of the output file (always saves to CSV format (for now)).
+You will be prompted to enter the number of rows and the name of the output file. After providing the required inputs, the program will generate the dataset and save it to the specified CSV file.(csv only for now)
 
-You will be prompted to enter the number of rows and the name of the output file. After providing the required inputs, the program will generate the dataset and save it to the specified CSV file.
-
-You can always change the code according to your specific needs, or if you don't really care just leave it as is
+You can always change the code according to your specific needs, after all gofakeit is very straighforward, or if you don't really care just leave it as is
