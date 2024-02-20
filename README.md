@@ -21,7 +21,5 @@ You can always change the code according to your specific needs, after all gofak
 
 ## Benchmarks
 
-<div>
-    <img src="output_100m.png" alt="Output 100m" style="display:inline; margin-right: 10px;" />
-    <img src="output_comparison.png" alt="Output Comparison" style="display:inline;" />
-</div>
+[<img src="output_100m.png" width="200" height="auto">](output_100m.png)
+[<img src="output_comparison.png" width="200" height="auto">](output_comparison.png)
