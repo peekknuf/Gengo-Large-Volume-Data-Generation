@@ -18,3 +18,10 @@ go build
 You will be prompted to enter the number of rows and the name of the output file. After providing the required inputs, the program will generate the dataset and save it to the specified CSV file.(csv only for now)
 
 You can always change the code according to your specific needs, after all gofakeit is very straighforward, or if you don't really care just leave it as is
+
+## Benchmarks
+
+<div>
+    <img src="output_100m.png" alt="Output 100m" style="display:inline; margin-right: 10px;" />
+    <img src="output_comparison.png" alt="Output Comparison" style="display:inline;" />
+</div>
