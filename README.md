@@ -1,9 +1,13 @@
 # Gengo
 
-___          ___     
-/ __|___ _ _ / __|___ 
-| (_ / -_) ' \ (_ / _ \
-\___\___|_||_\___\___/
+ _____                        
+|  __ \                       
+| |  \/ ___ _ __   __ _  ___  
+| | __ / _ \ '_ \ / _` |/ _ \ 
+| |_\ \  __/ | | | (_| | (_) |
+ \____/\___|_| |_|\__, |\___/ 
+                   __/ |      
+                  |___/       
 
 
 Gengo is a command-line interface (CLI) tool designed to generate large fake datasets quickly. 
