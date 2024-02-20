@@ -1,15 +1,5 @@
 # Gengo
 
- _____                        
-|  __ \                       
-| |  \/ ___ _ __   __ _  ___  
-| | __ / _ \ '_ \ / _` |/ _ \ 
-| |_\ \  __/ | | | (_| | (_) |
- \____/\___|_| |_|\__, |\___/ 
-                   __/ |      
-                  |___/       
-
-
 Gengo is a command-line interface (CLI) tool designed to generate large fake datasets quickly. 
 It enables users to simulate massive amounts of data for testing, development, or educational purposes. 
 With Gengo, you can effortlessly create datasets containing hundreds of millions of rows in just a matter of minutes.
