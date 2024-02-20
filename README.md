@@ -21,5 +21,5 @@ You can always change the code according to your specific needs, after all gofak
 
 ## Benchmarks
 
-[<img src="output_100m.png" width="200" height="auto">](output_100m.png)
-[<img src="output_comparison.png" width="200" height="auto">](output_comparison.png)
+[<img src="output_100m.png" width="400" height="auto">](output_100m.png)
+[<img src="output_comparison.png" width="400" height="auto">](output_comparison.png)
