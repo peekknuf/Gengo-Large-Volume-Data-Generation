@@ -4,6 +4,8 @@ Gengo is a command-line interface (CLI) tool designed to generate large fake dat
 It enables users to simulate massive amounts of data for testing, development, or educational purposes. 
 With Gengo, you can effortlessly create datasets containing hundreds of millions of rows in just a matter of minutes.
 
+The idea behind this is that doing the same thing using Python was incredibly slow. 
+
 ## Installation
 
 To install Gengo, follow these steps:
