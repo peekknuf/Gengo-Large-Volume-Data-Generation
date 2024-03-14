@@ -25,7 +25,6 @@ var (
 		"Quantity",
 		"Discount",
 		"TotalPrice",
-		"CustomerID",
 		"FirstName",
 		"LastName",
 		"Email",

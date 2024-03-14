@@ -48,8 +48,6 @@ func WriteToCSV(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCols
 				record[i] = fmt.Sprintf("%.2f", row.Discount)
 			case "TotalPrice":
 				record[i] = fmt.Sprintf("%.2f", row.TotalPrice)
-			case "CustomerID":
-				record[i] = strconv.Itoa(row.CustomerID)
 			case "FirstName":
 				record[i] = row.FirstName
 			case "LastName":

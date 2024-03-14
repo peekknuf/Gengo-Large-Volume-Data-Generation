@@ -17,7 +17,6 @@ type Row struct {
 	Quantity    int
 	Discount    float64
 	TotalPrice  float64
-	CustomerID  int
 	FirstName   string
 	LastName    string
 	Email       string
@@ -60,8 +59,6 @@ func simulatingData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch c
 				price := gf.Price(4.99, 399.99)
 				discount := gf.Float64Range(0.0, 0.66)
 				row.TotalPrice = price * (1 - discount)
-			case "CustomerID":
-				row.CustomerID = gf.Number(1, 99999)
 			case "FirstName":
 				row.FirstName = gf.FirstName()
 			case "LastName":
