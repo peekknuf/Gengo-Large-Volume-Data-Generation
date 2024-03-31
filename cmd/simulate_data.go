@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	gf "github.com/brianvoe/gofakeit/v6"
+	"strings"
 	"sync"
 	"time"
-
-	gf "github.com/brianvoe/gofakeit/v6"
 )
 
 type Row struct {
@@ -30,7 +30,7 @@ type Row struct {
 func simulatingData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch chan<- Row) {
 	defer wg.Done()
 
-	var timing = time.Now()
+	timing := time.Now()
 
 	for i := 0; i < numRows; i++ {
 
@@ -55,16 +55,15 @@ func simulatingData(numRows int, selectedCols []string, wg *sync.WaitGroup, ch c
 				row.Quantity = gf.Number(1, 499)
 			case "Discount":
 				row.Discount = gf.Float64Range(0.0, 0.66)
-			case "TotalPrice":
-				price := gf.Price(4.99, 399.99)
-				discount := gf.Float64Range(0.0, 0.66)
-				row.TotalPrice = price * (1 - discount)
 			case "FirstName":
 				row.FirstName = gf.FirstName()
 			case "LastName":
 				row.LastName = gf.LastName()
 			case "Email":
 				row.Email = gf.Email()
+				if !strings.Contains(row.Email, "gmail.com") {
+					row.Email = ""
+				}
 			case "Address":
 				row.Address = gf.Address().Address
 			case "City":
