@@ -22,7 +22,6 @@ func WriteToCSV(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCols
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	
 	if err := writer.Write(selectedCols); err != nil {
 		fmt.Println("Error writing header:", err)
 		return
@@ -46,8 +45,6 @@ func WriteToCSV(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCols
 				record[i] = strconv.Itoa(row.Quantity)
 			case "Discount":
 				record[i] = fmt.Sprintf("%.2f", row.Discount)
-			case "TotalPrice":
-				record[i] = fmt.Sprintf("%.2f", row.TotalPrice)
 			case "FirstName":
 				record[i] = row.FirstName
 			case "LastName":

@@ -9,6 +9,8 @@ import (
 	lipgloss "github.com/charmbracelet/lipgloss"
 )
 
+var outputFormat string
+
 var logoStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#8A2BE2")).
 	Italic(true).
@@ -24,7 +26,6 @@ var (
 		"Price",
 		"Quantity",
 		"Discount",
-		"TotalPrice",
 		"FirstName",
 		"LastName",
 		"Email",
@@ -37,10 +38,9 @@ var (
 )
 
 func getUserInput() (int, string, error) {
-
-	var numRowsStr string
 	// parsing underscores in the input
-	// 0s are tricky and so writing it as 100_000_000 is far more comfortable.
+	// 0s are tricky and so writing it, let's say, as 100_000_000 is far more comfortable.
+	var numRowsStr string
 	fmt.Print("Enter the number of rows (preferably a big one): ")
 	if _, err := fmt.Scanln(&numRowsStr); err != nil {
 		return 0, "", err
@@ -52,19 +52,27 @@ func getUserInput() (int, string, error) {
 		return 0, "", err
 	}
 
-	fmt.Print("Enter the output filename(without extension): ")
-	if _, err := fmt.Scanln(&outputFilename); err != nil {
+	fmt.Print("Enter the desired format (csv/json): ")
+	if _, err := fmt.Scanln(&outputFormat); err != nil {
 		return 0, "", err
 	}
-	// as for now only csv is supported, in the future might add parquet as well
-	// it would make a lot of sense for analytical purposes and would greatly reduce size
-	outputFilename += ".csv"
+
+	outputFilename := ""
+	if outputFormat == "csv" || outputFormat == "json" {
+		fmt.Print("Enter the output filename (without extension): ")
+		if _, err := fmt.Scanln(&outputFilename); err != nil {
+			return 0, "", err
+		}
+		outputFilename += "." + outputFormat
+	} else {
+		return 0, "", fmt.Errorf("unsupported output format")
+	}
 
 	return numRows, outputFilename, nil
 }
 
 func GenerateData(numRows int, outputFilename string, selectedCols []string) {
-	ch := make(chan Row, 1000)
+	ch := make(chan Row, 100)
 
 	var wg sync.WaitGroup
 
@@ -72,12 +80,16 @@ func GenerateData(numRows int, outputFilename string, selectedCols []string) {
 	go simulatingData(numRows, selectedCols, &wg, ch)
 
 	wg.Add(1)
-	go WriteToCSV(outputFilename, ch, &wg, selectedCols)
+	if outputFormat == "csv" {
+		go WriteToCSV(outputFilename, ch, &wg, selectedCols)
+	} else if outputFormat == "json" {
+		go WriteToJSON(outputFilename, ch, &wg, selectedCols)
+	}
 
 	wg.Wait()
 	// so as there's functionality for writing the input w the underscores
 	// the output is gonna be with underscores regardless of the input
-	//once again, better readability. 123123123 can be hard, but 123_123_123 is miles better.
+	// once again, better readability. 123123123 can be hard, but 123_123_123 is miles better.
 	numRowsWithUnderscores := addUnderscores(numRows)
 
 	fmt.Printf("Generated %s rows of e-commerce data and saved to %s\n", numRowsWithUnderscores, outputFilename)

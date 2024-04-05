@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -25,13 +26,14 @@ and follow through`,
 var generateCmd = &cobra.Command{
 	Use:   "gen",
 	Short: "Generate e-commerce data",
-	Long:  `Generate e-commerce data based on predefine columns.`,
+	Long:  `Generate e-commerce data based on predefined columns.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		numRows, outputFilename, err := getUserInput()
 		if err != nil {
 			fmt.Println("Error:", err)
 			os.Exit(1)
 		}
+
 		GenerateData(numRows, outputFilename, selectedCols)
 	},
 }
