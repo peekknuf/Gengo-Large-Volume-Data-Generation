@@ -19,6 +19,8 @@ go build
 
 You will be prompted to enter the number of rows and the name of the output file. After providing the required inputs, the program will generate the dataset and save it to the specified CSV file.(csv only for now) <- NOT ANYMORE
 
+![Little silly preview](rec.gif)
+
 Added support for json! as of 06/04/2024
 plans for .parquet for the future 
 
