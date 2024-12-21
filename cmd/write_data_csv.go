@@ -45,6 +45,8 @@ func WriteToCSV(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCols
 				record[i] = strconv.Itoa(row.Quantity)
 			case "Discount":
 				record[i] = fmt.Sprintf("%.2f", row.Discount)
+			case "TotalPrice":
+				record[i] = fmt.Sprintf("%.2f", row.TotalPrice)
 			case "FirstName":
 				record[i] = row.FirstName
 			case "LastName":
@@ -61,6 +63,16 @@ func WriteToCSV(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCols
 				record[i] = row.Zip
 			case "Country":
 				record[i] = row.Country
+			case "OrderStatus":
+				record[i] = row.OrderStatus
+			case "PaymentMethod":
+				record[i] = row.PaymentMethod
+			case "ShippingAddress":
+				record[i] = row.ShippingAddress
+			case "ProductCategory":
+				record[i] = row.ProductCategory
+			default:
+				fmt.Printf("Unknown column: %s\n", col)
 			}
 		}
 		if err := writer.Write(record); err != nil {

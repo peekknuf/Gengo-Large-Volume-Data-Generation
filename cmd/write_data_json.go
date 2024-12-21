@@ -19,6 +19,7 @@ func WriteToJSON(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCol
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ") // pretty print JSON
 
 	for row := range ch {
 		record := make(map[string]interface{})
@@ -38,6 +39,8 @@ func WriteToJSON(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCol
 				record["Quantity"] = row.Quantity
 			case "Discount":
 				record["Discount"] = row.Discount
+			case "TotalPrice":
+				record["TotalPrice"] = row.TotalPrice
 			case "FirstName":
 				record["FirstName"] = row.FirstName
 			case "LastName":
@@ -54,6 +57,16 @@ func WriteToJSON(filename string, ch <-chan Row, wg *sync.WaitGroup, selectedCol
 				record["Zip"] = row.Zip
 			case "Country":
 				record["Country"] = row.Country
+			case "OrderStatus":
+				record["OrderStatus"] = row.OrderStatus
+			case "PaymentMethod":
+				record["PaymentMethod"] = row.PaymentMethod
+			case "ShippingAddress":
+				record["ShippingAddress"] = row.ShippingAddress
+			case "ProductCategory":
+				record["ProductCategory"] = row.ProductCategory
+			default:
+				fmt.Printf("Unknown column: %s\n", col)
 			}
 		}
 		if err := encoder.Encode(record); err != nil {

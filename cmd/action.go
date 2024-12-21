@@ -17,8 +17,7 @@ var logoStyle = lipgloss.NewStyle().
 	Bold(true)
 
 var (
-	outputFilename string
-	selectedCols   = []string{
+	selectedCols = []string{
 		"ID",
 		"Timestamp",
 		"ProductName",
@@ -34,6 +33,10 @@ var (
 		"State",
 		"Zip",
 		"Country",
+		"OrderStatus",
+		"PaymentMethod",
+		"ShippingAddress",
+		"ProductCategory",
 	}
 )
 
@@ -52,13 +55,13 @@ func getUserInput() (int, string, error) {
 		return 0, "", err
 	}
 
-	fmt.Print("Enter the desired format (csv/json): ")
+	fmt.Print("Enter the desired format (csv/json/parquet): ")
 	if _, err := fmt.Scanln(&outputFormat); err != nil {
 		return 0, "", err
 	}
 
 	outputFilename := ""
-	if outputFormat == "csv" || outputFormat == "json" {
+	if outputFormat == "csv" || outputFormat == "json" || outputFormat == "parquet" {
 		fmt.Print("Enter the output filename (without extension): ")
 		if _, err := fmt.Scanln(&outputFilename); err != nil {
 			return 0, "", err
@@ -84,6 +87,8 @@ func GenerateData(numRows int, outputFilename string, selectedCols []string) {
 		go WriteToCSV(outputFilename, ch, &wg, selectedCols)
 	} else if outputFormat == "json" {
 		go WriteToJSON(outputFilename, ch, &wg, selectedCols)
+	} else if outputFormat == "parquet" {
+		go WriteToParquet(outputFilename, ch, &wg, selectedCols)
 	}
 
 	wg.Wait()
