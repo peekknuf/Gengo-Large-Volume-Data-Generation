@@ -17,12 +17,12 @@ go build
 ./Gengo gen
 ```
 
-You will be prompted to enter the number of rows and the name of the output file. After providing the required inputs, the program will generate the dataset and save it to the specified CSV file.(csv only for now) <- NOT ANYMORE
+You will be prompted to enter the number of rows and the name of the output file. After providing the required inputs, the program will generate the dataset and save it to the specified CSV file.(csv only for now) <- NOT ANYMORE <- NOT ANYMORE X2
 
 ![Little silly preview](rec.gif)
 
-Added support for json! as of 06/04/2024
-plans for .parquet for the future 
+Added support for json! as of 06/04/2024 
+plans for .parquet for the future (IT TOOK ME A WHILE BUT IT'S DONE)
 
 You can always change the code according to your specific needs, after all gofakeit is very straighforward, or if you don't really care just leave it as is
 
