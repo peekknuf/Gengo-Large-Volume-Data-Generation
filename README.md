@@ -78,6 +78,10 @@ Want different fake data? The generation logic is mainly in the `simulatingData`
 
 [<img src="output_comparison.png" width="400" height="auto">](output_comparison.png)
 
+1 Million Rows size comparison
+
+[<img src='gengo_size_comparison_1M.png' width="400" height="auto">](gengo_size_comparison_1M.png)
+
 *(Note: Actual performance will vary based on your hardware.)*
 ---
 
