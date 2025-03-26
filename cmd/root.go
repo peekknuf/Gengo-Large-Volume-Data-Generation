@@ -25,16 +25,23 @@ and follow through`,
 
 var generateCmd = &cobra.Command{
 	Use:   "gen",
-	Short: "Generate e-commerce data",
-	Long:  `Generate e-commerce data based on predefined columns.`,
+	Short: "Generate synthetic e-commerce data",
+	Long:  `Generates synthetic e-commerce data with predefined columns and saves it to the specified format (CSV, JSON, Parquet).`,
 	Run: func(cmd *cobra.Command, args []string) {
-		numRows, outputFilename, err := getUserInput()
+		fmt.Println("Starting data generation process...")
+
+		numRows, outputTarget, format, err := getUserInput()
 		if err != nil {
-			fmt.Println("Error:", err)
+			fmt.Println("\nError getting user input:", err)
 			os.Exit(1)
 		}
 
-		GenerateData(numRows, outputFilename, selectedCols)
+		fmt.Printf("Configuration: %s rows, Format: %s, Output: %s\n", addUnderscores(numRows), format, outputTarget)
+		fmt.Println("Generating data (this might take a while for large row counts)...")
+
+		GenerateData(numRows, outputTarget, format, selectedCols)
+
+		fmt.Println("\nProcess completed.")
 	},
 }
 

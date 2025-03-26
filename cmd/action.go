@@ -16,88 +16,132 @@ var logoStyle = lipgloss.NewStyle().
 	Italic(true).
 	Bold(true)
 
-var (
-	selectedCols = []string{
-		"ID",
-		"Timestamp",
-		"ProductName",
-		"Company",
-		"Price",
-		"Quantity",
-		"Discount",
-		"FirstName",
-		"LastName",
-		"Email",
-		"Address",
-		"City",
-		"State",
-		"Zip",
-		"Country",
-		"OrderStatus",
-		"PaymentMethod",
-		"ShippingAddress",
-		"ProductCategory",
-	}
-)
+var selectedCols = []string{
+	"ID",
+	"Timestamp",
+	"ProductName",
+	"Company",
+	"Price",
+	"Quantity",
+	"Discount",
+	"FirstName",
+	"LastName",
+	"Email",
+	"Address",
+	"City",
+	"State",
+	"Zip",
+	"Country",
+	"OrderStatus",
+	"PaymentMethod",
+	"ShippingAddress",
+	"ProductCategory",
+}
 
-func getUserInput() (int, string, error) {
+// --- User Input ---
+
+func getUserInput() (numRows int, outputTarget string, format string, err error) {
 	// parsing underscores in the input
-	// 0s are tricky and so writing it, let's say, as 100_000_000 is far more comfortable.
 	var numRowsStr string
-	fmt.Print("Enter the number of rows (preferably a big one): ")
-	if _, err := fmt.Scanln(&numRowsStr); err != nil {
-		return 0, "", err
+	fmt.Print("Enter the number of rows (e.g., 1_000_000): ")
+	if _, scanErr := fmt.Scanln(&numRowsStr); scanErr != nil {
+		err = fmt.Errorf("error reading number of rows: %w", scanErr)
+		return
 	}
 	numRowsStr = strings.ReplaceAll(numRowsStr, "_", "")
 
-	numRows, err := strconv.Atoi(numRowsStr)
+	numRows, err = strconv.Atoi(numRowsStr)
 	if err != nil {
-		return 0, "", err
+		err = fmt.Errorf("invalid number format: %w", err)
+		return
+	}
+	if numRows <= 0 {
+		err = fmt.Errorf("number of rows must be positive")
+		return
 	}
 
 	fmt.Print("Enter the desired format (csv/json/parquet): ")
-	if _, err := fmt.Scanln(&outputFormat); err != nil {
-		return 0, "", err
+	if _, scanErr := fmt.Scanln(&outputFormat); scanErr != nil {
+		err = fmt.Errorf("error reading output format: %w", scanErr)
+		return
+	}
+	outputFormat = strings.ToLower(strings.TrimSpace(outputFormat)) // Normalize format
+
+	var baseName string
+	prompt := "Enter the output filename (without extension): "
+	if outputFormat == "parquet" {
+		prompt = "Enter the output directory name: "
 	}
 
-	outputFilename := ""
-	if outputFormat == "csv" || outputFormat == "json" || outputFormat == "parquet" {
-		fmt.Print("Enter the output filename (without extension): ")
-		if _, err := fmt.Scanln(&outputFilename); err != nil {
-			return 0, "", err
-		}
-		outputFilename += "." + outputFormat
+	fmt.Print(prompt)
+	if _, scanErr := fmt.Scanln(&baseName); scanErr != nil {
+		err = fmt.Errorf("error reading output name: %w", scanErr)
+		return
+	}
+	baseName = strings.TrimSpace(baseName)
+	if baseName == "" {
+		err = fmt.Errorf("output name cannot be empty")
+		return
+	}
+
+	// Assign outputTarget based on format
+	if outputFormat == "csv" || outputFormat == "json" {
+		outputTarget = baseName + "." + outputFormat
+		format = outputFormat
+	} else if outputFormat == "parquet" {
+		outputTarget = baseName // Use the base name as the directory path
+		format = outputFormat
 	} else {
-		return 0, "", fmt.Errorf("unsupported output format")
+		err = fmt.Errorf("unsupported output format: %s", outputFormat)
+		return
 	}
 
-	return numRows, outputFilename, nil
+	return numRows, outputTarget, format, nil
 }
 
-func GenerateData(numRows int, outputFilename string, selectedCols []string) {
-	ch := make(chan Row, 100)
+func GenerateData(numRows int, outputTarget string, format string, selectedCols []string) {
+	// Use a buffered channel
+	// Buffer size can be tuned. Larger might help if writer is slower than generator.
+	ch := make(chan Row, 500)
 
 	var wg sync.WaitGroup
 
+	// Start producer goroutine
 	wg.Add(1)
 	go simulatingData(numRows, selectedCols, &wg, ch)
 
+	// Start consumer (writer) goroutine based on format
 	wg.Add(1)
-	if outputFormat == "csv" {
-		go WriteToCSV(outputFilename, ch, &wg, selectedCols)
-	} else if outputFormat == "json" {
-		go WriteToJSON(outputFilename, ch, &wg, selectedCols)
-	} else if outputFormat == "parquet" {
-		go WriteToParquet(outputFilename, ch, &wg, selectedCols)
+	switch format {
+	case "csv":
+		fmt.Printf("Starting CSV writer for %s...\n", outputTarget)
+		go WriteToCSV(outputTarget, ch, &wg, selectedCols)
+	case "json":
+		fmt.Printf("Starting JSON writer for %s...\n", outputTarget)
+		go WriteToJSON(outputTarget, ch, &wg, selectedCols)
+	case "parquet":
+		fmt.Printf("Starting Parquet writer for directory %s...\n", outputTarget)
+		go WriteToParquet(outputTarget, ch, &wg, selectedCols) // Pass directory path
+	default:
+		// Should not happen if getUserInput validation is correct, but handle defensively
+		fmt.Printf("Error: Invalid format '%s' passed to GenerateData. Aborting write.\n", format)
+		wg.Done() // Decrement waitgroup as no writer was started
+		// Drain channel to prevent producer deadlock
+		go func() {
+			for range ch {
+			}
+		}()
 	}
 
-	wg.Wait()
-	// so as there's functionality for writing the input w the underscores
-	// the output is gonna be with underscores regardless of the input
-	// once again, better readability. 123123123 can be hard, but 123_123_123 is miles better.
-	numRowsWithUnderscores := addUnderscores(numRows)
+	wg.Wait() // Wait for producer and consumer to finish
 
-	fmt.Printf("Generated %s rows of e-commerce data and saved to %s\n", numRowsWithUnderscores, outputFilename)
+	// --- Final Output Message ---
+	numRowsWithUnderscores := addUnderscores(numRows)
+	if format == "parquet" {
+		fmt.Printf("\nSuccessfully generated %s rows and saved to directory '%s'\n", numRowsWithUnderscores, outputTarget)
+	} else {
+		fmt.Printf("\nSuccessfully generated %s rows and saved to file '%s'\n", numRowsWithUnderscores, outputTarget)
+	}
 }
 
 // ouput readability
