@@ -55,11 +55,11 @@ Simply run the compiled binary with the `gen` command:
 
 Gengo will then prompt you interactively:
 
-Enter the approximate target size in GB: (e.g., 0.5, 10, 50). Gengo will display the estimated row counts for each table based on this.
+* Enter the approximate target size in GB: (e.g., 0.5, 10, 50). Gengo will display the estimated row counts for each table based on this.
 
-Enter the desired output format: Type csv, json, or parquet.
+* Enter the desired output format: Type csv, json, or parquet.
 
-Enter the output directory name: This directory will be created if it doesn't exist, and all generated table files (e.g., dim_customers.parquet, fact_orders.parquet) will be saved inside it.
+* Enter the output directory name: This directory will be created if it doesn't exist, and all generated table files (e.g., dim_customers.parquet, fact_orders.parquet) will be saved inside it.
 
 Gengo will then get to work, showing progress and timing information when complete.
 
