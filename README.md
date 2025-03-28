@@ -72,15 +72,15 @@ Want different fake data? The generation logic is mainly in the `simulatingData`
 
 *Shows how long it took to generate a large dataset.*
 
-[<img src="output_100m.png" width="400" height="auto">](output_100m.png)
+[<img src="img/output_100m.png" width="400" height="auto">](output_100m.png)
 
 **1 Million Rows speed comparison**
 
-[<img src="output_comparison.png" width="400" height="auto">](output_comparison.png)
+[<img src="img/output_comparison.png" width="400" height="auto">](output_comparison.png)
 
 1 Million Rows size comparison
 
-[<img src='gengo_size_comparison_1M.png' width="400" height="auto">](gengo_size_comparison_1M.png)
+[<img src='img/gengo_size_comparison_1M.png' width="400" height="auto">](gengo_size_comparison_1M.png)
 
 *(Note: Actual performance will vary based on your hardware.)*
 ---
