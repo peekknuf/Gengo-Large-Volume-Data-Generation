@@ -6,44 +6,44 @@ It was originally built because generating millions of rows using scripting lang
 
 ## Features ✨
 
-* **Fast:** Leverages Go's performance for speedy data generation.
-* **Relational Model:** Generates a predefined 3NF e-commerce data model including:
-  * `dim_customers`
-  * `dim_products`
-  * `dim_locations`
-  * `fact_orders`
-* **Multiple Formats:** Output data as **CSV**, **JSON Lines** (one JSON object per line), or efficient **Apache Parquet**.
-* **Realistic Facts:** Uses weighted sampling for selecting customers and products when generating orders, simulating more realistic purchasing patterns (e.g., some customers/products appear more frequently).
-* **Compressed Parquet:** Generates compressed Parquet files (Snappy by default) for smaller disk usage (one file per table).
-* **Size-Based Input:** Tell Gengo the approximate **target size in GB** for the dataset, and it estimates the required row counts for dimensions and facts.
-* **Simple Usage:** Interactive command-line prompts guide you through the setup.
-* **Customizable Code:** Easily tweak the data generation logic, schema structs, or data realism features within the Go code (uses `brianvoe/gofakeit` and other standard libraries).
+- **Fast:** Leverages Go's performance for speedy data generation.
+- **Relational Model:** Generates a predefined 3NF e-commerce data model including:
+  - `dim_customers`
+  - `dim_products`
+  - `dim_locations`
+  - `fact_orders`
+- **Multiple Formats:** Output data as **CSV**, **JSON Lines** (one JSON object per line), or efficient **Apache Parquet**.
+- **Realistic Facts:** Uses weighted sampling for selecting customers and products when generating orders, simulating more realistic purchasing patterns (e.g., some customers/products appear more frequently).
+- **Compressed Parquet:** Generates compressed Parquet files (Snappy by default) for smaller disk usage (one file per table).
+- **Size-Based Input:** Tell Gengo the approximate **target size in GB** for the dataset, and it estimates the required row counts for dimensions and facts.
+- **Simple Usage:** Interactive command-line prompts guide you through the setup.
+- **Customizable Code:** Easily tweak the data generation logic, schema structs, or data realism features within the Go code (uses `brianvoe/gofakeit` and other standard libraries).
 
 ## Installation 🛠️
 
 1. **Clone the repo:**
 
-    ```bash
-    git clone https://github.com/peekknuf/Gengo.git # Or your repo URL
-    ```
+   ```bash
+   git clone https://github.com/peekknuf/Gengo.git # Or your repo URL
+   ```
 
 2. **Navigate into the directory:**
 
-    ```bash
-    cd Gengo
-    ```
+   ```bash
+   cd Gengo
+   ```
 
 3. **Ensure dependencies are downloaded:**
 
-    ```bash
-    go mod tidy
-    ```
+   ```bash
+   go mod tidy
+   ```
 
 4. **Build the binary:**
 
-    ```bash
-    go build
-    ```
+   ```bash
+   go build
+   ```
 
 ## Usage ⌨️
 
@@ -55,11 +55,11 @@ Simply run the compiled binary with the `gen` command:
 
 Gengo will then prompt you interactively:
 
-* Enter the approximate target size in GB: (e.g., 0.5, 10, 50). Gengo will display the estimated row counts for each table based on this.
+- Enter the approximate target size in GB: (e.g., 0.5, 10, 50). Gengo will display the estimated row counts for each table based on this.
 
-* Enter the desired output format: Type csv, json, or parquet.
+- Enter the desired output format: Type csv, json, or parquet.
 
-* Enter the output directory name: This directory will be created if it doesn't exist, and all generated table files (e.g., dim_customers.parquet, fact_orders.parquet) will be saved inside it.
+- Enter the output directory name: This directory will be created if it doesn't exist, and all generated table files (e.g., dim_customers.parquet, fact_orders.parquet) will be saved inside it.
 
 Gengo will then get to work, showing progress and timing information when complete.
 
@@ -67,10 +67,10 @@ Gengo will then get to work, showing progress and timing information when comple
 
 Want different fake data or schema modifications?
 
-* **Schema:** Modify the Go structs (`Customer`, `Product`, `Location`, `OrderFact`) defined in `cmd/models.go`. Remember to update struct tags (`json`, `parquet`) accordingly.
-* **Dimension Data:** Change the `gofakeit` functions or logic used within the `generateCustomers`, `generateProducts`, `generateLocations` functions in `cmd/simulate_dims.go`.
-* **Fact Data & Realism:** Adjust the generation logic (e.g., distributions, static lists), foreign key selection (including weighted sampling), or calculation logic within the `generateAndWriteOrders` function in `cmd/simulate_facts.go`.
-* **Sizing Ratios:** Modify the constants like `DefaultOrdersPerCustomerRatio` in `cmd/sizing.go` to change the relative sizes of the generated tables.
+- **Schema:** Modify the Go structs (`Customer`, `Product`, `Location`, `OrderFact`) defined in `cmd/models.go`. Remember to update struct tags (`json`, `parquet`) accordingly.
+- **Dimension Data:** Change the `gofakeit` functions or logic used within the `generateCustomers`, `generateProducts`, `generateLocations` functions in `cmd/simulate_dims.go`.
+- **Fact Data & Realism:** Adjust the generation logic (e.g., distributions, static lists), foreign key selection (including weighted sampling), or calculation logic within the `generateAndWriteOrders` function in `cmd/simulate_facts.go`.
+- **Sizing Ratios:** Modify the constants like `DefaultOrdersPerCustomerRatio` in `cmd/sizing.go` to change the relative sizes of the generated tables.
 
 ## Benchmarks 📊
 
@@ -78,7 +78,7 @@ Want different fake data or schema modifications?
 
 **Generation Time (Example: 100 Million Rows in Gengo vs 1 Million Rows in performant Python libraries)**
 
-*Shows how long it took to generate a large dataset.*
+_Shows how long it took to generate a large dataset._
 
 [<img src="img/output_100m.png" width="400" height="auto">](output_100m.png)
 
@@ -90,6 +90,10 @@ Want different fake data or schema modifications?
 
 [<img src='img/gengo_size_comparison_1M.png' width="400" height="auto">](gengo_size_comparison_1M.png)
 
-*(Note: Actual performance will vary based on your hardware.)*
+An actual proof that it follows 3NF
+
+[<img src='img/proof_of_work.png' with='400' height="auto">](proof_of_work.png)
+
+_(Note: Actual performance will vary based on your hardware.)_
 
 Happy generating and playing around with the data!
