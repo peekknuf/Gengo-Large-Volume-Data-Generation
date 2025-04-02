@@ -126,7 +126,7 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		}
 		if (i+1)%progressStep == 0 || i == sliceLen-1 {
 			fmt.Printf("... %s / %s records processed for %s\n", addUnderscores(i+1), addUnderscores(sliceLen), targetFilename)
-		} // Assumes addUnderscores exists
+		}
 	} // End main loop
 
 	// 6. Write Final Batch
