@@ -6,110 +6,159 @@ import (
 	"math"
 )
 
-// --- Configuration Constants ---
-
-// Default Ratios (These are assumptions, adjust based on desired data shape)
+// --- E-commerce Configuration ---
 const (
-	// How many orders, on average, are associated with a single customer?
-	DefaultOrdersPerCustomerRatio float64 = 10.0
-	// How many orders, on average, are placed for each unique product available?
-	DefaultOrdersPerProductRatio float64 = 50.0
-	// How many orders, on average, reference a unique location (shipping or billing)?
-	// Location reuse is high, so fewer unique locations needed per order.
-	DefaultOrdersPerLocationRatio float64 = 100.0
+	AvgItemsPerOrder              = 5.0
+	DefaultOrdersPerCustomerRatio = 10.0
+	DefaultProductsPerSupplierRatio = 25.0
+	AvgAddressesPerCustomer       = 1.5
+)
+
+// --- Financial Configuration ---
+const (
+	AvgTradingDaysPerYear = 252
+	NumYearsOfData        = 5
 )
 
 // Estimated Average Size in Bytes for Different Field Types (Uncompressed)
-// These are rough estimates and can be tuned. Strings are the most variable.
 const (
-	AvgBytesStringTiny    = 8   // e.g., State abbreviation, maybe status
-	AvgBytesStringShort   = 15  // e.g., First name, Last name, City
-	AvgBytesStringMedium  = 30  // e.g., Email, Product Name, Category, Address Line 1
-	AvgBytesStringLong    = 50  // e.g., Longer addresses, Company names
-	SizeBytesInt          = 4   // Assuming int32 for IDs and Quantity
-	SizeBytesFloat64      = 8   // Price, Discount
-	SizeBytesTimestamp    = 8   // UnixMicro or similar binary representation; if string (RFC3339), use AvgBytesStringMedium
-	SizeBytesAssumedTotal = 250 // A fallback rough estimate for a whole OrderFact row if needed initially
+	AvgBytesStringTiny   = 8
+	AvgBytesStringShort  = 15
+	AvgBytesStringMedium = 30
+	AvgBytesStringLong   = 50
+	SizeBytesInt         = 4
+	SizeBytesInt64       = 8
+	SizeBytesFloat64     = 8
+	SizeBytesTimestamp   = 8
 )
 
-// RowCounts holds the calculated number of rows for each table
-type RowCounts struct {
-	Customers int
-	Products  int
-	Locations int
-	Orders    int
+// ECommerceRowCounts holds the calculated number of rows for each e-commerce table
+type ECommerceRowCounts struct {
+	Customers        int
+	CustomerAddresses int
+	Suppliers        int
+	Products         int
+	OrderHeaders     int
+	OrderItems       int
+}
+
+// FinancialRowCounts holds the calculated number of rows for each financial table
+type FinancialRowCounts struct {
+	Companies         int
+	Exchanges         int
+	DailyStockPrices int
 }
 
 // estimateAvgRowSizeBytes estimates the average uncompressed size of a single row for a given table type.
 func estimateAvgRowSizeBytes(tableType string) (int, error) {
 	switch tableType {
+	// E-commerce (empirical estimates based on CSV output from calibration run)
 	case "customer":
-		// CustomerID(int) + FirstName(short) + LastName(short) + Email(medium)
-		return SizeBytesInt + AvgBytesStringShort + AvgBytesStringShort + AvgBytesStringMedium, nil
+		return 78, nil
+	case "customer_address":
+		return 136, nil
+	case "supplier":
+		return 66, nil
 	case "product":
-		// ProductID(int) + ProductName(medium) + ProductCategory(medium) + Company(long) + BasePrice(float64)
-		return SizeBytesInt + AvgBytesStringMedium + AvgBytesStringMedium + AvgBytesStringLong + SizeBytesFloat64, nil
-	case "location":
-		// LocationID(int) + Address(medium) + City(short) + State(tiny) + Zip(tiny) + Country(short)
-		return SizeBytesInt + AvgBytesStringMedium + AvgBytesStringShort + AvgBytesStringTiny + AvgBytesStringTiny + AvgBytesStringShort, nil
-	case "orderfact":
-		// OrderID(int) + Timestamp(ts) + CustomerID(int) + ProductID(int) + ShipLocID(int) + BillLocID(int) +
-		// Quantity(int) + UnitPrice(float64) + Discount(float64) + TotalPrice(float64) + Status(tiny) + Payment(short)
-		return SizeBytesInt + SizeBytesTimestamp + SizeBytesInt + SizeBytesInt + SizeBytesInt + SizeBytesInt +
-			SizeBytesInt + SizeBytesFloat64 + SizeBytesFloat64 + SizeBytesFloat64 + AvgBytesStringTiny + AvgBytesStringShort, nil
+		return 84, nil
+	case "order_header":
+		return 111, nil
+	case "order_item":
+		return 63, nil
+	// Financial (empirical estimates based on CSV output from calibration run)
+	case "company":
+		return 78, nil
+	case "exchange":
+		return 37, nil
+	case "daily_stock_price":
+		return 120, nil
 	default:
 		return 0, fmt.Errorf("unknown table type: %s", tableType)
 	}
 }
 
-// CalculateRowCounts determines the target number of rows for each table based on a target size in GB.
-func CalculateRowCounts(targetGB float64) (RowCounts, error) {
+// CalculateECommerceRowCounts determines the target number of rows for each e-commerce table.
+// It aims to distribute the target size across all tables.
+func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 	if targetGB <= 0 {
-		return RowCounts{}, fmt.Errorf("target size must be positive")
+		return ECommerceRowCounts{}, fmt.Errorf("target size must be positive")
 	}
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
-	// Estimate size primarily based on the fact table, as it usually dominates
-	avgOrderSizeBytes, err := estimateAvgRowSizeBytes("orderfact")
-	if err != nil {
-		// Should not happen with hardcoded types, but handle defensively
-		return RowCounts{}, fmt.Errorf("failed to estimate order size: %w", err)
-	}
-	if avgOrderSizeBytes <= 0 {
-		return RowCounts{}, fmt.Errorf("estimated average order size is zero or negative")
-	}
+	// Empirical effective size per order item (includes proportional share of all dimensions and header)
+	const effectiveSizePerOrderItem = 148.0 // Bytes/item, derived from calibration
 
-	// Initial estimate for number of orders
-	numOrdersF := targetBytes / float64(avgOrderSizeBytes)
-	numOrders := int(math.Max(1.0, math.Round(numOrdersF))) // Ensure at least 1 order
+	numOrderItems := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerOrderItem)))
 
-	// Derive dimension counts based on ratios
-	numCustomersF := float64(numOrders) / DefaultOrdersPerCustomerRatio
-	numProductsF := float64(numOrders) / DefaultOrdersPerProductRatio
-	numLocationsF := float64(numOrders) / DefaultOrdersPerLocationRatio
+	// Derive other counts based on numOrderItems and original ratios
+	numOrderHeaders := int(math.Max(1.0, math.Round(float64(numOrderItems)/AvgItemsPerOrder)))
+	numCustomers := int(math.Max(1.0, math.Round(float64(numOrderHeaders)/DefaultOrdersPerCustomerRatio)))
+	numCustomerAddresses := int(math.Max(1.0, math.Round(float64(numCustomers)*AvgAddressesPerCustomer)))
+	numProducts := int(math.Max(1.0, math.Round(float64(numOrderItems)/AvgItemsPerOrder)))
+	numSuppliers := int(math.Max(1.0, math.Round(float64(numProducts)/DefaultProductsPerSupplierRatio)))
 
-	// Ensure minimum counts for dimensions (at least 1 of each)
-	counts := RowCounts{
-		Orders:    numOrders,
-		Customers: int(math.Max(1.0, math.Round(numCustomersF))),
-		Products:  int(math.Max(1.0, math.Round(numProductsF))),
-		Locations: int(math.Max(1.0, math.Round(numLocationsF))),
+	// Ensure minimums if calculations result in zero
+	if numOrderItems == 0 && targetGB > 0 {
+		numOrderItems = 1
+		numOrderHeaders = 1
+		numCustomers = 1
+		numCustomerAddresses = 1
+		numProducts = 1
+		numSuppliers = 1
 	}
 
-	// Optional: Refine estimate slightly by considering dimension sizes?
-	// This adds complexity. For now, relying on the dominant fact table size is often sufficient.
-	// Example refinement idea (more complex):
-	// avgCustSize, _ := estimateAvgRowSizeBytes("customer")
-	// avgProdSize, _ := estimateAvgRowSizeBytes("product")
-	// avgLocSize, _ := estimateAvgRowSizeBytes("location")
-	// totalEstimatedBytes := float64(counts.Orders)*float64(avgOrderSizeBytes) +
-	// 	float64(counts.Customers)*float64(avgCustSize) +
-	// 	float64(counts.Products)*float64(avgProdSize) +
-	// 	float64(counts.Locations)*float64(avgLocSize)
-	// adjustmentRatio := targetBytes / totalEstimatedBytes
-	// counts.Orders = int(math.Max(1.0, math.Round(float64(counts.Orders)*adjustmentRatio)))
-	// // Recalculate dimension counts based on adjusted orders... or adjust all counts by ratio.
+	counts := ECommerceRowCounts{
+		Customers:        numCustomers,
+		CustomerAddresses: numCustomerAddresses,
+		Suppliers:        numSuppliers,
+		Products:         numProducts,
+		OrderHeaders:     numOrderHeaders,
+		OrderItems:       numOrderItems,
+	}
 
 	return counts, nil
 }
+
+// CalculateFinancialRowCounts determines the target number of rows for each financial table.
+// It aims to distribute the target size across all tables, accounting for fixed dimensions.
+// Note: Achieving an exact target size is challenging due to:
+// 1. Inaccurate `estimateAvgRowSizeBytes` (estimates are averages, actual CSV sizes vary).
+// 2. Filesystem overhead (du -sh reports disk usage, not just raw data size).
+// 3. Integer rounding in row count calculations.
+// 4. Fixed dimensions (like exchanges) can impact accuracy for very small/large targets.
+func CalculateFinancialRowCounts(targetGB float64) (FinancialRowCounts, error) {
+	if targetGB <= 0 {
+		return FinancialRowCounts{}, fmt.Errorf("target size must be positive")
+	}
+
+	targetBytes := targetGB * 1024 * 1024 * 1024
+
+	// Empirical effective size per daily stock price (includes proportional share of all dimensions)
+	const effectiveSizePerDailyStockPrice = 139.0 // Bytes/price, derived from calibration
+
+	numPrices := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerDailyStockPrice)))
+
+	// Derive other counts based on numPrices and original ratios
+	numCompanies := int(math.Max(1.0, math.Round(float64(numPrices)/(AvgTradingDaysPerYear*NumYearsOfData))))
+	numExchanges := 5 // Fixed number of exchanges
+
+	// Ensure minimums
+	if numCompanies == 0 && numPrices > 0 {
+		numCompanies = 1
+	} else if numCompanies == 0 && numPrices == 0 {
+		numCompanies = 1
+		numPrices = AvgTradingDaysPerYear * NumYearsOfData
+	}
+
+	counts := FinancialRowCounts{
+		Companies:        numCompanies,
+		Exchanges:        numExchanges,
+		DailyStockPrices: numPrices,
+	}
+
+	return counts, nil
+}
+
+
+
