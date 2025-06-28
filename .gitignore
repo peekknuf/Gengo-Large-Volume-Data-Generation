@@ -2,34 +2,7 @@
 Gengo
 Gengo_test
 
-# Generated output directories
-gengo_ecommerce_100MB/
-gengo_ecommerce_100MB_v2/
-gengo_ecommerce_100MB_v3/
-gengo_ecommerce_100MB_v4/
-gengo_ecommerce_100MB_v5/
-gengo_ecommerce_100MB_v6/
-gengo_ecommerce_1GB_v2/
-gengo_ecommerce_1GB_v3/
-gengo_ecommerce_1GB_v4/
-gengo_ecommerce_1GB_v5/
-gengo_ecommerce_1GB_v6/
-gengo_ecommerce_1GB_v7/
-gengo_ecommerce_calibration/
-gengo_financial_100MB/
-gengo_financial_100MB_v2/
-gengo_financial_100MB_v3/
-gengo_financial_100MB_v4/
-gengo_financial_1GB/
-gengo_financial_1GB_v2/
-gengo_financial_1GB_v3/
-gengo_financial_1GB_v4/
-gengo_financial_1GB_v5/
-gengo_financial_calibration/
-gengo_financial_test/
-gengo_financial_test_sized/
-gengo_test_output/
-meh/
+
 
 # Other generated files
 Gengo.txt
