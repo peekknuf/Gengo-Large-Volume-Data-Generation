@@ -39,7 +39,7 @@ Example:
 		fmt.Println("Starting data model generation process...")
 
 		// --- Get User Input ---
-		rowCounts, outputFormat, outputDir, err := getUserInputForModel() // Assumes getUserInputForModel is in input.go or similar
+		modelType, counts, outputFormat, outputDir, err := getUserInputForModel() // Assumes getUserInputForModel is in input.go or similar
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nError getting user input: %v\n", err)
 			os.Exit(1)
@@ -58,7 +58,7 @@ Example:
 
 		// --- Call the Main Generation Orchestrator ---
 		// Assumes GenerateModelData is in orchestrator.go or similar
-		err = GenerateModelData(rowCounts, outputFormat, outputDir)
+		err = GenerateModelData(modelType, counts, outputFormat, outputDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nError during data generation: %v\n", err)
 			os.Exit(1)

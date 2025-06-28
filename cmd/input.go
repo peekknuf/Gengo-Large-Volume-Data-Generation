@@ -1,16 +1,26 @@
-// cmd/input.go
 package cmd
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
-	// Assuming RowCounts is defined in sizing.go and addUnderscores in utils.go (same package)
 )
 
-// getUserInputForModel prompts the user for generation parameters based on target size.
-// It returns the calculated row counts, desired output format, output directory path, and any error.
-func getUserInputForModel() (counts RowCounts, format string, outputDir string, err error) {
+// getUserInputForModel prompts the user for the data model and then for the generation parameters.
+func getUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
+	// --- Get Model Type ---
+	fmt.Print("Enter the data model to generate (ecommerce/financial): ")
+	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
+		err = fmt.Errorf("error reading model type: %w", scanErr)
+		return
+	}
+	modelType = strings.ToLower(strings.TrimSpace(modelType))
+	if modelType != "ecommerce" && modelType != "financial" {
+		err = fmt.Errorf("unsupported model type: %s. Please choose ecommerce or financial", modelType)
+		return
+	}
+
+	// --- Get Common Inputs ---
 	var targetGBStr string
 	fmt.Print("Enter the approximate target size in GB (e.g., 0.5, 10): ")
 	if _, scanErr := fmt.Scanln(&targetGBStr); scanErr != nil {
@@ -28,21 +38,39 @@ func getUserInputForModel() (counts RowCounts, format string, outputDir string, 
 		return
 	}
 
-	// --- Calculate Row Counts ---
-	counts, err = CalculateRowCounts(targetGB) // Assumes CalculateRowCounts is in sizing.go
-	if err != nil {
-		err = fmt.Errorf("error calculating row counts: %w", err)
-		return
+	// --- Calculate and Display Row Counts based on Model Type ---
+	switch modelType {
+	case "ecommerce":
+		var ecommerceCounts ECommerceRowCounts
+		ecommerceCounts, err = CalculateECommerceRowCounts(targetGB)
+		if err != nil {
+			err = fmt.Errorf("error calculating e-commerce row counts: %w", err)
+			return
+		}
+		counts = ecommerceCounts
+		fmt.Println("\n--- Estimated E-commerce Row Counts ---")
+		fmt.Printf("Customers:         %s\n", addUnderscores(ecommerceCounts.Customers))
+		fmt.Printf("Customer Addresses: %s\n", addUnderscores(ecommerceCounts.CustomerAddresses))
+		fmt.Printf("Suppliers:         %s\n", addUnderscores(ecommerceCounts.Suppliers))
+		fmt.Printf("Products:          %s\n", addUnderscores(ecommerceCounts.Products))
+		fmt.Printf("Order Headers:     %s\n", addUnderscores(ecommerceCounts.OrderHeaders))
+		fmt.Printf("Order Items:       %s\n", addUnderscores(ecommerceCounts.OrderItems))
+	case "financial":
+		var financialCounts FinancialRowCounts
+		financialCounts, err = CalculateFinancialRowCounts(targetGB)
+		if err != nil {
+			err = fmt.Errorf("error calculating financial row counts: %w", err)
+			return
+		}
+		counts = financialCounts
+		fmt.Println("\n--- Estimated Financial Row Counts ---")
+		fmt.Printf("Companies:             %s\n", addUnderscores(financialCounts.Companies))
+		fmt.Printf("Exchanges:             %s\n", addUnderscores(financialCounts.Exchanges))
+		fmt.Printf("Daily Stock Prices:    %s\n", addUnderscores(financialCounts.DailyStockPrices))
 	}
 
-	// --- Display Estimated Counts ---
-	fmt.Println("\n--- Estimated Row Counts ---")
-	fmt.Printf("Customers: %s\n", addUnderscores(counts.Customers)) // Assumes addUnderscores is in utils.go
-	fmt.Printf("Products:  %s\n", addUnderscores(counts.Products))
-	fmt.Printf("Locations: %s\n", addUnderscores(counts.Locations))
-	fmt.Printf("Orders:    %s\n", addUnderscores(counts.Orders))
-	fmt.Println("----------------------------")
-	fmt.Printf("Note: Final output size may vary due to data generation specifics and compression (especially Parquet).\n\n")
+	fmt.Println("----------------------------------------")
+	fmt.Printf("Note: Final output size may vary due to data generation specifics and compression.\n\n")
 
 	// --- Get Output Format ---
 	fmt.Print("Enter the desired output format (csv/json/parquet): ")
@@ -52,7 +80,7 @@ func getUserInputForModel() (counts RowCounts, format string, outputDir string, 
 	}
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format != "csv" && format != "json" && format != "parquet" {
-		err = fmt.Errorf("unsupported output format: %s. Please choose csv, json, or parquet", format)
+		err = fmt.Errorf("unsupported output format: %s", format)
 		return
 	}
 
@@ -68,5 +96,5 @@ func getUserInputForModel() (counts RowCounts, format string, outputDir string, 
 		return
 	}
 
-	return counts, format, outputDir, nil // Success
+		return modelType, counts, format, outputDir, nil
 }
