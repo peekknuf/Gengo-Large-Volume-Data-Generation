@@ -42,7 +42,7 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 		defer stdin.Close()
 		// Inputs: model type, very small size, csv format, temp directory name
 		io.WriteString(stdin, "ecommerce\n")
-		io.WriteString(stdin, "0.00001\n")
+		io.WriteString(stdin, "0.1\n")
 		io.WriteString(stdin, "csv\n")
 		io.WriteString(stdin, tempDir+"\n")
 	}()
@@ -166,7 +166,7 @@ func TestE2EFinancialGeneration(t *testing.T) {
 		defer stdin.Close()
 		// Inputs: model type, very small size, csv format, temp directory name
 		io.WriteString(stdin, "financial\n")
-		io.WriteString(stdin, "0.00001\n")
+		io.WriteString(stdin, "0.1\n")
 		io.WriteString(stdin, "csv\n")
 		io.WriteString(stdin, tempDir+"\n")
 	}()
@@ -238,7 +238,7 @@ func TestE2EMedicalGeneration(t *testing.T) {
 		defer stdin.Close()
 		// Inputs: model type, very small size, csv format, temp directory name
 		io.WriteString(stdin, "medical\n")
-		io.WriteString(stdin, "0.00001\n")
+		io.WriteString(stdin, "0.1\n")
 		io.WriteString(stdin, "csv\n")
 		io.WriteString(stdin, tempDir+"\n")
 	}()
