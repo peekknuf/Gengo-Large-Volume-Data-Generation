@@ -1,5 +1,5 @@
 // cmd/json.go
-package cmd
+package formats
 
 import (
 	"encoding/json"

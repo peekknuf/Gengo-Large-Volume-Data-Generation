@@ -1,5 +1,5 @@
 // cmd/parquet.go
-package cmd
+package formats
 
 import (
 	"fmt"
@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/peekknuf/Gengo/internal/utils"
 
 	"github.com/apache/arrow/go/v12/arrow"
 	"github.com/apache/arrow/go/v12/arrow/array"
@@ -109,7 +111,7 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 				return err
 			}
 			fieldVal := elemVal.Field(structFieldIndex)
-			if appendErr := appendValueToBuilder(builder.Field(fieldIdx), fieldVal); appendErr != nil {
+			if appendErr := AppendValueToBuilder(builder.Field(fieldIdx), fieldVal); appendErr != nil {
 				err = fmt.Errorf("append field %s record %d: %w", arrowField.Name, i, appendErr)
 				return err
 			}
@@ -125,8 +127,8 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 			rowsInCurrentBatch = 0
 		}
 		if (i+1)%progressStep == 0 || i == sliceLen-1 {
-			fmt.Printf("... %s / %s records processed for %s\n", addUnderscores(i+1), addUnderscores(sliceLen), targetFilename)
-		}
+            fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
+        }
 	} // End main loop
 
 	// 6. Write Final Batch
@@ -228,47 +230,4 @@ func buildArrowSchema(structType reflect.Type) (*arrow.Schema, error) {
 	return arrow.NewSchema(fields, nil), nil
 }
 
-// appendValueToBuilder appends a Go value to the correct Arrow builder.
-func appendValueToBuilder(bldr array.Builder, val reflect.Value) error {
-	if val.Kind() == reflect.Ptr {
-		if val.IsNil() {
-			bldr.AppendNull()
-			return nil
-		}
-		val = val.Elem()
-	}
-	if val.Kind() == reflect.Interface {
-		if val.IsNil() {
-			bldr.AppendNull()
-			return nil
-		}
-		val = val.Elem()
-	}
-	if !val.IsValid() {
-		bldr.AppendNull()
-		return nil
-	}
-	switch bldr := bldr.(type) {
-	case *array.Int32Builder:
-		bldr.Append(int32(val.Int()))
-	case *array.Int64Builder:
-		bldr.Append(val.Int())
-	case *array.Float32Builder:
-		bldr.Append(float32(val.Float()))
-	case *array.Float64Builder:
-		bldr.Append(val.Float())
-	case *array.StringBuilder:
-		bldr.Append(val.String())
-	case *array.BooleanBuilder:
-		bldr.Append(val.Bool())
-	case *array.TimestampBuilder:
-		if t, ok := val.Interface().(time.Time); ok {
-			bldr.Append(arrow.Timestamp(t.UnixMicro()))
-		} else {
-			return fmt.Errorf("expected time.Time for TimestampBuilder")
-		}
-	default:
-		return fmt.Errorf("unsupported arrow builder type: %T", bldr)
-	}
-	return nil
-}
+

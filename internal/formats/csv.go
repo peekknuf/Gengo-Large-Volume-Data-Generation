@@ -1,5 +1,5 @@
 // cmd/csv.go
-package cmd
+package formats
 
 import (
 	"encoding/csv"
@@ -7,8 +7,17 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	// Needed by valueToString if it were here, but valueToString is in utils.go
 )
+
+// createRecordMap creates a map from CSV header names to their column indices.
+func CreateRecordMap(records [][]string) map[string]int {
+	header := records[0]
+	rmap := make(map[string]int, len(header))
+	for i, h := range header {
+		rmap[h] = i
+	}
+	return rmap
+}
 
 // writeSliceToCSV writes a slice of structs to a CSV file.
 // It uses reflection to determine headers (preferring 'json' tags) and data.
@@ -96,7 +105,7 @@ func writeSliceToCSV(data interface{}, targetFilename string) error {
 
 		for j := 0; j < numFields; j++ {
 			fieldVal := elemVal.Field(fieldIndices[j])
-			record[j] = valueToString(fieldVal) // Calls valueToString from utils.go
+			record[j] = ValueToString(fieldVal) // Calls valueToString from formats.go
 		}
 		if err := writer.Write(record); err != nil {
 			return fmt.Errorf("failed to write csv record %d to %s: %w", i, targetFilename, err)

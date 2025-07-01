@@ -1,13 +1,17 @@
-package cmd
+package core
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/peekknuf/Gengo/internal/utils"
+	financialsimulation "github.com/peekknuf/Gengo/internal/simulation/financial"
+	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
 )
 
 // getUserInputForModel prompts the user for the data model and then for the generation parameters.
-func getUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
+func GetUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
 	// --- Get Model Type ---
 	fmt.Print("Enter the data model to generate (ecommerce/financial/medical): ")
 	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
@@ -49,14 +53,14 @@ func getUserInputForModel() (modelType string, counts interface{}, format string
 		}
 		counts = ecommerceCounts
 		fmt.Println("\n--- Estimated E-commerce Row Counts ---")
-		fmt.Printf("Customers:         %s\n", addUnderscores(ecommerceCounts.Customers))
-		fmt.Printf("Customer Addresses: %s\n", addUnderscores(ecommerceCounts.CustomerAddresses))
-		fmt.Printf("Suppliers:         %s\n", addUnderscores(ecommerceCounts.Suppliers))
-		fmt.Printf("Products:          %s\n", addUnderscores(ecommerceCounts.Products))
-		fmt.Printf("Order Headers:     %s\n", addUnderscores(ecommerceCounts.OrderHeaders))
-		fmt.Printf("Order Items:       %s\n", addUnderscores(ecommerceCounts.OrderItems))
+		fmt.Printf("Customers:         %s\n", utils.AddUnderscores(ecommerceCounts.Customers))
+		fmt.Printf("Customer Addresses: %s\n", utils.AddUnderscores(ecommerceCounts.CustomerAddresses))
+		fmt.Printf("Suppliers:         %s\n", utils.AddUnderscores(ecommerceCounts.Suppliers))
+		fmt.Printf("Products:          %s\n", utils.AddUnderscores(ecommerceCounts.Products))
+		fmt.Printf("Order Headers:     %s\n", utils.AddUnderscores(ecommerceCounts.OrderHeaders))
+		fmt.Printf("Order Items:       %s\n", utils.AddUnderscores(ecommerceCounts.OrderItems))
 	case "financial":
-		var financialCounts FinancialRowCounts
+		var financialCounts financialsimulation.FinancialRowCounts
 		financialCounts, err = CalculateFinancialRowCounts(targetGB)
 		if err != nil {
 			err = fmt.Errorf("error calculating financial row counts: %w", err)
@@ -64,11 +68,11 @@ func getUserInputForModel() (modelType string, counts interface{}, format string
 		}
 		counts = financialCounts
 		fmt.Println("\n--- Estimated Financial Row Counts ---")
-		fmt.Printf("Companies:             %s\n", addUnderscores(financialCounts.Companies))
-		fmt.Printf("Exchanges:             %s\n", addUnderscores(financialCounts.Exchanges))
-		fmt.Printf("Daily Stock Prices:    %s\n", addUnderscores(financialCounts.DailyStockPrices))
+		fmt.Printf("Companies:             %s\n", utils.AddUnderscores(financialCounts.Companies))
+		fmt.Printf("Exchanges:             %s\n", utils.AddUnderscores(financialCounts.Exchanges))
+		fmt.Printf("Daily Stock Prices:    %s\n", utils.AddUnderscores(financialCounts.DailyStockPrices))
 	case "medical":
-		var medicalCounts MedicalRowCounts
+		var medicalCounts medicalsimulation.MedicalRowCounts
 		medicalCounts, err = CalculateMedicalRowCounts(targetGB)
 		if err != nil {
 			err = fmt.Errorf("error calculating medical row counts: %w", err)
@@ -76,10 +80,10 @@ func getUserInputForModel() (modelType string, counts interface{}, format string
 		}
 		counts = medicalCounts
 		fmt.Println("\n--- Estimated Medical Row Counts ---")
-		fmt.Printf("Patients:      %s\n", addUnderscores(medicalCounts.Patients))
-		fmt.Printf("Doctors:       %s\n", addUnderscores(medicalCounts.Doctors))
-		fmt.Printf("Clinics:       %s\n", addUnderscores(medicalCounts.Clinics))
-		fmt.Printf("Appointments:  %s\n", addUnderscores(medicalCounts.Appointments))
+		fmt.Printf("Patients:      %s\n", utils.AddUnderscores(medicalCounts.Patients))
+		fmt.Printf("Doctors:       %s\n", utils.AddUnderscores(medicalCounts.Doctors))
+		fmt.Printf("Clinics:       %s\n", utils.AddUnderscores(medicalCounts.Clinics))
+		fmt.Printf("Appointments:  %s\n", utils.AddUnderscores(medicalCounts.Appointments))
 	}
 
 	fmt.Println("----------------------------------------")

@@ -1,5 +1,5 @@
 // cmd/simulate_medical_dims.go
-package cmd
+package medical
 
 import (
 	"fmt"
@@ -7,17 +7,19 @@ import (
 	"time"
 
 	gf "github.com/brianvoe/gofakeit/v6"
+
+	"github.com/peekknuf/Gengo/internal/models/medical"
 )
 
 // generatePatients creates a slice of Patient structs.
-func generatePatients(count int) []Patient {
+func GeneratePatients(count int) []medical.Patient {
 	if count <= 0 {
-		return []Patient{}
+		return []medical.Patient{}
 	}
-	patients := make([]Patient, count)
+	patients := make([]medical.Patient, count)
 	for i := 0; i < count; i++ {
 		dob := gf.DateRange(time.Date(1940, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC))
-		patients[i] = Patient{
+		patients[i] = medical.Patient{
 			PatientID:   i + 1,
 			PatientName: gf.Name(),
 			DateOfBirth: dob,
@@ -28,14 +30,14 @@ func generatePatients(count int) []Patient {
 }
 
 // generateDoctors creates a slice of Doctor structs.
-func generateDoctors(count int) []Doctor {
+func GenerateDoctors(count int) []medical.Doctor {
 	if count <= 0 {
-		return []Doctor{}
+		return []medical.Doctor{}
 	}
-	doctors := make([]Doctor, count)
+	doctors := make([]medical.Doctor, count)
 	specializations := []string{"Cardiology", "Neurology", "Pediatrics", "General Practice", "Oncology"}
 	for i := 0; i < count; i++ {
-		doctors[i] = Doctor{
+		doctors[i] = medical.Doctor{
 			DoctorID:       i + 1,
 			DoctorName:     fmt.Sprintf("Dr. %s", gf.Name()),
 			Specialization: specializations[rand.Intn(len(specializations))],
@@ -45,14 +47,14 @@ func generateDoctors(count int) []Doctor {
 }
 
 // generateClinics creates a slice of Clinic structs.
-func generateClinics(count int) []Clinic {
+func GenerateClinics(count int) []medical.Clinic {
 	if count <= 0 {
-		return []Clinic{}
+		return []medical.Clinic{}
 	}
-	clinics := make([]Clinic, count)
+	clinics := make([]medical.Clinic, count)
 	for i := 0; i < count; i++ {
 		addr := gf.Address()
-		clinics[i] = Clinic{
+		clinics[i] = medical.Clinic{
 			ClinicID:   i + 1,
 			ClinicName: fmt.Sprintf("%s Clinic", gf.LastName()),
 			Address:    fmt.Sprintf("%s, %s, %s %s", addr.Address, addr.City, addr.State, addr.Zip),

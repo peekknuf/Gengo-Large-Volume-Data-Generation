@@ -1,9 +1,12 @@
 // cmd/sizing.go
-package cmd
+package core
 
 import (
 	"fmt"
 	"math"
+
+	financialsimulation "github.com/peekknuf/Gengo/internal/simulation/financial"
+	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
 )
 
 // --- E-commerce Configuration ---
@@ -34,27 +37,12 @@ const (
 
 // ECommerceRowCounts holds the calculated number of rows for each e-commerce table
 type ECommerceRowCounts struct {
-	Customers        int
+	Customers         int
 	CustomerAddresses int
-	Suppliers        int
-	Products         int
-	OrderHeaders     int
-	OrderItems       int
-}
-
-// FinancialRowCounts holds the calculated number of rows for each financial table
-	type FinancialRowCounts struct {
-	Companies         int
-	Exchanges         int
-	DailyStockPrices int
-}
-
-// MedicalRowCounts holds the calculated number of rows for each medical table
-type MedicalRowCounts struct {
-	Patients     int
-	Doctors      int
-	Clinics      int
-	Appointments int
+	Suppliers         int
+	Products          int
+	OrderHeaders      int
+	OrderItems        int
 }
 
 // estimateAvgRowSizeBytes estimates the average uncompressed size of a single row for a given table type.
@@ -144,9 +132,9 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 // 2. Filesystem overhead (du -sh reports disk usage, not just raw data size).
 // 3. Integer rounding in row count calculations.
 // 4. Fixed dimensions (like exchanges) can impact accuracy for very small/large targets.
-func CalculateFinancialRowCounts(targetGB float64) (FinancialRowCounts, error) {
+func CalculateFinancialRowCounts(targetGB float64) (financialsimulation.FinancialRowCounts, error) {
 	if targetGB <= 0 {
-		return FinancialRowCounts{}, fmt.Errorf("target size must be positive")
+		return financialsimulation.FinancialRowCounts{}, fmt.Errorf("target size must be positive")
 	}
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
@@ -168,7 +156,7 @@ func CalculateFinancialRowCounts(targetGB float64) (FinancialRowCounts, error) {
 		numPrices = AvgTradingDaysPerYear * NumYearsOfData
 	}
 
-	counts := FinancialRowCounts{
+	counts := financialsimulation.FinancialRowCounts{
 		Companies:        numCompanies,
 		Exchanges:        numExchanges,
 		DailyStockPrices: numPrices,
@@ -178,9 +166,9 @@ func CalculateFinancialRowCounts(targetGB float64) (FinancialRowCounts, error) {
 }
 
 // CalculateMedicalRowCounts determines the target number of rows for each medical table.
-func CalculateMedicalRowCounts(targetGB float64) (MedicalRowCounts, error) {
+func CalculateMedicalRowCounts(targetGB float64) (medicalsimulation.MedicalRowCounts, error) {
 	if targetGB <= 0 {
-		return MedicalRowCounts{}, fmt.Errorf("target size must be positive")
+		return medicalsimulation.MedicalRowCounts{}, fmt.Errorf("target size must be positive")
 	}
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
@@ -193,7 +181,7 @@ func CalculateMedicalRowCounts(targetGB float64) (MedicalRowCounts, error) {
 	numDoctors := int(math.Max(1.0, math.Round(float64(numPatients)/100.0)))   // 100 patients per doctor
 	numClinics := int(math.Max(1.0, math.Round(float64(numDoctors)/20.0)))      // 20 doctors per clinic
 
-	counts := MedicalRowCounts{
+	counts := medicalsimulation.MedicalRowCounts{
 		Patients:     numPatients,
 		Doctors:      numDoctors,
 		Clinics:      numClinics,

@@ -1,10 +1,11 @@
 // cmd/simulate_financial_dims.go
-package cmd
+package financial
 
 import (
 	"math/rand"
 
 	gf "github.com/brianvoe/gofakeit/v6"
+	"github.com/peekknuf/Gengo/internal/models/financial"
 )
 
 var (
@@ -12,13 +13,13 @@ var (
 	exchangeNames = []string{"NASDAQ", "New York Stock Exchange", "London Stock Exchange", "Tokyo Stock Exchange", "Hong Kong Stock Exchange"}
 )
 
-func generateCompanies(count int) []Company {
+func GenerateCompanies(count int) []financial.Company {
 	if count <= 0 {
-		return []Company{}
+		return []financial.Company{}
 	}
-	companies := make([]Company, count)
+	companies := make([]financial.Company, count)
 	for i := 0; i < count; i++ {
-		companies[i] = Company{
+		companies[i] = financial.Company{
 			CompanyID:    i + 1,
 			CompanyName:  gf.Company(),
 			TickerSymbol: gf.LetterN(4),
@@ -28,13 +29,13 @@ func generateCompanies(count int) []Company {
 	return companies
 }
 
-func generateExchanges(count int) []Exchange {
+func GenerateExchanges(count int) []financial.Exchange {
 	if count <= 0 {
-		return []Exchange{}
+		return []financial.Exchange{}
 	}
-	exchanges := make([]Exchange, count)
+	exchanges := make([]financial.Exchange, count)
 	for i := 0; i < count; i++ {
-		exchanges[i] = Exchange{
+		exchanges[i] = financial.Exchange{
 			ExchangeID:   i + 1,
 			ExchangeName: exchangeNames[i%len(exchangeNames)],
 			Country:      gf.Country(),

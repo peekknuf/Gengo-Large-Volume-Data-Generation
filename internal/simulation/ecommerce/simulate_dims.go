@@ -1,5 +1,5 @@
 // cmd/simulate_dims.go
-package cmd
+package ecommerce
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	gf "github.com/brianvoe/gofakeit/v6"
+	"github.com/peekknuf/Gengo/internal/models/ecommerce"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
@@ -18,11 +19,11 @@ var (
 )
 
 // generateCustomers creates a slice of Customer structs.
-func generateCustomers(count int) []Customer {
+func GenerateCustomers(count int) []ecommerce.Customer {
 	if count <= 0 {
-		return []Customer{}
+		return []ecommerce.Customer{}
 	}
-	customers := make([]Customer, count)
+	customers := make([]ecommerce.Customer, count)
 	for i := 0; i < count; i++ {
 		firstName := gf.FirstName()
 		lastName := gf.LastName()
@@ -33,7 +34,7 @@ func generateCustomers(count int) []Customer {
 			gf.Number(1, 999),
 			emailProvider)
 
-		customers[i] = Customer{
+		customers[i] = ecommerce.Customer{
 			CustomerID: i + 1,
 			FirstName:  firstName,
 			LastName:   lastName,
@@ -43,11 +44,11 @@ func generateCustomers(count int) []Customer {
 	return customers
 }
 
-func generateCustomerAddresses(customers []Customer) []CustomerAddress {
+func GenerateCustomerAddresses(customers []ecommerce.Customer) []ecommerce.CustomerAddress {
 	if len(customers) == 0 {
-		return []CustomerAddress{}
+		return []ecommerce.CustomerAddress{}
 	}
-	addresses := make([]CustomerAddress, 0)
+	addresses := make([]ecommerce.CustomerAddress, 0)
 	addressIDCounter := 1
 
 	for _, customer := range customers {
@@ -56,7 +57,7 @@ func generateCustomerAddresses(customers []Customer) []CustomerAddress {
 			addrInfo := gf.Address()
 			addressType := addressTypes[rand.Intn(len(addressTypes))]
 
-			addresses = append(addresses, CustomerAddress{
+			addresses = append(addresses, ecommerce.CustomerAddress{
 				AddressID:   addressIDCounter,
 				CustomerID:  customer.CustomerID,
 				AddressType: addressType,
@@ -72,13 +73,13 @@ func generateCustomerAddresses(customers []Customer) []CustomerAddress {
 	return addresses
 }
 
-func generateSuppliers(count int) []Supplier {
+func GenerateSuppliers(count int) []ecommerce.Supplier {
 	if count <= 0 {
-		return []Supplier{}
+		return []ecommerce.Supplier{}
 	}
-	suppliers := make([]Supplier, count)
+	suppliers := make([]ecommerce.Supplier, count)
 	for i := 0; i < count; i++ {
-		suppliers[i] = Supplier{
+		suppliers[i] = ecommerce.Supplier{
 			SupplierID:   i + 1,
 			SupplierName: gf.Company(),
 			Country:      gf.Country(),
@@ -87,11 +88,11 @@ func generateSuppliers(count int) []Supplier {
 	return suppliers
 }
 
-func generateProducts(count int, supplierIDs []int) []Product {
+func GenerateProducts(count int, supplierIDs []int) []ecommerce.Product {
 	if count <= 0 || len(supplierIDs) == 0 {
-		return []Product{}
+		return []ecommerce.Product{}
 	}
-	products := make([]Product, count)
+	products := make([]ecommerce.Product, count)
 
 	priceDist := distuv.Normal{Mu: 75, Sigma: 45}
 
@@ -103,7 +104,7 @@ func generateProducts(count int, supplierIDs []int) []Product {
 			price = gf.Float64Range(5.0, 25.0)
 		}
 
-		products[i] = Product{
+				products[i] = ecommerce.Product{
 			ProductID:       i + 1,
 			SupplierID:      supplierIDs[rand.Intn(len(supplierIDs))],
 			ProductName:     productName,

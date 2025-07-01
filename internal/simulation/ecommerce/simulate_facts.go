@@ -1,15 +1,17 @@
 // cmd/simulate_facts.go
-package cmd
+package ecommerce
 
 import (
 	"fmt"
 	"math"
 	"math/rand"
-	"path/filepath"
+	
 	"sort"
 	"time"
 
 	gf "github.com/brianvoe/gofakeit/v6"
+
+	"github.com/peekknuf/Gengo/internal/models/ecommerce"
 )
 
 // --- Static data for Order generation ---
@@ -72,22 +74,22 @@ func (s *weightedSampler) Sample() int {
 
 // --- Fact Table Generation ---
 
-func generateAndWriteFacts(numOrders int, customerIDs []int, customerAddresses []CustomerAddress, productInfo map[int]ProductDetails, productIDsForSampling []int, format string, outputDir string) error {
+func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommerce.CustomerAddress, productInfo map[int]ecommerce.ProductDetails, productIDsForSampling []int) ([]ecommerce.OrderHeader, []ecommerce.OrderItem, error) {
 	if numOrders <= 0 {
-		return nil
+		return nil, nil, nil
 	}
 	if len(customerIDs) == 0 || len(productIDsForSampling) == 0 || len(customerAddresses) == 0 {
-		return fmt.Errorf("cannot generate facts: dimension ID lists are empty")
+		return nil, nil, fmt.Errorf("cannot generate facts: dimension ID lists are empty")
 	}
 
 	// --- Setup Samplers ---
 	customerSampler, err := setupWeightedSampler(customerIDs)
 	if err != nil {
-		return fmt.Errorf("failed to set up customer sampler: %w", err)
+		return nil, nil, fmt.Errorf("failed to set up customer sampler: %w", err)
 	}
 	productSampler, err := setupWeightedSampler(productIDsForSampling)
 	if err != nil {
-		return fmt.Errorf("failed to set up product sampler: %w", err)
+		return nil, nil, fmt.Errorf("failed to set up product sampler: %w", err)
 	}
 
 	// --- Prepare customer address map ---
@@ -97,8 +99,8 @@ func generateAndWriteFacts(numOrders int, customerIDs []int, customerAddresses [
 	}
 
 	// --- Generation ---
-	headers := make([]OrderHeader, numOrders)
-	items := make([]OrderItem, 0, numOrders*3) // Pre-allocate with an average of 3 items per order
+	headers := make([]ecommerce.OrderHeader, numOrders)
+	items := make([]ecommerce.OrderItem, 0, numOrders*3) // Pre-allocate with an average of 3 items per order
 	orderItemIDCounter := 1
 
 	gf.Seed(time.Now().UnixNano())
@@ -137,7 +139,7 @@ func generateAndWriteFacts(numOrders int, customerIDs []int, customerAddresses [
 			totalPrice := float64(quantity)*unitPrice*(1.0-discount)
 			totalOrderAmount += totalPrice
 
-			orderItem := OrderItem{
+			orderItem := ecommerce.OrderItem{
 				OrderItemID: orderItemIDCounter,
 				OrderID:     i + 1,
 				ProductID:   productID,
@@ -150,7 +152,7 @@ func generateAndWriteFacts(numOrders int, customerIDs []int, customerAddresses [
 			orderItemIDCounter++
 		}
 
-		headers[i] = OrderHeader{
+		headers[i] = ecommerce.OrderHeader{
 			OrderID:           i + 1,
 			CustomerID:        customerID,
 			ShippingAddressID: shippingAddressID,
@@ -160,40 +162,7 @@ func generateAndWriteFacts(numOrders int, customerIDs []int, customerAddresses [
 			TotalOrderAmount:  totalOrderAmount,
 		}
 
-		printProgress(i+1, numOrders, "Generating Orders")
+		
 	}
-	fmt.Println() // Ensure a newline after progress bar
-
-	// --- Writing ---
-	fmt.Println("\n--- Writing Fact Data ---")
-	if err := writeFactData(headers, "fact_orders_header", format, outputDir); err != nil {
-		return err
-	}
-	if err := writeFactData(items, "fact_order_items", format, outputDir); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func writeFactData(data interface{}, filenameBase, format, outputDir string) error {
-	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
-	fmt.Printf("Attempting to write fact table to: %s\n", targetFilename)
-
-	var writeErr error
-	switch format {
-	case "csv":
-		writeErr = writeSliceToCSV(data, targetFilename)
-	case "json":
-		writeErr = writeSliceToJSON(data, targetFilename)
-	case "parquet":
-		writeErr = writeSliceToParquet(data, targetFilename)
-	default:
-		writeErr = fmt.Errorf("unsupported format '%s'", format)
-	}
-
-	if writeErr != nil {
-		return fmt.Errorf("error writing %s: %w", targetFilename, writeErr)
-	}
-	return nil
+	return headers, items, nil
 }
