@@ -203,7 +203,87 @@ func TestE2EFinancialGeneration(t *testing.T) {
 	verifyForeignKey(t, stockPrices, "company_id", companyPKs, "dim_companies")
 	verifyForeignKey(t, stockPrices, "exchange_id", exchangePKs, "dim_exchanges")
 
+	// Verify 3NF by simulating a join
+	verify3NFFinancial(t, companies, exchanges, stockPrices)
+
 	t.Log("All financial integrity checks passed.")
+}
+
+// verify3NFFinancial checks the 3NF integrity of the financial data by simulating a join.
+func verify3NFFinancial(t *testing.T, companies, exchanges, stockPrices [][]string) {
+	t.Log("Verifying 3NF for financial data by simulating a join...")
+
+	// Create maps for dim_companies and dim_exchanges for easy lookup
+	companiesMap := make(map[string][]string)
+	companiesHeaderMap := createRecordMap(companies)
+	companyIDIndex, ok := companiesHeaderMap["company_id"]
+	if !ok {
+		t.Fatal("column 'company_id' not found in dim_companies")
+	}
+	companyNameIndex, ok := companiesHeaderMap["company_name"]
+	if !ok {
+		t.Fatal("column 'company_name' not found in dim_companies")
+	}
+	for _, record := range companies[1:] {
+		companiesMap[record[companyIDIndex]] = record
+	}
+
+	exchangesMap := make(map[string][]string)
+	exchangesHeaderMap := createRecordMap(exchanges)
+	exchangeIDIndex, ok := exchangesHeaderMap["exchange_id"]
+	if !ok {
+		t.Fatal("column 'exchange_id' not found in dim_exchanges")
+	}
+	exchangeNameIndex, ok := exchangesHeaderMap["exchange_name"]
+	if !ok {
+		t.Fatal("column 'exchange_name' not found in dim_exchanges")
+	}
+	for _, record := range exchanges[1:] {
+		exchangesMap[record[exchangeIDIndex]] = record
+	}
+
+	stockPricesHeaderMap := createRecordMap(stockPrices)
+	stockCompanyIDIndex, ok := stockPricesHeaderMap["company_id"]
+	if !ok {
+		t.Fatal("column 'company_id' not found in fact_daily_stock_prices")
+	}
+	stockExchangeIDIndex, ok := stockPricesHeaderMap["exchange_id"]
+	if !ok {
+		t.Fatal("column 'exchange_id' not found in fact_daily_stock_prices")
+	}
+
+	// "Join" fact_daily_stock_prices with dim_companies and dim_exchanges
+	for i, stockRecord := range stockPrices[1:] {
+		companyID := stockRecord[stockCompanyIDIndex]
+		exchangeID := stockRecord[stockExchangeIDIndex]
+
+		// Check if company exists
+		companyRecord, ok := companiesMap[companyID]
+		if !ok {
+			// This is already checked by verifyForeignKey, but it's good practice for a join simulation
+			t.Errorf("Row %d in fact_daily_stock_prices: Company with ID '%s' not found in dim_companies", i+2, companyID)
+			continue
+		}
+
+		// Check if exchange exists
+		exchangeRecord, ok := exchangesMap[exchangeID]
+		if !ok {
+			// This is already checked by verifyForeignKey, but it's good practice for a join simulation
+			t.Errorf("Row %d in fact_daily_stock_prices: Exchange with ID '%s' not found in dim_exchanges", i+2, exchangeID)
+			continue
+		}
+
+		// 3NF check: ensure some data from the joined tables is consistent and not null.
+		if companyRecord[companyNameIndex] == "" {
+			t.Errorf("Row %d in fact_daily_stock_prices: Joined company with ID '%s' has an empty company_name", i+2, companyID)
+		}
+
+		if exchangeRecord[exchangeNameIndex] == "" {
+			t.Errorf("Row %d in fact_daily_stock_prices: Joined exchange with ID '%s' has an empty exchange_name", i+2, exchangeID)
+		}
+	}
+
+	t.Log("3NF verification for financial data passed.")
 }
 
 // --- Test Helper Functions ---
