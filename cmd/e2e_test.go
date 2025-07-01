@@ -209,6 +209,78 @@ func TestE2EFinancialGeneration(t *testing.T) {
 	t.Log("All financial integrity checks passed.")
 }
 
+// TestE2EMedicalGeneration performs an end-to-end test of the data generation process for the medical model.
+func TestE2EMedicalGeneration(t *testing.T) {
+	// 1. Setup: Build the binary and create a temporary output directory
+	t.Log("Building Gengo binary...")
+	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", "..")
+	if err := buildCmd.Run(); err != nil {
+		t.Fatalf("Failed to build Gengo binary: %v", err)
+	}
+
+	// Add execute permissions to the binary
+	if err := os.Chmod("Gengo_test", 0755); err != nil {
+		t.Fatalf("Failed to set executable permission on Gengo_test: %v", err)
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	tempDir := fmt.Sprintf("gengo_test_output_medical_%d", rand.Intn(100000))
+	t.Logf("Using temporary directory: %s", tempDir)
+
+	// 2. Execution: Run the generator with predefined inputs
+	genCmd := exec.Command("./Gengo_test", "gen")
+	stdin, err := genCmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("Failed to get stdin pipe: %v", err)
+	}
+
+	go func() {
+		defer stdin.Close()
+		// Inputs: model type, very small size, csv format, temp directory name
+		io.WriteString(stdin, "medical\n")
+		io.WriteString(stdin, "0.00001\n")
+		io.WriteString(stdin, "csv\n")
+		io.WriteString(stdin, tempDir+"\n")
+	}()
+
+	t.Log("Running Gengo medical generator...")
+	output, err := genCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Medical Generator output:\n%s", string(output))
+		t.Fatalf("Gengo medical command failed: %v", err)
+	}
+	t.Log("Medical Generator finished successfully.")
+
+	// 3. Verification: Defer cleanup and run checks
+	defer func() {
+		t.Logf("Cleaning up temporary directory: %s", tempDir)
+		os.RemoveAll(tempDir)
+		os.Remove("Gengo_test")
+	}()
+
+	// --- Read all generated data ---
+	t.Log("Reading generated medical files...")
+	patients := readCsvFile(t, filepath.Join(tempDir, "dim_patients.csv"))
+	doctors := readCsvFile(t, filepath.Join(tempDir, "dim_doctors.csv"))
+	clinics := readCsvFile(t, filepath.Join(tempDir, "dim_clinics.csv"))
+	appointments := readCsvFile(t, filepath.Join(tempDir, "fact_appointments.csv"))
+
+	// --- Create maps for FK lookups ---
+	patientPKs := createPrimaryKeySet(t, patients, "patient_id")
+	doctorPKs := createPrimaryKeySet(t, doctors, "doctor_id")
+	clinicPKs := createPrimaryKeySet(t, clinics, "clinic_id")
+
+	// --- Perform Integrity Checks ---
+	t.Log("Verifying medical data integrity...")
+
+	// Check FKs in fact_appointments
+	verifyForeignKey(t, appointments, "patient_id", patientPKs, "dim_patients")
+	verifyForeignKey(t, appointments, "doctor_id", doctorPKs, "dim_doctors")
+	verifyForeignKey(t, appointments, "clinic_id", clinicPKs, "dim_clinics")
+
+	t.Log("All medical integrity checks passed.")
+}
+
 // verify3NFFinancial checks the 3NF integrity of the financial data by simulating a join.
 func verify3NFFinancial(t *testing.T, companies, exchanges, stockPrices [][]string) {
 	t.Log("Verifying 3NF for financial data by simulating a join...")
@@ -301,15 +373,6 @@ func readCsvFile(t *testing.T, path string) [][]string {
 		t.Fatalf("Failed to read CSV data from %s: %v", path, err)
 	}
 	return records
-}
-
-func createRecordMap(records [][]string) map[string]int {
-	header := records[0]
-	rmap := make(map[string]int, len(header))
-	for i, h := range header {
-		rmap[h] = i
-	}
-	return rmap
 }
 
 func createPrimaryKeySet(t *testing.T, records [][]string, pkColumnName string) map[string]struct{} {

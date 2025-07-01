@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -33,6 +34,25 @@ func addUnderscores(n int) string {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
 	return strings.Join(parts, "_")
+}
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func randomString(n int) string {
+    b := make([]byte, n)
+    for i := range b {
+        b[i] = letterBytes[rand.Intn(len(letterBytes))]
+    }
+    return string(b)
+}
+
+func createRecordMap(records [][]string) map[string]int {
+	header := records[0]
+	rmap := make(map[string]int, len(header))
+	for i, h := range header {
+		rmap[h] = i
+	}
+	return rmap
 }
 
 var lastReportedInterval int = -1

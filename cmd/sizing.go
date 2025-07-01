@@ -43,10 +43,18 @@ type ECommerceRowCounts struct {
 }
 
 // FinancialRowCounts holds the calculated number of rows for each financial table
-type FinancialRowCounts struct {
+	type FinancialRowCounts struct {
 	Companies         int
 	Exchanges         int
 	DailyStockPrices int
+}
+
+// MedicalRowCounts holds the calculated number of rows for each medical table
+type MedicalRowCounts struct {
+	Patients     int
+	Doctors      int
+	Clinics      int
+	Appointments int
 }
 
 // estimateAvgRowSizeBytes estimates the average uncompressed size of a single row for a given table type.
@@ -72,6 +80,15 @@ func estimateAvgRowSizeBytes(tableType string) (int, error) {
 		return 37, nil
 	case "daily_stock_price":
 		return 120, nil
+	// Medical (placeholder estimates)
+	case "patient":
+		return 80, nil
+	case "doctor":
+		return 70, nil
+	case "clinic":
+		return 100, nil
+	case "appointment":
+		return 90, nil
 	default:
 		return 0, fmt.Errorf("unknown table type: %s", tableType)
 	}
@@ -160,5 +177,28 @@ func CalculateFinancialRowCounts(targetGB float64) (FinancialRowCounts, error) {
 	return counts, nil
 }
 
+// CalculateMedicalRowCounts determines the target number of rows for each medical table.
+func CalculateMedicalRowCounts(targetGB float64) (MedicalRowCounts, error) {
+	if targetGB <= 0 {
+		return MedicalRowCounts{}, fmt.Errorf("target size must be positive")
+	}
 
+	targetBytes := targetGB * 1024 * 1024 * 1024
 
+	// Placeholder logic for sizing the medical model
+	const effectiveSizePerAppointment = 200.0 // Bytes/appointment, placeholder
+
+	numAppointments := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerAppointment)))
+	numPatients := int(math.Max(1.0, math.Round(float64(numAppointments)/5.0))) // 5 appointments per patient
+	numDoctors := int(math.Max(1.0, math.Round(float64(numPatients)/100.0)))   // 100 patients per doctor
+	numClinics := int(math.Max(1.0, math.Round(float64(numDoctors)/20.0)))      // 20 doctors per clinic
+
+	counts := MedicalRowCounts{
+		Patients:     numPatients,
+		Doctors:      numDoctors,
+		Clinics:      numClinics,
+		Appointments: numAppointments,
+	}
+
+	return counts, nil
+}

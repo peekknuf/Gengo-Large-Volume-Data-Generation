@@ -24,6 +24,9 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 	case "financial":
 		financialCounts := counts.(FinancialRowCounts)
 		err = GenerateFinancialModelData(financialCounts, format, outputDir)
+	case "medical":
+		medicalCounts := counts.(MedicalRowCounts)
+		err = GenerateMedicalModelData(medicalCounts, format, outputDir)
 	default:
 		err = fmt.Errorf("unsupported model type: %s", modelType)
 	}
@@ -94,5 +97,32 @@ func GenerateFinancialModelData(counts FinancialRowCounts, format string, output
 	if err := generateAndWriteDailyStockPrices(counts.DailyStockPrices, companies, exchanges, format, outputDir); err != nil {
 		return fmt.Errorf("failed generating/writing daily stock prices: %w", err)
 	}
+	return nil
+}
+
+// GenerateMedicalModelData generates and writes the medical relational model.
+func GenerateMedicalModelData(counts MedicalRowCounts, format string, outputDir string) error {
+	// Generate dimensions
+	patients := generatePatients(counts.Patients)
+	doctors := generateDoctors(counts.Doctors)
+	clinics := generateClinics(counts.Clinics)
+
+	// Write dimensions
+	if err := writeSliceData(patients, "dim_patients", format, outputDir); err != nil {
+		return fmt.Errorf("failed writing patients: %w", err)
+	}
+	if err := writeSliceData(doctors, "dim_doctors", format, outputDir); err != nil {
+		return fmt.Errorf("failed writing doctors: %w", err)
+	}
+	if err := writeSliceData(clinics, "dim_clinics", format, outputDir); err != nil {
+		return fmt.Errorf("failed writing clinics: %w", err)
+	}
+
+	// Generate and write facts
+	appointments := generateAppointments(counts.Appointments, patients, doctors, clinics)
+	if err := writeSliceData(appointments, "fact_appointments", format, outputDir); err != nil {
+		return fmt.Errorf("failed generating/writing appointments: %w", err)
+	}
+
 	return nil
 }

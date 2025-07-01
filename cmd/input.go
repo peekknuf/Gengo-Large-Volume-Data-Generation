@@ -9,14 +9,14 @@ import (
 // getUserInputForModel prompts the user for the data model and then for the generation parameters.
 func getUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
 	// --- Get Model Type ---
-	fmt.Print("Enter the data model to generate (ecommerce/financial): ")
+	fmt.Print("Enter the data model to generate (ecommerce/financial/medical): ")
 	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
 		err = fmt.Errorf("error reading model type: %w", scanErr)
 		return
 	}
 	modelType = strings.ToLower(strings.TrimSpace(modelType))
-	if modelType != "ecommerce" && modelType != "financial" {
-		err = fmt.Errorf("unsupported model type: %s. Please choose ecommerce or financial", modelType)
+	if modelType != "ecommerce" && modelType != "financial" && modelType != "medical" {
+		err = fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", modelType)
 		return
 	}
 
@@ -67,6 +67,19 @@ func getUserInputForModel() (modelType string, counts interface{}, format string
 		fmt.Printf("Companies:             %s\n", addUnderscores(financialCounts.Companies))
 		fmt.Printf("Exchanges:             %s\n", addUnderscores(financialCounts.Exchanges))
 		fmt.Printf("Daily Stock Prices:    %s\n", addUnderscores(financialCounts.DailyStockPrices))
+	case "medical":
+		var medicalCounts MedicalRowCounts
+		medicalCounts, err = CalculateMedicalRowCounts(targetGB)
+		if err != nil {
+			err = fmt.Errorf("error calculating medical row counts: %w", err)
+			return
+		}
+		counts = medicalCounts
+		fmt.Println("\n--- Estimated Medical Row Counts ---")
+		fmt.Printf("Patients:      %s\n", addUnderscores(medicalCounts.Patients))
+		fmt.Printf("Doctors:       %s\n", addUnderscores(medicalCounts.Doctors))
+		fmt.Printf("Clinics:       %s\n", addUnderscores(medicalCounts.Clinics))
+		fmt.Printf("Appointments:  %s\n", addUnderscores(medicalCounts.Appointments))
 	}
 
 	fmt.Println("----------------------------------------")
