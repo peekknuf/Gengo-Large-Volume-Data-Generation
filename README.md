@@ -7,11 +7,10 @@ It was originally built because generating millions of rows using scripting lang
 ## Features ✨
 
 - **Fast:** Leverages Go's performance for speedy data generation.
-- **Relational Model:** Generates a predefined 3NF e-commerce data model including:
-  - `dim_customers`
-  - `dim_products`
-  - `dim_locations`
-  - `fact_orders`
+- **Relational Model:** Generates predefined 3NF data models for:
+    - **E-commerce:** `dim_customers`, `dim_customer_addresses`, `dim_suppliers`, `dim_products`, `fact_orders_header`, `fact_order_items`
+    - **Financial:** `dim_companies`, `dim_exchanges`, `fact_daily_stock_prices`
+    - **Medical:** `dim_patients`, `dim_doctors`, `dim_clinics`, `fact_appointments`
 - **Multiple Formats:** Output data as **CSV**, **JSON Lines** (one JSON object per line), or efficient **Apache Parquet**.
 - **Realistic Facts:** Uses weighted sampling for selecting customers and products when generating orders, simulating more realistic purchasing patterns (e.g., some customers/products appear more frequently).
 - **Compressed Parquet:** Generates compressed Parquet files (Snappy by default) for smaller disk usage (one file per table).
@@ -55,6 +54,8 @@ Simply run the compiled binary with the `gen` command:
 
 Gengo will then prompt you interactively:
 
+- Enter the data model to generate: Type `ecommerce`, `financial`, or `medical`. Gengo can handle common misspellings and abbreviations (e.g., `ecom`, `fin`, `med`).
+
 - Enter the approximate target size in GB: (e.g., 0.5, 10, 50). Gengo will display the estimated row counts for each table based on this.
 
 - Enter the desired output format: Type csv, json, or parquet.
@@ -67,10 +68,10 @@ Gengo will then get to work, showing progress and timing information when comple
 
 Want different fake data or schema modifications?
 
-- **Schema:** Modify the Go structs (`Customer`, `Product`, `Location`, `OrderFact`) defined in `cmd/models.go`. Remember to update struct tags (`json`, `parquet`) accordingly.
-- **Dimension Data:** Change the `gofakeit` functions or logic used within the `generateCustomers`, `generateProducts`, `generateLocations` functions in `cmd/simulate_dims.go`.
-- **Fact Data & Realism:** Adjust the generation logic (e.g., distributions, static lists), foreign key selection (including weighted sampling), or calculation logic within the `generateAndWriteOrders` function in `cmd/simulate_facts.go`.
-- **Sizing Ratios:** Modify the constants like `DefaultOrdersPerCustomerRatio` in `cmd/sizing.go` to change the relative sizes of the generated tables.
+- **Schema:** Modify the Go structs in `internal/models/ecommerce/ecommerce.go`, `internal/models/financial/financial.go`, and `internal/models/medical/medical.go`. Remember to update struct tags (`json`, `parquet`) accordingly.
+- **Dimension Data:** Change the `gofakeit` functions or logic used within the `Generate*` functions in `internal/simulation/ecommerce/simulate_dims.go`, `internal/simulation/financial/simulate_financial_dims.go`, and `internal/simulation/medical/simulate_medical_dims.go`.
+- **Fact Data & Realism:** Adjust the generation logic (e.g., distributions, static lists), foreign key selection (including weighted sampling), or calculation logic within the `Generate*ModelData` functions in `internal/simulation/ecommerce/simulate_facts.go`, `internal/simulation/financial/simulate_financial_facts.go`, and `internal/simulation/medical/simulate_medical_facts.go`.
+- **Sizing Ratios:** Modify the constants in `internal/core/sizing.go` to change the relative sizes of the generated tables.
 
 ## Benchmarks 📊
 
