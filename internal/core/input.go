@@ -12,15 +12,14 @@ import (
 
 // getUserInputForModel prompts the user for the data model and then for the generation parameters.
 func GetUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
-	// --- Get Model Type ---
 	fmt.Print("Enter the data model to generate (ecommerce/financial/medical): ")
 	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
 		err = fmt.Errorf("error reading model type: %w", scanErr)
 		return
 	}
 	modelType = strings.ToLower(strings.TrimSpace(modelType))
-	if modelType != "ecommerce" && modelType != "financial" && modelType != "medical" {
-		err = fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", modelType)
+	modelType, err = matchModelType(modelType)
+	if err != nil {
 		return
 	}
 
@@ -114,4 +113,19 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 	}
 
 		return modelType, counts, format, outputDir, nil
+}
+
+// matchModelType attempts to match the user's input to a valid model type.
+// It handles common misspellings and abbreviations.
+func matchModelType(input string) (string, error) {
+	switch strings.ToLower(input) {
+	case "ecommerce", "ecom", "e-commerce":
+		return "ecommerce", nil
+	case "financial", "fin":
+		return "financial", nil
+	case "medical", "med":
+		return "medical", nil
+	default:
+		return "", fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", input)
+	}
 }

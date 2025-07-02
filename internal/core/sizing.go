@@ -1,4 +1,3 @@
-// cmd/sizing.go
 package core
 
 import (
@@ -9,7 +8,6 @@ import (
 	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
 )
 
-// --- E-commerce Configuration ---
 const (
 	AvgItemsPerOrder              = 5.0
 	DefaultOrdersPerCustomerRatio = 10.0
@@ -17,13 +15,11 @@ const (
 	AvgAddressesPerCustomer       = 1.5
 )
 
-// --- Financial Configuration ---
 const (
 	AvgTradingDaysPerYear = 252
 	NumYearsOfData        = 5
 )
 
-// Estimated Average Size in Bytes for Different Field Types (Uncompressed)
 const (
 	AvgBytesStringTiny   = 8
 	AvgBytesStringShort  = 15
@@ -35,7 +31,6 @@ const (
 	SizeBytesTimestamp   = 8
 )
 
-// ECommerceRowCounts holds the calculated number of rows for each e-commerce table
 type ECommerceRowCounts struct {
 	Customers         int
 	CustomerAddresses int

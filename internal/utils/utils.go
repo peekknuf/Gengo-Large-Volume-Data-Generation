@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// AddUnderscores enhances integer readability by adding underscore separators.
 func AddUnderscores(n int) string {
 	str := strconv.Itoa(n)
 	ln := len(str)
@@ -23,14 +22,12 @@ func AddUnderscores(n int) string {
 	if ln > 0 {
 		parts = append(parts, str)
 	}
-	// Reverse the parts
 	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
 	return strings.Join(parts, "_")
 }
 
-// PrintProgress displays a progress bar in the console.
 func PrintProgress(current, total int, label string) {
 	if total == 0 {
 		return

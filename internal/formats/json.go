@@ -1,4 +1,3 @@
-// cmd/json.go
 package formats
 
 import (
@@ -8,25 +7,21 @@ import (
 	"reflect"
 )
 
-// writeSliceToJSON writes a slice of structs to a file using JSON Lines format.
 func writeSliceToJSON(data interface{}, targetFilename string) error {
-	// 1. Validate input
 	sliceVal := reflect.ValueOf(data)
 	if sliceVal.Kind() != reflect.Slice {
 		return fmt.Errorf("writeSliceToJSON expected a slice, got %T", data)
 	}
-	sliceLen := sliceVal.Len() // Store length
+	sliceLen := sliceVal.Len()
 	if sliceLen == 0 {
 		fmt.Printf("Skipping JSON write for %s: slice is empty.\n", targetFilename)
 		return nil
 	}
 
-	// 2. Create file
 	file, err := os.Create(targetFilename)
 	if err != nil {
 		return fmt.Errorf("failed to create json file %s: %w", targetFilename, err)
 	}
-	// Use named return variable to capture potential close error
 	var fileCloseErr error
 	defer func() {
 		if err := file.Close(); err != nil {
@@ -34,10 +29,8 @@ func writeSliceToJSON(data interface{}, targetFilename string) error {
 		}
 	}()
 
-	// 3. Create Encoder (JSON Lines format - no indentation)
 	encoder := json.NewEncoder(file)
 
-	// 4. Iterate and encode
 	elemType := sliceVal.Type().Elem()
 	isPointer := elemType.Kind() == reflect.Ptr
 
@@ -48,19 +41,17 @@ func writeSliceToJSON(data interface{}, targetFilename string) error {
 			continue
 		}
 
-		interfaceVal := elemVal.Interface() // Encoder works on interface{}
+		interfaceVal := elemVal.Interface()
 
 		if err := encoder.Encode(interfaceVal); err != nil {
-			// Return encoding error immediately, defer will still close file
 			return fmt.Errorf("failed to encode record %d to json file %s: %w", i, targetFilename, err)
 		}
 	}
 
-	// If encoding finished, return potential file close error captured by defer
 	if fileCloseErr != nil {
 		return fileCloseErr
 	}
 
 	fmt.Printf("Successfully wrote %d records to %s (JSON Lines)\n", sliceLen, targetFilename)
-	return nil // Success
+	return nil
 }

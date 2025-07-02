@@ -1,4 +1,3 @@
-// cmd/simulate_medical_facts.go
 package medical
 
 import (
@@ -11,7 +10,6 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// generateAppointments creates a slice of Appointment structs.
 func generateAppointments(count int, patients []medical.Patient, doctors []medical.Doctor, clinics []medical.Clinic) []medical.Appointment {
 	if count <= 0 || len(patients) == 0 || len(doctors) == 0 || len(clinics) == 0 {
 		return []medical.Appointment{}

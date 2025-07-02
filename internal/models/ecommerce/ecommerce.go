@@ -2,9 +2,6 @@ package ecommerce
 
 import "time"
 
-// --- E-commerce Model ---
-
-// Customer represents the dim_customers table
 type Customer struct {
 	CustomerID int    `json:"customer_id" parquet:"customer_id"`
 	FirstName  string `json:"first_name" parquet:"first_name"`
@@ -12,11 +9,10 @@ type Customer struct {
 	Email      string `json:"email" parquet:"email"`
 }
 
-// CustomerAddress represents the dim_customer_addresses table
 type CustomerAddress struct {
 	AddressID   int    `json:"address_id" parquet:"address_id"`
-	CustomerID  int    `json:"customer_id" parquet:"customer_id"` // FK to dim_customers
-	AddressType string `json:"address_type" parquet:"address_type"` // e.g., "shipping", "billing"
+	CustomerID  int    `json:"customer_id" parquet:"customer_id"`
+	AddressType string `json:"address_type" parquet:"address_type"`
 	Address     string `json:"address" parquet:"address"`
 	City        string `json:"city" parquet:"city"`
 	State       string `json:"state" parquet:"state"`
@@ -24,45 +20,40 @@ type CustomerAddress struct {
 	Country     string `json:"country" parquet:"country"`
 }
 
-// Supplier represents the dim_suppliers table
 type Supplier struct {
 	SupplierID   int    `json:"supplier_id" parquet:"supplier_id"`
 	SupplierName string `json:"supplier_name" parquet:"supplier_name"`
 	Country      string `json:"country" parquet:"country"`
 }
 
-// Product represents the dim_products table
 type Product struct {
 	ProductID       int     `json:"product_id" parquet:"product_id"`
-	SupplierID      int     `json:"supplier_id" parquet:"supplier_id"` // FK to dim_suppliers
+	SupplierID      int     `json:"supplier_id" parquet:"supplier_id"`
 	ProductName     string  `json:"product_name" parquet:"product_name"`
 	ProductCategory string  `json:"product_category" parquet:"product_category"`
 	BasePrice       float64 `json:"base_price" parquet:"base_price"`
 }
 
-// OrderHeader represents the fact_orders_header table
 type OrderHeader struct {
 	OrderID           int       `json:"order_id" parquet:"order_id"`
-	CustomerID        int       `json:"customer_id" parquet:"customer_id"`               // FK to dim_customers
-	ShippingAddressID int       `json:"shipping_address_id" parquet:"shipping_address_id"` // FK to dim_customer_addresses
-	BillingAddressID  int       `json:"billing_address_id" parquet:"billing_address_id"`   // FK to dim_customer_addresses
+	CustomerID        int       `json:"customer_id" parquet:"customer_id"`
+	ShippingAddressID int       `json:"shipping_address_id" parquet:"shipping_address_id"`
+	BillingAddressID  int       `json:"billing_address_id" parquet:"billing_address_id"`
 	OrderTimestamp    time.Time `json:"order_timestamp" parquet:"order_timestamp"`
 	OrderStatus       string    `json:"order_status" parquet:"order_status"`
-	TotalOrderAmount  float64   `json:"total_order_amount" parquet:"total_order_amount"` // Calculated from order items
+	TotalOrderAmount  float64   `json:"total_order_amount" parquet:"total_order_amount"`
 }
 
-// OrderItem represents the fact_order_items table
 type OrderItem struct {
 	OrderItemID int     `json:"order_item_id" parquet:"order_item_id"`
-	OrderID     int     `json:"order_id" parquet:"order_id"`         // FK to fact_orders_header
-	ProductID   int     `json:"product_id" parquet:"product_id"`     // FK to dim_products
+	OrderID     int     `json:"order_id" parquet:"order_id"`
+	ProductID   int     `json:"product_id" parquet:"product_id"`
 	Quantity    int     `json:"quantity" parquet:"quantity"`
-	UnitPrice   float64 `json:"unit_price" parquet:"unit_price"`   // Price at time of sale
-	Discount    float64 `json:"discount" parquet:"discount"`       // 0.0 to 1.0
-	TotalPrice  float64 `json:"total_price" parquet:"total_price"` // Calculated: Quantity * UnitPrice * (1 - Discount)
+	UnitPrice   float64 `json:"unit_price" parquet:"unit_price"`
+	Discount    float64 `json:"discount" parquet:"discount"`
+	TotalPrice  float64 `json:"total_price" parquet:"total_price"`
 }
 
-// ProductDetails is used to pass essential product info for order generation.
 type ProductDetails struct {
 	BasePrice float64
 }

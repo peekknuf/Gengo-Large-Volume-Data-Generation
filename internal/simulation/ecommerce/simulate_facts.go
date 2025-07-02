@@ -1,4 +1,3 @@
-// cmd/simulate_facts.go
 package ecommerce
 
 import (
@@ -14,12 +13,9 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/ecommerce"
 )
 
-// --- Static data for Order generation ---
 var (
 	orderStatuses = []string{"Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Returned"}
 )
-
-// --- Weighted Sampler ---
 
 type weightedSampler struct {
 	ids               []int
@@ -72,8 +68,6 @@ func (s *weightedSampler) Sample() int {
 	return s.ids[index]
 }
 
-// --- Fact Table Generation ---
-
 func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommerce.CustomerAddress, productInfo map[int]ecommerce.ProductDetails, productIDsForSampling []int) ([]ecommerce.OrderHeader, []ecommerce.OrderItem, error) {
 	if numOrders <= 0 {
 		return nil, nil, nil
@@ -82,7 +76,6 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		return nil, nil, fmt.Errorf("cannot generate facts: dimension ID lists are empty")
 	}
 
-	// --- Setup Samplers ---
 	customerSampler, err := setupWeightedSampler(customerIDs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to set up customer sampler: %w", err)
@@ -92,15 +85,13 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		return nil, nil, fmt.Errorf("failed to set up product sampler: %w", err)
 	}
 
-	// --- Prepare customer address map ---
 	customerAddressMap := make(map[int][]int)
 	for _, addr := range customerAddresses {
 		customerAddressMap[addr.CustomerID] = append(customerAddressMap[addr.CustomerID], addr.AddressID)
 	}
 
-	// --- Generation ---
 	headers := make([]ecommerce.OrderHeader, numOrders)
-	items := make([]ecommerce.OrderItem, 0, numOrders*3) // Pre-allocate with an average of 3 items per order
+	items := make([]ecommerce.OrderItem, 0, numOrders*3)
 	orderItemIDCounter := 1
 
 	gf.Seed(time.Now().UnixNano())
@@ -111,7 +102,7 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		customerID := customerSampler.Sample()
 		addresses, ok := customerAddressMap[customerID]
 		if !ok || len(addresses) == 0 {
-			continue // Skip if customer has no addresses
+			continue
 		}
 
 		shippingAddressID := addresses[rand.Intn(len(addresses))]
@@ -120,7 +111,7 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		orderTimestamp := gf.DateRange(startTime, endTime)
 		orderStatus := orderStatuses[rand.Intn(len(orderStatuses))]
 
-		numItems := rand.Intn(10) + 1 // 1 to 10 items per order
+		numItems := rand.Intn(10) + 1
 		var totalOrderAmount float64
 
 		for j := 0; j < numItems; j++ {

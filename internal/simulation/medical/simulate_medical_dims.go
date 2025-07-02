@@ -1,4 +1,3 @@
-// cmd/simulate_medical_dims.go
 package medical
 
 import (
@@ -11,7 +10,6 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// generatePatients creates a slice of Patient structs.
 func GeneratePatients(count int) []medical.Patient {
 	if count <= 0 {
 		return []medical.Patient{}
@@ -29,7 +27,6 @@ func GeneratePatients(count int) []medical.Patient {
 	return patients
 }
 
-// generateDoctors creates a slice of Doctor structs.
 func GenerateDoctors(count int) []medical.Doctor {
 	if count <= 0 {
 		return []medical.Doctor{}
@@ -46,7 +43,6 @@ func GenerateDoctors(count int) []medical.Doctor {
 	return doctors
 }
 
-// generateClinics creates a slice of Clinic structs.
 func GenerateClinics(count int) []medical.Clinic {
 	if count <= 0 {
 		return []medical.Clinic{}

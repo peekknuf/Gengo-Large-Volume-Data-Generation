@@ -22,7 +22,6 @@ go build
 ./Gengo gen
 and follow through`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// This will be handled by the 'gen' command or other subcommands
 	},
 }
 

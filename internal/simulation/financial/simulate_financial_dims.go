@@ -1,4 +1,3 @@
-// cmd/simulate_financial_dims.go
 package financial
 
 import (

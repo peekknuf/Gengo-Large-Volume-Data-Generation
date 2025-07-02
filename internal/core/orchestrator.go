@@ -44,7 +44,6 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 			productIDsForSampling = append(productIDsForSampling, p.ProductID)
 		}
 		
-		// Write dimension data
 		if err = formats.WriteSliceData(customers, "dim_customers", format, outputDir); err != nil {
 			return err
 		}
@@ -57,9 +56,9 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 		if err = formats.WriteSliceData(products, "dim_products", format, outputDir); err != nil {
 			return err
 		}
-
-		// Generate and write fact data
-		headers, items, err := ecommerce.GenerateECommerceModelData(ecommerceCounts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling)
+			var headers []ecommercemodels.OrderHeader
+		var items []ecommercemodels.OrderItem
+		headers, items, err = ecommerce.GenerateECommerceModelData(ecommerceCounts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling)
 		if err != nil {
 			return err
 		}

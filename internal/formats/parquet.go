@@ -1,4 +1,3 @@
-// cmd/parquet.go
 package formats
 
 import (
@@ -22,9 +21,7 @@ const (
 	parquetWriteBatchSize = 1024 * 16
 )
 
-// writeSliceToParquet writes a slice of structs to a single Parquet file with batching.
-func writeSliceToParquet(data interface{}, targetFilename string) (err error) { // Use named return
-	// 1. Validate input
+func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 	sliceVal := reflect.ValueOf(data)
 	if sliceVal.Kind() != reflect.Slice {
 		return fmt.Errorf("writeSliceToParquet expected a slice, got %T", data)
@@ -35,7 +32,6 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		return nil
 	}
 
-	// 2. Determine Schema
 	elemType := sliceVal.Type().Elem()
 	isPointer := elemType.Kind() == reflect.Ptr
 	if isPointer {
@@ -57,7 +53,6 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		}
 	}
 
-	// 3. Setup File (NO defer file.Close() here)
 	var file *os.File
 	file, err = os.Create(targetFilename)
 	if err != nil {
@@ -69,7 +64,6 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		}
 	}()
 
-	// 4. Setup Writer and Builder
 	pool := memory.NewGoAllocator()
 	props := parquet.NewWriterProperties(parquet.WithDictionaryDefault(true), parquet.WithCompression(compress.Codecs.Snappy))
 	arrowProps := pqarrow.NewArrowWriterProperties()
@@ -84,9 +78,8 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		}
 	}()
 	builder := array.NewRecordBuilder(pool, schema)
-	defer builder.Release() // Defer builder release
+	defer builder.Release()
 
-	// 5. Iterate, Append, and Write Batches
 	rowsInCurrentBatch := 0
 	fmt.Printf("Writing %d records to %s (Parquet)...\n", sliceLen, targetFilename)
 	progressStep := sliceLen / 20
@@ -129,9 +122,8 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		if (i+1)%progressStep == 0 || i == sliceLen-1 {
             fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
         }
-	} // End main loop
+	} 
 
-	// 6. Write Final Batch
 	if rowsInCurrentBatch > 0 {
 		fmt.Printf("Writing final %d rows for %s parquet...\n", rowsInCurrentBatch, targetFilename)
 		_, writeErr := writeParquetBatchCorrected(writer, builder, pool, schema, targetFilename)
@@ -141,7 +133,6 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) { 
 		}
 	}
 
-	// 7. Return final error state
 	if err == nil {
 		fmt.Printf("Successfully finished writing to %s (pending close)\n", targetFilename)
 	}

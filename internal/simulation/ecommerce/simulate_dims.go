@@ -1,4 +1,3 @@
-// cmd/simulate_dims.go
 package ecommerce
 
 import (
