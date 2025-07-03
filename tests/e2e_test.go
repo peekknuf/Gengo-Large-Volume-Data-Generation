@@ -2,6 +2,7 @@
 package tests
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -34,6 +35,7 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 
 	// 2. Execution: Run the generator with predefined inputs
 	genCmd := exec.Command("/home/peek/code/Gengo/Gengo_test", "gen")
+	genCmd.Env = append(os.Environ(), "GENGO_TEST_MODE=true")
 	stdin, err := genCmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("Failed to get stdin pipe: %v", err)
@@ -49,9 +51,15 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 	}()
 
 	t.Log("Running Gengo generator...")
-	output, err := genCmd.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	genCmd.Stdout = &stdout
+	genCmd.Stderr = &stderr
+
+	err = genCmd.Run()
+
+	t.Logf("Gengo stdout:\n%s", stdout.String())
 	if err != nil {
-		t.Logf("Generator output:\n%s", string(output))
+		t.Logf("Gengo stderr:\n%s", stderr.String())
 		t.Fatalf("Gengo command failed: %v", err)
 	}
 	t.Log("Generator finished successfully.")
@@ -159,6 +167,7 @@ func TestE2EFinancialGeneration(t *testing.T) {
 
 	// 2. Execution: Run the generator with predefined inputs
 	genCmd := exec.Command("/home/peek/code/Gengo/Gengo_test", "gen")
+	genCmd.Env = append(os.Environ(), "GENGO_TEST_MODE=true")
 	stdin, err := genCmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("Failed to get stdin pipe: %v", err)
@@ -174,9 +183,15 @@ func TestE2EFinancialGeneration(t *testing.T) {
 	}()
 
 	t.Log("Running Gengo financial generator...")
-	output, err := genCmd.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	genCmd.Stdout = &stdout
+	genCmd.Stderr = &stderr
+
+	err = genCmd.Run()
+
+	t.Logf("Gengo stdout:\n%s", stdout.String())
 	if err != nil {
-		t.Logf("Financial Generator output:\n%s", string(output))
+		t.Logf("Gengo stderr:\n%s", stderr.String())
 		t.Fatalf("Gengo financial command failed: %v", err)
 	}
 	t.Log("Financial Generator finished successfully.")
@@ -232,6 +247,7 @@ func TestE2EMedicalGeneration(t *testing.T) {
 
 	// 2. Execution: Run the generator with predefined inputs
 	genCmd := exec.Command("/home/peek/code/Gengo/Gengo_test", "gen")
+	genCmd.Env = append(os.Environ(), "GENGO_TEST_MODE=true")
 	stdin, err := genCmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("Failed to get stdin pipe: %v", err)
@@ -247,9 +263,15 @@ func TestE2EMedicalGeneration(t *testing.T) {
 	}()
 
 	t.Log("Running Gengo medical generator...")
-	output, err := genCmd.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	genCmd.Stdout = &stdout
+	genCmd.Stderr = &stderr
+
+	err = genCmd.Run()
+
+	t.Logf("Gengo stdout:\n%s", stdout.String())
 	if err != nil {
-		t.Logf("Medical Generator output:\n%s", string(output))
+		t.Logf("Gengo stderr:\n%s", stderr.String())
 		t.Fatalf("Gengo medical command failed: %v", err)
 	}
 	t.Log("Medical Generator finished successfully.")

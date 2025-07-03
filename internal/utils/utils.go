@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -29,6 +30,13 @@ func AddUnderscores(n int) string {
 }
 
 func PrintProgress(current, total int, label string) {
+	if os.Getenv("GENGO_TEST_MODE") == "true" {
+		if current == total {
+			fmt.Println()
+		}
+		return
+	}
+
 	if total == 0 {
 		return
 	}
