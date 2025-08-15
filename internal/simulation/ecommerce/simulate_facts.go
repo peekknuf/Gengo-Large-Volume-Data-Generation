@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	
+	"runtime"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	gf "github.com/brianvoe/gofakeit/v6"
@@ -68,37 +70,16 @@ func (s *weightedSampler) Sample() int {
 	return s.ids[index]
 }
 
-func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommerce.CustomerAddress, productInfo map[int]ecommerce.ProductDetails, productIDsForSampling []int) ([]ecommerce.OrderHeader, []ecommerce.OrderItem, error) {
-	if numOrders <= 0 {
-		return nil, nil, nil
-	}
-	if len(customerIDs) == 0 || len(productIDsForSampling) == 0 || len(customerAddresses) == 0 {
-		return nil, nil, fmt.Errorf("cannot generate facts: dimension ID lists are empty")
-	}
+// generateECommerceFactsChunk is a worker function that generates a chunk of orders and items.
+func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderItemIDCounter *int64, customerSampler *weightedSampler, productSampler *weightedSampler, customerAddressMap map[int][]int, productInfo map[int]ecommerce.ProductDetails) ([]ecommerce.OrderHeader, []ecommerce.OrderItem) {
+	headers := make([]ecommerce.OrderHeader, numOrdersToGenerate)
+	items := make([]ecommerce.OrderItem, 0, numOrdersToGenerate*5) // Pre-allocate with an average
 
-	customerSampler, err := setupWeightedSampler(customerIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to set up customer sampler: %w", err)
-	}
-	productSampler, err := setupWeightedSampler(productIDsForSampling)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to set up product sampler: %w", err)
-	}
-
-	customerAddressMap := make(map[int][]int)
-	for _, addr := range customerAddresses {
-		customerAddressMap[addr.CustomerID] = append(customerAddressMap[addr.CustomerID], addr.AddressID)
-	}
-
-	headers := make([]ecommerce.OrderHeader, numOrders)
-	items := make([]ecommerce.OrderItem, 0, numOrders*3)
-	orderItemIDCounter := 1
-
-	gf.Seed(time.Now().UnixNano())
 	startTime := time.Now().AddDate(-5, 0, 0)
 	endTime := time.Now()
 
-	for i := 0; i < numOrders; i++ {
+	for i := 0; i < numOrdersToGenerate; i++ {
+		orderID := startOrderID + i
 		customerID := customerSampler.Sample()
 		addresses, ok := customerAddressMap[customerID]
 		if !ok || len(addresses) == 0 {
@@ -130,9 +111,11 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 			totalPrice := float64(quantity)*unitPrice*(1.0-discount)
 			totalOrderAmount += totalPrice
 
+			newItemID := atomic.AddInt64(orderItemIDCounter, 1)
+
 			orderItem := ecommerce.OrderItem{
-				OrderItemID: orderItemIDCounter,
-				OrderID:     i + 1,
+				OrderItemID: int(newItemID),
+				OrderID:     orderID,
 				ProductID:   productID,
 				Quantity:    quantity,
 				UnitPrice:   unitPrice,
@@ -140,11 +123,10 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 				TotalPrice:  totalPrice,
 			}
 			items = append(items, orderItem)
-			orderItemIDCounter++
 		}
 
 		headers[i] = ecommerce.OrderHeader{
-			OrderID:           i + 1,
+			OrderID:           orderID,
 			CustomerID:        customerID,
 			ShippingAddressID: shippingAddressID,
 			BillingAddressID:  billingAddressID,
@@ -152,8 +134,78 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 			OrderStatus:       orderStatus,
 			TotalOrderAmount:  totalOrderAmount,
 		}
-
-		
 	}
-	return headers, items, nil
+	return headers, items
+}
+
+// GenerateECommerceModelData generates the e-commerce fact tables concurrently.
+func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommerce.CustomerAddress, productInfo map[int]ecommerce.ProductDetails, productIDsForSampling []int) ([]ecommerce.OrderHeader, []ecommerce.OrderItem, error) {
+	if numOrders <= 0 {
+		return nil, nil, nil
+	}
+	if len(customerIDs) == 0 || len(productIDsForSampling) == 0 || len(customerAddresses) == 0 {
+		return nil, nil, fmt.Errorf("cannot generate facts: dimension ID lists are empty")
+	}
+
+	// Setup shared resources
+	customerSampler, err := setupWeightedSampler(customerIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to set up customer sampler: %w", err)
+	}
+	productSampler, err := setupWeightedSampler(productIDsForSampling)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to set up product sampler: %w", err)
+	}
+
+	customerAddressMap := make(map[int][]int)
+	for _, addr := range customerAddresses {
+		customerAddressMap[addr.CustomerID] = append(customerAddressMap[addr.CustomerID], addr.AddressID)
+	}
+
+	// Concurrency setup
+	numWorkers := runtime.NumCPU()
+	ordersPerWorker := (numOrders + numWorkers - 1) / numWorkers
+
+	var wg sync.WaitGroup
+	type result struct {
+		headers []ecommerce.OrderHeader
+		items   []ecommerce.OrderItem
+	}
+	resultsChan := make(chan result, numWorkers)
+	var orderItemIDCounter int64
+
+	for i := 0; i < numWorkers; i++ {
+		startOrderID := (i * ordersPerWorker) + 1
+		numToGen := ordersPerWorker
+		if startOrderID+numToGen > numOrders+1 {
+			numToGen = numOrders - startOrderID + 1
+		}
+
+		if numToGen > 0 {
+			wg.Add(1)
+			go func(startID, count int) {
+				defer wg.Done()
+				h, i := generateECommerceFactsChunk(startID, count, &orderItemIDCounter, customerSampler, productSampler, customerAddressMap, productInfo)
+				resultsChan <- result{headers: h, items: i}
+			}(startOrderID, numToGen)
+		}
+	}
+
+	wg.Wait()
+	close(resultsChan)
+
+	// Aggregate results
+	finalHeaders := make([]ecommerce.OrderHeader, 0, numOrders)
+	finalItems := make([]ecommerce.OrderItem, 0, numOrders*5)
+	for res := range resultsChan {
+		finalHeaders = append(finalHeaders, res.headers...)
+		finalItems = append(finalItems, res.items...)
+	}
+
+	// Ensure order for headers
+	sort.Slice(finalHeaders, func(i, j int) bool {
+		return finalHeaders[i].OrderID < finalHeaders[j].OrderID
+	})
+
+	return finalHeaders, finalItems, nil
 }

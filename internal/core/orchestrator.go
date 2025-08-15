@@ -3,16 +3,19 @@ package core
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/peekknuf/Gengo/internal/formats"
 	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
+	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
+	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 	"github.com/peekknuf/Gengo/internal/simulation/ecommerce"
 	financialsimulation "github.com/peekknuf/Gengo/internal/simulation/financial"
 	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
-	"github.com/peekknuf/Gengo/internal/formats"
 )
 
-// GenerateModelData orchestrates the sequential generation and writing of the relational model.
+// GenerateModelData orchestrates the generation and writing of the relational model.
 func GenerateModelData(modelType string, counts interface{}, format string, outputDir string) error {
 	startTime := time.Now()
 
@@ -24,84 +27,11 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 
 	switch modelType {
 	case "ecommerce":
-		ecommerceCounts := counts.(ECommerceRowCounts)
-		customers := ecommerce.GenerateCustomers(ecommerceCounts.Customers)
-		customerIDs := make([]int, 0, len(customers))
-		for _, c := range customers {
-			customerIDs = append(customerIDs, c.CustomerID)
-		}
-		customerAddresses := ecommerce.GenerateCustomerAddresses(customers)
-		suppliers := ecommerce.GenerateSuppliers(ecommerceCounts.Suppliers)
-		supplierIDs := make([]int, 0, len(suppliers))
-		for _, s := range suppliers {
-			supplierIDs = append(supplierIDs, s.SupplierID)
-		}
-		products := ecommerce.GenerateProducts(ecommerceCounts.Products, supplierIDs)
-		productInfo := make(map[int]ecommercemodels.ProductDetails, len(products))
-		productIDsForSampling := make([]int, 0, len(products))
-		for _, p := range products {
-			productInfo[p.ProductID] = ecommercemodels.ProductDetails{BasePrice: p.BasePrice}
-			productIDsForSampling = append(productIDsForSampling, p.ProductID)
-		}
-		
-		if err = formats.WriteSliceData(customers, "dim_customers", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(customerAddresses, "dim_customer_addresses", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(suppliers, "dim_suppliers", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(products, "dim_products", format, outputDir); err != nil {
-			return err
-		}
-			var headers []ecommercemodels.OrderHeader
-		var items []ecommercemodels.OrderItem
-		headers, items, err = ecommerce.GenerateECommerceModelData(ecommerceCounts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling)
-		if err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(headers, "fact_orders_header", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(items, "fact_order_items", format, outputDir); err != nil {
-			return err
-		}
+		err = generateECommerceDataConcurrently(counts.(ECommerceRowCounts), format, outputDir)
 	case "financial":
-		financialCounts := counts.(financialsimulation.FinancialRowCounts)
-		companies := financialsimulation.GenerateCompanies(financialCounts.Companies)
-		exchanges := financialsimulation.GenerateExchanges(financialCounts.Exchanges)
-
-		// Write dimension data
-		if err = formats.WriteSliceData(companies, "dim_companies", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(exchanges, "dim_exchanges", format, outputDir); err != nil {
-			return err
-		}
-
-		// Generate and write fact data
-		err = financialsimulation.GenerateFinancialModelData(financialCounts, companies, exchanges, format, outputDir)
+		err = generateFinancialDataConcurrently(counts.(financialsimulation.FinancialRowCounts), format, outputDir)
 	case "medical":
-		medicalCounts := counts.(medicalsimulation.MedicalRowCounts)
-		patients := medicalsimulation.GeneratePatients(medicalCounts.Patients)
-		doctors := medicalsimulation.GenerateDoctors(medicalCounts.Doctors)
-		clinics := medicalsimulation.GenerateClinics(medicalCounts.Clinics)
-
-		// Write dimension data
-		if err = formats.WriteSliceData(patients, "dim_patients", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(doctors, "dim_doctors", format, outputDir); err != nil {
-			return err
-		}
-		if err = formats.WriteSliceData(clinics, "dim_clinics", format, outputDir); err != nil {
-			return err
-		}
-
-		// Generate and write fact data
-		err = medicalsimulation.GenerateMedicalModelData(medicalCounts, patients, doctors, clinics, format, outputDir)
+		err = generateMedicalDataConcurrently(counts.(medicalsimulation.MedicalRowCounts), format, outputDir)
 	default:
 		err = fmt.Errorf("unsupported model type: %s", modelType)
 	}
@@ -111,5 +41,214 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 	}
 
 	fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
+	return nil
+}
+
+func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string) error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, 10)
+
+	// --- Concurrent Dimension Generation ---
+	var customers []ecommercemodels.Customer
+	var suppliers []ecommercemodels.Supplier
+	var customerAddresses []ecommercemodels.CustomerAddress
+	var products []ecommercemodels.Product
+
+	var genWg sync.WaitGroup
+	genWg.Add(2)
+
+	go func() {
+		defer genWg.Done()
+		customers = ecommerce.GenerateCustomers(counts.Customers)
+		customerAddresses = ecommerce.GenerateCustomerAddresses(customers)
+	}()
+
+	go func() {
+		defer genWg.Done()
+		suppliers = ecommerce.GenerateSuppliers(counts.Suppliers)
+		supplierIDs := make([]int, len(suppliers))
+		for i, s := range suppliers {
+			supplierIDs[i] = s.SupplierID
+		}
+		products = ecommerce.GenerateProducts(counts.Products, supplierIDs)
+	}()
+
+	genWg.Wait() // Wait for all dimension data to be generated
+
+	// --- Concurrent Dimension Writing ---
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(customers, "dim_customers", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(customerAddresses, "dim_customer_addresses", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(suppliers, "dim_suppliers", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(products, "dim_products", format, outputDir)
+	}()
+
+	// --- Fact Table Generation (can run while dimensions are writing) ---
+	customerIDs := make([]int, len(customers))
+	for i, c := range customers {
+		customerIDs[i] = c.CustomerID
+	}
+	productInfo := make(map[int]ecommercemodels.ProductDetails, len(products))
+	productIDsForSampling := make([]int, len(products))
+	for i, p := range products {
+		productInfo[p.ProductID] = ecommercemodels.ProductDetails{BasePrice: p.BasePrice}
+		productIDsForSampling[i] = p.ProductID
+	}
+
+	headers, items, err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling)
+	if err != nil {
+		return err // This error is critical and should stop the process
+	}
+
+	// --- Concurrent Fact Table Writing ---
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(headers, "fact_orders_header", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(items, "fact_order_items", format, outputDir)
+	}()
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			// Return the first error encountered
+			return err
+		}
+	}
+
+	return nil
+}
+
+func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCounts, format string, outputDir string) error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, 3) // 2 dims + 1 fact operation
+
+	// --- Concurrent Dimension Generation ---
+	var companies []financialmodels.Company
+	var exchanges []financialmodels.Exchange
+
+	var genWg sync.WaitGroup
+	genWg.Add(2)
+
+	go func() {
+		defer genWg.Done()
+		companies = financialsimulation.GenerateCompanies(counts.Companies)
+	}()
+
+	go func() {
+		defer genWg.Done()
+		exchanges = financialsimulation.GenerateExchanges(counts.Exchanges)
+	}()
+
+	genWg.Wait()
+
+	// --- Concurrent Dimension Writing ---
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(companies, "dim_companies", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(exchanges, "dim_exchanges", format, outputDir)
+	}()
+
+	// --- Fact Table Generation and Writing ---
+	// This runs after dimension generation is complete.
+	// The financial simulation function handles its own writing.
+	err := financialsimulation.GenerateFinancialModelData(counts, companies, exchanges, format, outputDir)
+	if err != nil {
+		errChan <- err
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, format string, outputDir string) error {
+	var wg sync.WaitGroup
+	errChan := make(chan error, 4) // 3 dims + 1 fact operation
+
+	// --- Concurrent Dimension Generation ---
+	var patients []medicalmodels.Patient
+	var doctors []medicalmodels.Doctor
+	var clinics []medicalmodels.Clinic
+
+	var genWg sync.WaitGroup
+	genWg.Add(3)
+
+	go func() {
+		defer genWg.Done()
+		patients = medicalsimulation.GeneratePatients(counts.Patients)
+	}()
+
+	go func() {
+		defer genWg.Done()
+		doctors = medicalsimulation.GenerateDoctors(counts.Doctors)
+	}()
+
+	go func() {
+		defer genWg.Done()
+		clinics = medicalsimulation.GenerateClinics(counts.Clinics)
+	}()
+
+	genWg.Wait()
+
+	// --- Concurrent Dimension Writing ---
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(patients, "dim_patients", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(doctors, "dim_doctors", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(clinics, "dim_clinics", format, outputDir)
+	}()
+
+	// --- Fact Table Generation and Writing ---
+	// This runs after dimension generation is complete.
+	// The medical simulation function handles its own writing.
+	err := medicalsimulation.GenerateMedicalModelData(counts, patients, doctors, clinics, format, outputDir)
+	if err != nil {
+		errChan <- err
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

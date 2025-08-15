@@ -95,8 +95,11 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 	numOrderHeaders := int(math.Max(1.0, math.Round(float64(numOrderItems)/AvgItemsPerOrder)))
 	numCustomers := int(math.Max(1.0, math.Round(float64(numOrderHeaders)/DefaultOrdersPerCustomerRatio)))
 	numCustomerAddresses := int(math.Max(1.0, math.Round(float64(numCustomers)*AvgAddressesPerCustomer)))
-	numProducts := int(math.Max(1.0, math.Round(float64(numOrderItems)/AvgItemsPerOrder)))
-	numSuppliers := int(math.Max(1.0, math.Round(float64(numProducts)/DefaultProductsPerSupplierRatio)))
+
+	// New logic: Derive suppliers from customers, and products from suppliers.
+	// This creates a more realistic hierarchy and decouples products from orders.
+	numSuppliers := int(math.Max(1.0, math.Round(float64(numCustomers)/100.0))) // Assume 100 customers per supplier
+	numProducts := int(math.Max(1.0, math.Round(float64(numSuppliers)*DefaultProductsPerSupplierRatio)))
 
 	// Ensure minimums if calculations result in zero
 	if numOrderItems == 0 && targetGB > 0 {

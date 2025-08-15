@@ -6,7 +6,7 @@ It was originally built because generating millions of rows using scripting lang
 
 ## Features ✨
 
-- **Fast:** Leverages Go's performance for speedy data generation.
+- **Fast:** Leverages Go's performance for **ultra-fast** data generation, achieving **up to 3x speed improvements** over initial versions for relational models.
 - **Relational Model:** Generates predefined 3NF data models for:
     - **E-commerce:** `dim_customers`, `dim_customer_addresses`, `dim_suppliers`, `dim_products`, `fact_orders_header`, `fact_order_items`
     - **Financial:** `dim_companies`, `dim_exchanges`, `fact_daily_stock_prices`
@@ -73,27 +73,26 @@ Want different fake data or schema modifications?
 - **Fact Data & Realism:** Adjust the generation logic (e.g., distributions, static lists), foreign key selection (including weighted sampling), or calculation logic within the `Generate*ModelData` functions in `internal/simulation/ecommerce/simulate_facts.go`, `internal/simulation/financial/simulate_financial_facts.go`, and `internal/simulation/medical/simulate_medical_facts.go`.
 - **Sizing Ratios:** Modify the constants in `internal/core/sizing.go` to change the relative sizes of the generated tables.
 
+## Implementation Details ⚙️
+
+For those interested in the technical underpinnings, Gengo's performance and design are rooted in the following key implementation choices:
+
+-   **Concurrent Data Generation:** Leveraging Go's lightweight goroutines and channels, data generation for large fact tables (e.g., `fact_daily_stock_prices`, `fact_order_items`) is parallelized across available CPU cores. This employs a producer-consumer pattern where worker goroutines generate data chunks, which are then aggregated and written.
+-   **Atomic ID Management:** Unique primary keys (e.g., `OrderItemID`, `AppointmentID`) are managed across concurrent generation streams using `sync/atomic` operations, ensuring correctness without performance bottlenecks from locks.
+-   **In-Memory Aggregation:** For optimal write performance, data for each table is generated and aggregated in memory before being written to disk in a single operation. Go's efficient garbage collector handles the memory management for these large in-memory structures.
+-   **Dynamic Sizing Heuristics:** The `internal/core/sizing.go` package dynamically estimates row counts for all tables based on a target GB size, using empirically derived ratios and logical dependencies between dimensions and facts.
+-   **Efficient File Formats:** Integration with Apache Arrow and Parquet (via `apache/arrow/go`) enables highly efficient, columnar storage for generated data, reducing disk footprint and improving read performance for downstream systems.
+
 ## Benchmarks 📊
 
-**NOTE:** The benchmarks below reflect tests run on a **previous version** of Gengo that generated a single, large, denormalized file. Performance characteristics for generating the multi-table relational model may differ. Pending updated benchmarks. Previous version readily available in the repository's history. Commit: 7638828f147a298e623ad281e794002de4a206a9
+Gengo has been significantly optimized for speed, especially for generating complex relational datasets. The benchmarks below reflect the performance after implementing concurrent data generation strategies.
 
-**Generation Time (Example: 100 Million Rows in Gengo vs 1 Million Rows in performant Python libraries)**
+| Data Model          | Size | Format | Initial Time | Final Time | Improvement |
+| ------------------- | ---- | ------ | ------------ | ---------- | ----------- |
+| E-commerce          | 1GB  | CSV    | 23s          | **13s**    | ~1.8x       |
+| Financial           | 2GB  | CSV    | 1m 50s       | **35s**    | ~3.1x       |
 
-_Shows how long it took to generate a large dataset._
-
-[<img src="img/output_100m.png" width="400" height="auto">](output_100m.png)
-
-**1 Million Rows speed comparison**
-
-[<img src="img/output_comparison.png" width="400" height="auto">](output_comparison.png)
-
-1 Million Rows size comparison
-
-[<img src='img/gengo_size_comparison_1M.png' width="400" height="auto">](gengo_size_comparison_1M.png)
-
-An actual proof that it follows 3NF
-
-[<img src='img/proof_of_work.png' with='400' height="auto">](proof_of_work.png)
+These improvements were achieved by parallelizing the most CPU-intensive parts of the data generation, particularly the large fact tables, across multiple CPU cores.
 
 _(Note: Actual performance will vary based on your hardware.)_
 

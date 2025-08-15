@@ -15,7 +15,7 @@ import (
 // WriteSliceData dispatches writing based on format.
 func WriteSliceData(data interface{}, filenameBase, format, outputDir string) error {
 	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
-	fmt.Printf("Attempting to write data to: %s (from outputDir: %s)\n", targetFilename, outputDir)
+	
 
 	var writeErr error
 	switch format {

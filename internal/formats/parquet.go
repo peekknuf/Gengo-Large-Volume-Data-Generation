@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/peekknuf/Gengo/internal/utils"
+	
 
 	"github.com/apache/arrow/go/v12/arrow"
 	"github.com/apache/arrow/go/v12/arrow/array"
@@ -119,9 +119,9 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 			builder = newBuilder
 			rowsInCurrentBatch = 0
 		}
-		if (i+1)%progressStep == 0 || i == sliceLen-1 {
-            fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
-        }
+		// if (i+1)%progressStep == 0 || i == sliceLen-1 {
+            // fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
+        // }
 	} 
 
 	if rowsInCurrentBatch > 0 {
