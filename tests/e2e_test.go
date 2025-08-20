@@ -18,14 +18,13 @@ import (
 func TestE2EEcommerceGeneration(t *testing.T) {
 	// 1. Setup: Build the binary and create a temporary output directory
 	t.Log("Building Gengo binary...")
-	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", ".")
-	buildCmd.Dir = "/home/peek/code/Gengo"
+	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", "..")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build Gengo binary: %v", err)
 	}
 
 	// Add execute permissions to the binary
-	if err := os.Chmod("/home/peek/code/Gengo/Gengo_test", 0755); err != nil {
+	if err := os.Chmod("./Gengo_test", 0755); err != nil {
 		t.Fatalf("Failed to set executable permission on Gengo_test: %v", err)
 	}
 
@@ -34,7 +33,7 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 	t.Logf("Using temporary directory: %s", tempDir)
 
 	// 2. Execution: Run the generator with predefined inputs
-	genCmd := exec.Command("/home/peek/code/Gengo/Gengo_test", "gen")
+	genCmd := exec.Command("./Gengo_test", "gen")
 	genCmd.Env = append(os.Environ(), "GENGO_TEST_MODE=true")
 	stdin, err := genCmd.StdinPipe()
 	if err != nil {
@@ -68,7 +67,7 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 	defer func() {
 		t.Logf("Cleaning up temporary directory: %s", tempDir)
 		os.RemoveAll(tempDir)
-		os.Remove("/home/peek/code/Gengo/Gengo_test")
+		os.Remove("./Gengo_test")
 	}()
 
 	// --- Read all generated data ---
@@ -150,14 +149,13 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 func TestE2EFinancialGeneration(t *testing.T) {
 	// 1. Setup: Build the binary and create a temporary output directory
 	t.Log("Building Gengo binary...")
-	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", ".")
-	buildCmd.Dir = "/home/peek/code/Gengo"
+	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", "..")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build Gengo binary: %v", err)
 	}
 
 	// Add execute permissions to the binary
-	if err := os.Chmod("/home/peek/code/Gengo/Gengo_test", 0755); err != nil {
+	if err := os.Chmod("./Gengo_test", 0755); err != nil {
 		t.Fatalf("Failed to set executable permission on Gengo_test: %v", err)
 	}
 
@@ -166,7 +164,7 @@ func TestE2EFinancialGeneration(t *testing.T) {
 	t.Logf("Using temporary directory: %s", tempDir)
 
 	// 2. Execution: Run the generator with predefined inputs
-	genCmd := exec.Command("/home/peek/code/Gengo/Gengo_test", "gen")
+	genCmd := exec.Command("./Gengo_test", "gen")
 	genCmd.Env = append(os.Environ(), "GENGO_TEST_MODE=true")
 	stdin, err := genCmd.StdinPipe()
 	if err != nil {
@@ -200,7 +198,7 @@ func TestE2EFinancialGeneration(t *testing.T) {
 	defer func() {
 		t.Logf("Cleaning up temporary directory: %s", tempDir)
 		os.RemoveAll(tempDir)
-		os.Remove("/home/peek/code/Gengo/Gengo_test")
+		os.Remove("./Gengo_test")
 	}()
 
 	// --- Read all generated data ---
@@ -230,14 +228,13 @@ func TestE2EFinancialGeneration(t *testing.T) {
 func TestE2EMedicalGeneration(t *testing.T) {
 	// 1. Setup: Build the binary and create a temporary output directory
 	t.Log("Building Gengo binary...")
-	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", ".")
-	buildCmd.Dir = "/home/peek/code/Gengo"
+	buildCmd := exec.Command("go", "build", "-o", "Gengo_test", "..")
 	if err := buildCmd.Run(); err != nil {
 		t.Fatalf("Failed to build Gengo binary: %v", err)
 	}
 
 	// Add execute permissions to the binary
-	if err := os.Chmod("/home/peek/code/Gengo/Gengo_test", 0755); err != nil {
+	if err := os.Chmod("./Gengo_test", 0755); err != nil {
 		t.Fatalf("Failed to set executable permission on Gengo_test: %v", err)
 	}
 
@@ -246,7 +243,7 @@ func TestE2EMedicalGeneration(t *testing.T) {
 	t.Logf("Using temporary directory: %s", tempDir)
 
 	// 2. Execution: Run the generator with predefined inputs
-	genCmd := exec.Command("/home/peek/code/Gengo/Gengo_test", "gen")
+	genCmd := exec.Command("./Gengo_test", "gen")
 	genCmd.Env = append(os.Environ(), "GENGO_TEST_MODE=true")
 	stdin, err := genCmd.StdinPipe()
 	if err != nil {
@@ -280,7 +277,7 @@ func TestE2EMedicalGeneration(t *testing.T) {
 	defer func() {
 		t.Logf("Cleaning up temporary directory: %s", tempDir)
 		os.RemoveAll(tempDir)
-		os.Remove("/home/peek/code/Gengo/Gengo_test")
+		os.Remove("./Gengo_test")
 	}()
 
 	// --- Read all generated data ---

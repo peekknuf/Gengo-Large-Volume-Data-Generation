@@ -70,8 +70,11 @@ func (s *weightedSampler) Sample() int {
 	return s.ids[index]
 }
 
-// generateECommerceFactsChunk is a worker function that generates a chunk of orders and items and sends them to channels.
-func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderItemIDCounter *int64, customerSampler *weightedSampler, productSampler *weightedSampler, customerAddressMap map[int][]int, productInfo map[int]ecommerce.ProductDetails, headersChan chan<- interface{}, itemsChan chan<- interface{}) {
+// generateECommerceFactsChunk is a worker function that generates a chunk of orders and items.
+func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderItemIDCounter *int64, customerSampler *weightedSampler, productSampler *weightedSampler, customerAddressMap map[int][]int, productInfo map[int]ecommerce.ProductDetails) ([]ecommerce.OrderHeader, []ecommerce.OrderItem) {
+	headers := make([]ecommerce.OrderHeader, numOrdersToGenerate)
+	items := make([]ecommerce.OrderItem, 0, numOrdersToGenerate*5) // Pre-allocate with an average
+
 	startTime := time.Now().AddDate(-5, 0, 0)
 	endTime := time.Now()
 
@@ -117,10 +120,10 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 				Discount:    discount,
 				TotalPrice:  totalPrice,
 			}
-			itemsChan <- orderItem
+			items = append(items, orderItem)
 		}
 
-		orderHeader := ecommerce.OrderHeader{
+		headers[i] = ecommerce.OrderHeader{
 			OrderID:           orderID,
 			CustomerID:        customerID,
 			ShippingAddressID: shippingAddressID,
@@ -128,12 +131,12 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 			OrderTimestamp:    orderTimestamp,
 			OrderStatus:       orderStatus,
 		}
-		headersChan <- orderHeader
 	}
+	return headers, items
 }
 
 // GenerateECommerceModelData generates the e-commerce fact tables concurrently, streaming data to channels.
-func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommerce.CustomerAddress, productInfo map[int]ecommerce.ProductDetails, productIDsForSampling []int, headersChan chan<- interface{}, itemsChan chan<- interface{}) error {
+func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommerce.CustomerAddress, productInfo map[int]ecommerce.ProductDetails, productIDsForSampling []int, headersChan chan<- []ecommerce.OrderHeader, itemsChan chan<- []ecommerce.OrderItem) error {
 	if numOrders <= 0 {
 		return nil
 	}
@@ -177,7 +180,13 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 			wg.Add(1)
 			go func(startID, count int) {
 				defer wg.Done()
-				generateECommerceFactsChunk(startID, count, &orderItemIDCounter, customerSampler, productSampler, customerAddressMap, productInfo, headersChan, itemsChan)
+				headers, items := generateECommerceFactsChunk(startID, count, &orderItemIDCounter, customerSampler, productSampler, customerAddressMap, productInfo)
+				// Sort headers before sending to preserve order
+				sort.Slice(headers, func(i, j int) bool {
+					return headers[i].OrderID < headers[j].OrderID
+				})
+				headersChan <- headers
+				itemsChan <- items
 			}(startOrderID, numToGen)
 		}
 	}

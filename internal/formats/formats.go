@@ -34,8 +34,8 @@ func WriteSliceData(data interface{}, filenameBase, format, outputDir string) er
 	return nil
 }
 
-// WriteStreamData dispatches writing from a channel based on format.
-func WriteStreamData(dataChan <-chan interface{}, filenameBase, format, outputDir string) error {
+// WriteStreamData dispatches writing from a channel of slices based on format.
+func WriteStreamData(dataChan <-chan []interface{}, filenameBase, format, outputDir string) error {
 	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
 
 	var writeErr error
