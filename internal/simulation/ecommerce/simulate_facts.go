@@ -161,9 +161,25 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		return fmt.Errorf("failed to set up product sampler: %w", err)
 	}
 
-	customerAddressMap := make(map[int][]int)
+	// Optimized address map creation to prevent slice reallocations, a key performance bottleneck.
+	// First pass: count addresses per customer to determine exact slice sizes.
+	addressCounts := make(map[int]int, len(customerIDs))
 	for _, addr := range customerAddresses {
-		customerAddressMap[addr.CustomerID] = append(customerAddressMap[addr.CustomerID], addr.AddressID)
+		addressCounts[addr.CustomerID]++
+	}
+
+	// Second pass: pre-allocate slices to their final size and fill them without using append.
+	customerAddressMap := make(map[int][]int, len(addressCounts))
+	addressIndices := make(map[int]int) // Tracks the current write index for each customer's slice.
+	for _, addr := range customerAddresses {
+		// If this is the first time we've seen this customer, create their address slice.
+		if _, ok := customerAddressMap[addr.CustomerID]; !ok {
+			customerAddressMap[addr.CustomerID] = make([]int, addressCounts[addr.CustomerID])
+		}
+		// Place the address ID at the correct index and increment the index for the next one.
+		idx := addressIndices[addr.CustomerID]
+		customerAddressMap[addr.CustomerID][idx] = addr.AddressID
+		addressIndices[addr.CustomerID]++
 	}
 
 	// Concurrency setup
