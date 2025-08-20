@@ -38,6 +38,7 @@ type ECommerceRowCounts struct {
 	Products          int
 	OrderHeaders      int
 	OrderItems        int
+	ProductCategories int
 }
 
 // estimateAvgRowSizeBytes estimates the average uncompressed size of a single row for a given table type.
@@ -112,12 +113,13 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 	}
 
 	counts := ECommerceRowCounts{
-		Customers:        numCustomers,
+		Customers:         numCustomers,
 		CustomerAddresses: numCustomerAddresses,
-		Suppliers:        numSuppliers,
-		Products:         numProducts,
-		OrderHeaders:     numOrderHeaders,
-		OrderItems:       numOrderItems,
+		Suppliers:         numSuppliers,
+		Products:          numProducts,
+		OrderHeaders:      numOrderHeaders,
+		OrderItems:        numOrderItems,
+		ProductCategories: 10,
 	}
 
 	return counts, nil

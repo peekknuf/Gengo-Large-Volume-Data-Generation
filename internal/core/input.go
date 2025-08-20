@@ -56,6 +56,7 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		fmt.Printf("Customer Addresses: %s\n", utils.AddUnderscores(ecommerceCounts.CustomerAddresses))
 		fmt.Printf("Suppliers:         %s\n", utils.AddUnderscores(ecommerceCounts.Suppliers))
 		fmt.Printf("Products:          %s\n", utils.AddUnderscores(ecommerceCounts.Products))
+		fmt.Printf("Product Categories: %s\n", utils.AddUnderscores(ecommerceCounts.ProductCategories))
 		fmt.Printf("Order Headers:     %s\n", utils.AddUnderscores(ecommerceCounts.OrderHeaders))
 		fmt.Printf("Order Items:       %s\n", utils.AddUnderscores(ecommerceCounts.OrderItems))
 	case "financial":
