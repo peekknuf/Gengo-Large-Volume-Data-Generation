@@ -9,8 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	gf "github.com/brianvoe/gofakeit/v6"
-
 	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
 )
 
@@ -78,8 +76,10 @@ func (s *weightedSampler) Sample() int {
 
 // generateECommerceFactsChunk is a worker function that generates a chunk of orders and items and sends them to channels.
 func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderItemIDCounter *int64, customerSampler *weightedSampler, productSampler *weightedSampler, customerAddressMap map[int][]int, productInfo map[int]ecommercemodels.ProductDetails, headersChan chan<- ecommercemodels.OrderHeader, itemsChan chan<- ecommercemodels.OrderItem) {
-	startTime := time.Now().AddDate(-5, 0, 0)
-	endTime := time.Now()
+	// Pre-calculate time range for faster random date generation
+	startTimeUnix := time.Now().AddDate(-5, 0, 0).Unix()
+	endTimeUnix := time.Now().Unix()
+	timeRange := endTimeUnix - startTimeUnix
 
 	for i := 0; i < numOrdersToGenerate; i++ {
 		orderID := startOrderID + i
@@ -92,7 +92,10 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 		shippingAddressID := addresses[rand.Intn(len(addresses))]
 		billingAddressID := addresses[rand.Intn(len(addresses))]
 
-		orderTimestamp := gf.DateRange(startTime, endTime)
+		// High-performance random date generation
+		randomTimestamp := startTimeUnix + rand.Int63n(timeRange)
+		orderTimestamp := time.Unix(randomTimestamp, 0)
+
 		orderStatus := orderStatuses[rand.Intn(len(orderStatuses))]
 
 		numItems := rand.Intn(10) + 1
@@ -104,11 +107,12 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 				continue
 			}
 
-			quantity := gf.Number(1, 15)
+			// High-performance random number generation, avoiding reflection-based gofakeit
+			quantity := rand.Intn(15) + 1
 			unitPrice := details.BasePrice
 			discount := 0.0
 			if rand.Intn(100) < 30 {
-				discount = gf.Float64Range(0.05, 0.25)
+				discount = 0.05 + rand.Float64()*0.20 // Simulate gf.Float64Range(0.05, 0.25)
 			}
 			totalPrice := float64(quantity)*unitPrice*(1.0-discount)
 
@@ -147,7 +151,8 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		return fmt.Errorf("cannot generate facts: dimension ID lists are empty")
 	}
 
-	// Close channels when the function exits
+	// This function is the parent of the worker goroutines. It's responsible
+	// for closing the channels when all workers are done.
 	defer close(headersChan)
 	defer close(itemsChan)
 
