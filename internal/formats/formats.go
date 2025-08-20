@@ -34,6 +34,27 @@ func WriteSliceData(data interface{}, filenameBase, format, outputDir string) er
 	return nil
 }
 
+// WriteStreamData dispatches writing from a channel based on format.
+func WriteStreamData(dataChan <-chan interface{}, filenameBase, format, outputDir string) error {
+	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
+
+	var writeErr error
+	switch format {
+	case "csv":
+		writeErr = WriteStreamToCSV(dataChan, targetFilename)
+	// case "json":
+	// 	writeErr = writeStreamToJSON(dataChan, targetFilename) // Not implemented yet
+	// case "parquet":
+	// 	writeErr = writeStreamToParquet(dataChan, targetFilename) // Not implemented yet
+	default:
+		writeErr = fmt.Errorf("unsupported format '%s' for streaming", format)
+	}
+	if writeErr != nil {
+		return fmt.Errorf("error writing stream to %s: %w", targetFilename, writeErr)
+	}
+	return nil
+}
+
 // ValueToString converts a reflect.Value to its string representation, primarily for CSV.
 func ValueToString(v reflect.Value) string {
 	if !v.IsValid() {
