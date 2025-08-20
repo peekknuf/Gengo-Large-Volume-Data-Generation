@@ -114,3 +114,117 @@ func writeSliceToCSV(data interface{}, targetFilename string) error {
 	fmt.Printf("Successfully wrote %d records to %s\n", sliceLen, targetFilename)
 	return nil
 }
+
+func WriteStreamToCSV(dataChan <-chan interface{}, targetFilename string) error {
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
+	}
+	var fileCloseErr error
+	defer func() {
+		if err := file.Close(); err != nil {
+			fileCloseErr = fmt.Errorf("error closing csv file %s: %w", targetFilename, err)
+		}
+	}()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	var headers []string
+	var fieldIndices []int
+	var elemType reflect.Type
+	var recordCount int64
+
+	// Read the first element to determine headers
+	firstItem, ok := <-dataChan
+	if !ok {
+		fmt.Printf("Skipping CSV write for %s: channel is empty or closed.\n", targetFilename)
+		return nil // Channel was closed before any data was sent.
+	}
+
+	elemVal := reflect.ValueOf(firstItem)
+	if elemVal.Kind() == reflect.Ptr {
+		elemVal = elemVal.Elem()
+	}
+	if !elemVal.IsValid() || elemVal.Kind() != reflect.Struct {
+		return fmt.Errorf("expected struct/pointer, got %T", firstItem)
+	}
+	elemType = elemVal.Type()
+
+	numFields := elemType.NumField()
+	headers = make([]string, numFields)
+	fieldIndices = make([]int, numFields)
+
+	for i := 0; i < numFields; i++ {
+		field := elemType.Field(i)
+		headerName := field.Name
+		jsonTag := field.Tag.Get("json")
+		if jsonTag != "" {
+			parts := strings.Split(jsonTag, ",")
+			if parts[0] != "" && parts[0] != "-" {
+				headerName = parts[0]
+			}
+		} else {
+			pqTag := field.Tag.Get("parquet")
+			if pqTag != "" {
+				parts := strings.Split(pqTag, ",")
+				if parts[0] != "" && parts[0] != "-" {
+					headerName = parts[0]
+				}
+			}
+		}
+		headers[i] = headerName
+		fieldIndices[i] = i
+	}
+
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	}
+
+	// Process the first item
+	record := make([]string, numFields)
+	for j := 0; j < numFields; j++ {
+		fieldVal := elemVal.Field(fieldIndices[j])
+		record[j] = ValueToString(fieldVal)
+	}
+	if err := writer.Write(record); err != nil {
+		return fmt.Errorf("failed to write first csv record to %s: %w", targetFilename, err)
+	}
+	recordCount++
+
+	// Process remaining items from the channel
+	for item := range dataChan {
+		elemVal := reflect.ValueOf(item)
+		if elemVal.Kind() == reflect.Ptr {
+			if elemVal.IsNil() {
+				continue
+			}
+			elemVal = elemVal.Elem()
+		}
+		if !elemVal.IsValid() || elemVal.Type() != elemType {
+			// You might want to log this inconsistency
+			continue
+		}
+
+		for j := 0; j < numFields; j++ {
+			fieldVal := elemVal.Field(fieldIndices[j])
+			record[j] = ValueToString(fieldVal)
+		}
+		if err := writer.Write(record); err != nil {
+			// Decide how to handle this error: continue, break, or return
+			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
+		}
+		recordCount++
+	}
+
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("error occurred during csv writing/flushing to %s: %w", targetFilename, err)
+	}
+
+	if fileCloseErr != nil {
+		return fileCloseErr
+	}
+
+	fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
+	return nil
+}
