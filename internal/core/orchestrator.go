@@ -55,40 +55,85 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var products []ecommercemodels.Product
 	var productCategories []ecommercemodels.ProductCategory
 
-	// --- Channels for Streaming Fact Tables ---
-	headersChan := make(chan interface{}, 100)
-	itemsChan := make(chan interface{}, 100)
+	// --- Channels for Streaming Fact Table Chunks ---
+	// Specific channels from the generator
+	headersChunkChan := make(chan []ecommercemodels.OrderHeader, 10)
+	itemsChunkChan := make(chan []ecommercemodels.OrderItem, 10)
+
+	// Generic channels for the writer
+	headersInterfaceChan := make(chan []interface{}, 10)
+	itemsInterfaceChan := make(chan []interface{}, 10)
+
+	// --- Adapter Goroutines ---
+	// Adapter for headers: converts []OrderHeader to []interface{}
+	go func() {
+		defer close(headersInterfaceChan)
+		for chunk := range headersChunkChan {
+			iSlice := make([]interface{}, len(chunk))
+			for i, v := range chunk {
+				iSlice[i] = v
+			}
+			headersInterfaceChan <- iSlice
+		}
+	}()
+
+	// Adapter for items: converts []OrderItem to []interface{}
+	go func() {
+		defer close(itemsInterfaceChan)
+		for chunk := range itemsChunkChan {
+			iSlice := make([]interface{}, len(chunk))
+			for i, v := range chunk {
+				iSlice[i] = v
+			}
+			itemsInterfaceChan <- iSlice
+		}
+	}()
 
 	// --- Goroutine for Writing Fact Orders Header ---
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errChan <- formats.WriteStreamData(headersChan, "fact_orders_header", format, outputDir)
+		errChan <- formats.WriteStreamData(headersInterfaceChan, "fact_orders_header", format, outputDir)
 	}()
 
 	// --- Goroutine for Writing Fact Order Items ---
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errChan <- formats.WriteStreamData(itemsChan, "fact_order_items", format, outputDir)
+		errChan <- formats.WriteStreamData(itemsInterfaceChan, "fact_order_items", format, outputDir)
 	}()
 
-	// --- Concurrent Dimension Generation ---
-	var coreDimsWg sync.WaitGroup
-	coreDimsWg.Add(2) // For customers/addresses and products
+	// --- Concurrent Dimension Generation with Correct Parallelism ---
+	var customersWg, suppliersWg, categoriesWg, productsWg sync.WaitGroup
+	customersWg.Add(1)
+	suppliersWg.Add(1)
+	categoriesWg.Add(1)
+	productsWg.Add(1)
 
+	// Goroutine for Customers and Addresses
 	go func() {
+		defer customersWg.Done()
 		customers = ecommerce.GenerateCustomers(counts.Customers)
 		customerAddresses = ecommerce.GenerateCustomerAddresses(customers)
-		coreDimsWg.Done() // Signal that customers and addresses are ready
 	}()
 
+	// Goroutine for Suppliers
 	go func() {
-		// This goroutine now depends on suppliers and categories being generated first
-		// To simplify, we'll generate them sequentially before this goroutine
-		// This part could be further optimized with more complex signaling
-		productCategories = ecommerce.GenerateProductCategories()
+		defer suppliersWg.Done()
 		suppliers = ecommerce.GenerateSuppliers(counts.Suppliers)
+	}()
+
+	// Goroutine for Product Categories
+	go func() {
+		defer categoriesWg.Done()
+		productCategories = ecommerce.GenerateProductCategories()
+	}()
+
+	// Goroutine for Products (depends on Suppliers and Categories)
+	go func() {
+		defer productsWg.Done()
+		suppliersWg.Wait()
+		categoriesWg.Wait()
 
 		supplierIDs := make([]int, len(suppliers))
 		for i, s := range suppliers {
@@ -99,14 +144,14 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			categoryIDs[i] = pc.CategoryID
 		}
 		products = ecommerce.GenerateProducts(counts.Products, supplierIDs, categoryIDs)
-		coreDimsWg.Done() // Signal that products are ready
 	}()
 
 	// --- Goroutine to Start Fact Generation as soon as Core Dimensions are Ready ---
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		coreDimsWg.Wait() // Wait for customers, addresses, and products
+		customersWg.Wait()
+		productsWg.Wait()
 
 		customerIDs := make([]int, len(customers))
 		for i, c := range customers {
@@ -119,44 +164,38 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productIDsForSampling[i] = p.ProductID
 		}
 
-		// This now writes to channels and doesn't return data slices
-		err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChan, itemsChan)
+		err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChunkChan, itemsChunkChan)
 		if err != nil {
 			errChan <- fmt.Errorf("error during fact table generation: %w", err)
 		}
 	}()
 
-	// --- Concurrent Dimension Writing (can run in parallel with fact generation) ---
+	// --- Concurrent Dimension Writing ---
 	wg.Add(5)
 	go func() {
 		defer wg.Done()
-		coreDimsWg.Wait() // Ensure customers is generated before writing
+		customersWg.Wait()
 		errChan <- formats.WriteSliceData(customers, "dim_customers", format, outputDir)
 	}()
 	go func() {
 		defer wg.Done()
-		coreDimsWg.Wait() // Ensure customerAddresses is generated
+		customersWg.Wait() // Addresses are generated with customers
 		errChan <- formats.WriteSliceData(customerAddresses, "dim_customer_addresses", format, outputDir)
 	}()
 	go func() {
 		defer wg.Done()
-		// No need to wait for coreDimsWg, but must wait for its own data
-		// This part is tricky because products depends on suppliers.
-		// The goroutine generating products will finish after suppliers is ready.
-		// We need to ensure we don't read from a nil slice.
-		// A simple way is to wait for the core dims, which guarantees all dims are generated.
-		coreDimsWg.Wait()
+		suppliersWg.Wait()
 		errChan <- formats.WriteSliceData(suppliers, "dim_suppliers", format, outputDir)
 	}()
 	go func() {
 		defer wg.Done()
-		coreDimsWg.Wait() // Ensure products is generated
-		errChan <- formats.WriteSliceData(products, "dim_products", format, outputDir)
+		categoriesWg.Wait()
+		errChan <- formats.WriteSliceData(productCategories, "dim_product_categories", format, outputDir)
 	}()
 	go func() {
 		defer wg.Done()
-		coreDimsWg.Wait()
-		errChan <- formats.WriteSliceData(productCategories, "dim_product_categories", format, outputDir)
+		productsWg.Wait()
+		errChan <- formats.WriteSliceData(products, "dim_products", format, outputDir)
 	}()
 
 	wg.Wait()
@@ -164,7 +203,6 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 
 	for err := range errChan {
 		if err != nil {
-			// Return the first error encountered
 			return err
 		}
 	}
