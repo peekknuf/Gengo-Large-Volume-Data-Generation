@@ -46,7 +46,7 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 }
 
 func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string) error {
-	var wg sync.WaitGroup
+	var writersWg sync.WaitGroup
 	errChan := make(chan error, 10)
 
 	// --- Dimension Data Holders ---
@@ -56,24 +56,25 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var products []ecommercemodels.Product
 	var productCategories []ecommercemodels.ProductCategory
 
-	// --- High-Performance Pipeline Setup ---
-	// Create specific channels for item-by-item streaming
+	// --- Fact Table Pipeline Setup ---
 	headersChan := make(chan ecommercemodels.OrderHeader, 1000)
 	itemsChan := make(chan ecommercemodels.OrderItem, 5000)
 
-	// --- Goroutines for Writing Fact Tables (using high-performance writers) ---
-	wg.Add(1)
+	// Launch Fact Writers Immediately
+	writersWg.Add(2)
 	go func() {
-		defer wg.Done()
-		targetFilename := filepath.Join(outputDir, "fact_orders_header.csv")
-		errChan <- formats.WriteStreamOrderHeadersToCSV(headersChan, targetFilename)
+		defer writersWg.Done()
+		target := filepath.Join(outputDir, "fact_orders_header.csv")
+		if err := formats.WriteStreamOrderHeadersToCSV(headersChan, target); err != nil {
+			errChan <- err
+		}
 	}()
-
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-		targetFilename := filepath.Join(outputDir, "fact_order_items.csv")
-		errChan <- formats.WriteStreamOrderItemsToCSV(itemsChan, targetFilename)
+		defer writersWg.Done()
+		target := filepath.Join(outputDir, "fact_order_items.csv")
+		if err := formats.WriteStreamOrderItemsToCSV(itemsChan, target); err != nil {
+			errChan <- err
+		}
 	}()
 
 	// --- Concurrent Dimension Generation with Correct Parallelism ---
@@ -83,31 +84,23 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	categoriesWg.Add(1)
 	productsWg.Add(1)
 
-	// Goroutine for Customers and Addresses
 	go func() {
 		defer customersWg.Done()
 		customers = ecommerce.GenerateCustomers(counts.Customers)
 		customerAddresses = ecommerce.GenerateCustomerAddresses(customers)
 	}()
-
-	// Goroutine for Suppliers
 	go func() {
 		defer suppliersWg.Done()
 		suppliers = ecommerce.GenerateSuppliers(counts.Suppliers)
 	}()
-
-	// Goroutine for Product Categories
 	go func() {
 		defer categoriesWg.Done()
 		productCategories = ecommerce.GenerateProductCategories()
 	}()
-
-	// Goroutine for Products (depends on Suppliers and Categories)
 	go func() {
 		defer productsWg.Done()
 		suppliersWg.Wait()
 		categoriesWg.Wait()
-
 		supplierIDs := make([]int, len(suppliers))
 		for i, s := range suppliers {
 			supplierIDs[i] = s.SupplierID
@@ -119,13 +112,48 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		products = ecommerce.GenerateProducts(counts.Products, supplierIDs, categoryIDs)
 	}()
 
-	// --- Goroutine to Start Fact Generation as soon as Core Dimensions are Ready ---
-	wg.Add(1)
+	// --- Concurrent Dimension Writing ---
+	writersWg.Add(5)
 	go func() {
-		defer wg.Done()
+		defer writersWg.Done()
+		customersWg.Wait()
+		if err := formats.WriteCustomersToCSV(customers, filepath.Join(outputDir, "dim_customers.csv")); err != nil {
+			errChan <- err
+		}
+	}()
+	go func() {
+		defer writersWg.Done()
+		customersWg.Wait()
+		if err := formats.WriteCustomerAddressesToCSV(customerAddresses, filepath.Join(outputDir, "dim_customer_addresses.csv")); err != nil {
+			errChan <- err
+		}
+	}()
+	go func() {
+		defer writersWg.Done()
+		suppliersWg.Wait()
+		if err := formats.WriteSuppliersToCSV(suppliers, filepath.Join(outputDir, "dim_suppliers.csv")); err != nil {
+			errChan <- err
+		}
+	}()
+	go func() {
+		defer writersWg.Done()
+		categoriesWg.Wait()
+		if err := formats.WriteProductCategoriesToCSV(productCategories, filepath.Join(outputDir, "dim_product_categories.csv")); err != nil {
+			errChan <- err
+		}
+	}()
+	go func() {
+		defer writersWg.Done()
+		productsWg.Wait()
+		if err := formats.WriteProductsToCSV(products, filepath.Join(outputDir, "dim_products.csv")); err != nil {
+			errChan <- err
+		}
+	}()
+
+	// --- Fact Generation ---
+	go func() {
 		customersWg.Wait()
 		productsWg.Wait()
-
 		customerIDs := make([]int, len(customers))
 		for i, c := range customers {
 			customerIDs[i] = c.CustomerID
@@ -136,42 +164,13 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productInfo[p.ProductID] = ecommercemodels.ProductDetails{BasePrice: p.BasePrice}
 			productIDsForSampling[i] = p.ProductID
 		}
-
-		err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChan, itemsChan)
-		if err != nil {
-			errChan <- fmt.Errorf("error during fact table generation: %w", err)
+		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChan, itemsChan); err != nil {
+			errChan <- err
 		}
 	}()
 
-	// --- Concurrent Dimension Writing (using high-performance writers via dispatcher) ---
-	wg.Add(5)
-	go func() {
-		defer wg.Done()
-		customersWg.Wait()
-		errChan <- formats.WriteSliceData(customers, "dim_customers", format, outputDir)
-	}()
-	go func() {
-		defer wg.Done()
-		customersWg.Wait() // Addresses are generated with customers
-		errChan <- formats.WriteSliceData(customerAddresses, "dim_customer_addresses", format, outputDir)
-	}()
-	go func() {
-		defer wg.Done()
-		suppliersWg.Wait()
-		errChan <- formats.WriteSliceData(suppliers, "dim_suppliers", format, outputDir)
-	}()
-	go func() {
-		defer wg.Done()
-		categoriesWg.Wait()
-		errChan <- formats.WriteSliceData(productCategories, "dim_product_categories", format, outputDir)
-	}()
-	go func() {
-		defer wg.Done()
-		productsWg.Wait()
-		errChan <- formats.WriteSliceData(products, "dim_products", format, outputDir)
-	}()
-
-	wg.Wait()
+	// --- Final Synchronization ---
+	writersWg.Wait()
 	close(errChan)
 
 	for err := range errChan {
@@ -179,7 +178,6 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			return err
 		}
 	}
-
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package formats
 
 import (
+	"bufio"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -12,359 +13,80 @@ import (
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// --- High-Performance, Type-Specific CSV Writers for E-commerce ---
+// writeCSVHeaderAndRecords is a helper to reduce boilerplate.
+func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [][]string) error {
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
+	}
+	defer file.Close()
 
-// WriteCustomersToCSV writes a slice of Customer structs to a CSV file using a streaming approach.
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	}
+	if err := writer.WriteAll(records); err != nil {
+		return fmt.Errorf("failed to write csv records to %s: %w", targetFilename, err)
+	}
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
+	}
+	fmt.Printf("Successfully wrote %d records to %s\n", len(records), targetFilename)
+	return nil
+}
+
+// --- Dimension Writers (kept as original for focus) ---
+
 func WriteCustomersToCSV(customers []ecommercemodels.Customer, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
 	headers := []string{"customer_id", "first_name", "last_name", "email"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	records := make([][]string, len(customers))
+	for i, c := range customers {
+		records[i] = []string{strconv.Itoa(c.CustomerID), c.FirstName, c.LastName, c.Email}
 	}
-
-	record := make([]string, len(headers))
-	for _, c := range customers {
-		record[0] = strconv.Itoa(c.CustomerID)
-		record[1] = c.FirstName
-		record[2] = c.LastName
-		record[3] = c.Email
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(customers), targetFilename)
-	return nil
-}
-
-func WriteDailyStockPricesToCSV(prices []financialmodels.DailyStockPrice, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"price_id", "date", "company_id", "exchange_id", "open_price", "high_price", "low_price", "close_price", "volume"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, p := range prices {
-		record[0] = strconv.FormatInt(p.PriceID, 10)
-		record[1] = p.Date.Format("2006-01-02")
-		record[2] = strconv.Itoa(p.CompanyID)
-		record[3] = strconv.Itoa(p.ExchangeID)
-		record[4] = strconv.FormatFloat(p.OpenPrice, 'f', 4, 64)
-		record[5] = strconv.FormatFloat(p.HighPrice, 'f', 4, 64)
-		record[6] = strconv.FormatFloat(p.LowPrice, 'f', 4, 64)
-		record[7] = strconv.FormatFloat(p.ClosePrice, 'f', 4, 64)
-		record[8] = strconv.Itoa(p.Volume)
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(prices), targetFilename)
-	return nil
-}
-
-func WriteAppointmentsToCSV(appointments []medicalmodels.Appointment, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"appointment_id", "patient_id", "doctor_id", "clinic_id", "appointment_date", "diagnosis"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, a := range appointments {
-		record[0] = strconv.FormatInt(a.AppointmentID, 10)
-		record[1] = strconv.Itoa(a.PatientID)
-		record[2] = strconv.Itoa(a.DoctorID)
-		record[3] = strconv.Itoa(a.ClinicID)
-		record[4] = a.AppointmentDate.Format(time.RFC3339)
-		record[5] = a.Diagnosis
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(appointments), targetFilename)
-	return nil
-}
-
-// --- High-Performance, Type-Specific CSV Writers for Medical ---
-
-func WritePatientsToCSV(patients []medicalmodels.Patient, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"patient_id", "patient_name", "date_of_birth", "gender"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, p := range patients {
-		record[0] = strconv.Itoa(p.PatientID)
-		record[1] = p.PatientName
-		record[2] = p.DateOfBirth.Format(time.RFC3339)
-		record[3] = p.Gender
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(patients), targetFilename)
-	return nil
-}
-
-func WriteDoctorsToCSV(doctors []medicalmodels.Doctor, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"doctor_id", "doctor_name", "specialization"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, d := range doctors {
-		record[0] = strconv.Itoa(d.DoctorID)
-		record[1] = d.DoctorName
-		record[2] = d.Specialization
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(doctors), targetFilename)
-	return nil
-}
-
-func WriteClinicsToCSV(clinics []medicalmodels.Clinic, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"clinic_id", "clinic_name", "address"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, c := range clinics {
-		record[0] = strconv.Itoa(c.ClinicID)
-		record[1] = c.ClinicName
-		record[2] = c.Address
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(clinics), targetFilename)
-	return nil
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }
 
 func WriteCustomerAddressesToCSV(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
 	headers := []string{"address_id", "customer_id", "address_type", "address", "city", "state", "zip", "country"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	records := make([][]string, len(addresses))
+	for i, a := range addresses {
+		records[i] = []string{strconv.Itoa(a.AddressID), strconv.Itoa(a.CustomerID), a.AddressType, a.Address, a.City, a.State, a.Zip, a.Country}
 	}
-
-	record := make([]string, len(headers))
-	for _, a := range addresses {
-		record[0] = strconv.Itoa(a.AddressID)
-		record[1] = strconv.Itoa(a.CustomerID)
-		record[2] = a.AddressType
-		record[3] = a.Address
-		record[4] = a.City
-		record[5] = a.State
-		record[6] = a.Zip
-		record[7] = a.Country
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(addresses), targetFilename)
-	return nil
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }
 
 func WriteSuppliersToCSV(suppliers []ecommercemodels.Supplier, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
 	headers := []string{"supplier_id", "supplier_name", "country"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	records := make([][]string, len(suppliers))
+	for i, s := range suppliers {
+		records[i] = []string{strconv.Itoa(s.SupplierID), s.SupplierName, s.Country}
 	}
-
-	record := make([]string, len(headers))
-	for _, s := range suppliers {
-		record[0] = strconv.Itoa(s.SupplierID)
-		record[1] = s.SupplierName
-		record[2] = s.Country
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(suppliers), targetFilename)
-	return nil
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }
 
 func WriteProductCategoriesToCSV(categories []ecommercemodels.ProductCategory, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
 	headers := []string{"category_id", "category_name"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	records := make([][]string, len(categories))
+	for i, c := range categories {
+		records[i] = []string{strconv.Itoa(c.CategoryID), c.CategoryName}
 	}
-
-	record := make([]string, len(headers))
-	for _, c := range categories {
-		record[0] = strconv.Itoa(c.CategoryID)
-		record[1] = c.CategoryName
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(categories), targetFilename)
-	return nil
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }
 
 func WriteProductsToCSV(products []ecommercemodels.Product, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
 	headers := []string{"product_id", "supplier_id", "product_name", "category_id", "base_price"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	records := make([][]string, len(products))
+	for i, p := range products {
+		records[i] = []string{strconv.Itoa(p.ProductID), strconv.Itoa(p.SupplierID), p.ProductName, strconv.Itoa(p.CategoryID), strconv.FormatFloat(p.BasePrice, 'f', 2, 64)}
 	}
-
-	record := make([]string, len(headers))
-	for _, p := range products {
-		record[0] = strconv.Itoa(p.ProductID)
-		record[1] = strconv.Itoa(p.SupplierID)
-		record[2] = p.ProductName
-		record[3] = strconv.Itoa(p.CategoryID)
-		record[4] = strconv.FormatFloat(p.BasePrice, 'f', 2, 64)
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(products), targetFilename)
-	return nil
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }
 
-// WriteStreamOrderHeadersToCSV writes OrderHeader structs from a channel to a CSV file.
+// --- Fact Table Streaming Writers ---
+
+// WriteStreamOrderHeadersToCSV writes OrderHeader structs from a channel to a CSV file using a buffered writer.
 func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader, targetFilename string) error {
 	file, err := os.Create(targetFilename)
 	if err != nil {
@@ -372,7 +94,11 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 	}
 	defer file.Close()
 
-	writer := csv.NewWriter(file)
+	// Use a buffered writer for performance
+	bufferedWriter := bufio.NewWriter(file)
+	defer bufferedWriter.Flush()
+
+	writer := csv.NewWriter(bufferedWriter)
 	defer writer.Flush()
 
 	headers := []string{"order_id", "customer_id", "shipping_address_id", "billing_address_id", "order_timestamp", "order_status"}
@@ -403,76 +129,7 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 	return nil
 }
 
-// --- High-Performance, Type-Specific CSV Writers for Financial ---
-
-func WriteCompaniesToCSV(companies []financialmodels.Company, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"company_id", "company_name", "ticker_symbol", "sector"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, c := range companies {
-		record[0] = strconv.Itoa(c.CompanyID)
-		record[1] = c.CompanyName
-		record[2] = c.TickerSymbol
-		record[3] = c.Sector
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(companies), targetFilename)
-	return nil
-}
-
-func WriteExchangesToCSV(exchanges []financialmodels.Exchange, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	headers := []string{"exchange_id", "exchange_name", "country"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
-	for _, e := range exchanges {
-		record[0] = strconv.Itoa(e.ExchangeID)
-		record[1] = e.ExchangeName
-		record[2] = e.Country
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", len(exchanges), targetFilename)
-	return nil
-}
-
-// WriteStreamOrderItemsToCSV writes OrderItem structs from a channel to a CSV file.
+// WriteStreamOrderItemsToCSV writes OrderItem structs from a channel to a CSV file using a buffered writer.
 func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targetFilename string) error {
 	file, err := os.Create(targetFilename)
 	if err != nil {
@@ -480,7 +137,11 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 	}
 	defer file.Close()
 
-	writer := csv.NewWriter(file)
+	// Use a buffered writer for performance
+	bufferedWriter := bufio.NewWriter(file)
+	defer bufferedWriter.Flush()
+
+	writer := csv.NewWriter(bufferedWriter)
 	defer writer.Flush()
 
 	headers := []string{"order_item_id", "order_id", "product_id", "quantity", "unit_price", "discount", "total_price"}
@@ -510,4 +171,77 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 
 	fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
 	return nil
+}
+
+// --- Other Model Writers (kept as original for focus) ---
+
+func WriteDailyStockPricesToCSV(prices []financialmodels.DailyStockPrice, targetFilename string) error {
+	headers := []string{"price_id", "date", "company_id", "exchange_id", "open_price", "high_price", "low_price", "close_price", "volume"}
+	records := make([][]string, len(prices))
+	for i, p := range prices {
+		records[i] = []string{
+			strconv.FormatInt(p.PriceID, 10), p.Date.Format("2006-01-02"), strconv.Itoa(p.CompanyID),
+			strconv.Itoa(p.ExchangeID), strconv.FormatFloat(p.OpenPrice, 'f', 4, 64),
+			strconv.FormatFloat(p.HighPrice, 'f', 4, 64), strconv.FormatFloat(p.LowPrice, 'f', 4, 64),
+			strconv.FormatFloat(p.ClosePrice, 'f', 4, 64), strconv.Itoa(p.Volume),
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteAppointmentsToCSV(appointments []medicalmodels.Appointment, targetFilename string) error {
+	headers := []string{"appointment_id", "patient_id", "doctor_id", "clinic_id", "appointment_date", "diagnosis"}
+	records := make([][]string, len(appointments))
+	for i, a := range appointments {
+		records[i] = []string{
+			strconv.FormatInt(a.AppointmentID, 10), strconv.Itoa(a.PatientID), strconv.Itoa(a.DoctorID),
+			strconv.Itoa(a.ClinicID), a.AppointmentDate.Format(time.RFC3339), a.Diagnosis,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WritePatientsToCSV(patients []medicalmodels.Patient, targetFilename string) error {
+	headers := []string{"patient_id", "patient_name", "date_of_birth", "gender"}
+	records := make([][]string, len(patients))
+	for i, p := range patients {
+		records[i] = []string{strconv.Itoa(p.PatientID), p.PatientName, p.DateOfBirth.Format(time.RFC3339), p.Gender}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteDoctorsToCSV(doctors []medicalmodels.Doctor, targetFilename string) error {
+	headers := []string{"doctor_id", "doctor_name", "specialization"}
+	records := make([][]string, len(doctors))
+	for i, d := range doctors {
+		records[i] = []string{strconv.Itoa(d.DoctorID), d.DoctorName, d.Specialization}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteClinicsToCSV(clinics []medicalmodels.Clinic, targetFilename string) error {
+	headers := []string{"clinic_id", "clinic_name", "address"}
+	records := make([][]string, len(clinics))
+	for i, c := range clinics {
+		records[i] = []string{strconv.Itoa(c.ClinicID), c.ClinicName, c.Address}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteCompaniesToCSV(companies []financialmodels.Company, targetFilename string) error {
+	headers := []string{"company_id", "company_name", "ticker_symbol", "sector"}
+	records := make([][]string, len(companies))
+	for i, c := range companies {
+		records[i] = []string{strconv.Itoa(c.CompanyID), c.CompanyName, c.TickerSymbol, c.Sector}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteExchangesToCSV(exchanges []financialmodels.Exchange, targetFilename string) error {
+	headers := []string{"exchange_id", "exchange_name", "country"}
+	records := make([][]string, len(exchanges))
+	for i, e := range exchanges {
+		records[i] = []string{strconv.Itoa(e.ExchangeID), e.ExchangeName, e.Country}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }
