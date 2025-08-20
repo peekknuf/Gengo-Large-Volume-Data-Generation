@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"path/filepath"
 	"os"
 	"sync"
 	"time"
@@ -55,52 +56,24 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var products []ecommercemodels.Product
 	var productCategories []ecommercemodels.ProductCategory
 
-	// --- Channels for Streaming Fact Table Chunks ---
-	// Specific channels from the generator
-	headersChunkChan := make(chan []ecommercemodels.OrderHeader, 10)
-	itemsChunkChan := make(chan []ecommercemodels.OrderItem, 10)
+	// --- High-Performance Pipeline Setup ---
+	// Create specific channels for item-by-item streaming
+	headersChan := make(chan ecommercemodels.OrderHeader, 1000)
+	itemsChan := make(chan ecommercemodels.OrderItem, 5000)
 
-	// Generic channels for the writer
-	headersInterfaceChan := make(chan []interface{}, 10)
-	itemsInterfaceChan := make(chan []interface{}, 10)
-
-	// --- Adapter Goroutines ---
-	// Adapter for headers: converts []OrderHeader to []interface{}
-	go func() {
-		defer close(headersInterfaceChan)
-		for chunk := range headersChunkChan {
-			iSlice := make([]interface{}, len(chunk))
-			for i, v := range chunk {
-				iSlice[i] = v
-			}
-			headersInterfaceChan <- iSlice
-		}
-	}()
-
-	// Adapter for items: converts []OrderItem to []interface{}
-	go func() {
-		defer close(itemsInterfaceChan)
-		for chunk := range itemsChunkChan {
-			iSlice := make([]interface{}, len(chunk))
-			for i, v := range chunk {
-				iSlice[i] = v
-			}
-			itemsInterfaceChan <- iSlice
-		}
-	}()
-
-	// --- Goroutine for Writing Fact Orders Header ---
+	// --- Goroutines for Writing Fact Tables (using high-performance writers) ---
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errChan <- formats.WriteStreamData(headersInterfaceChan, "fact_orders_header", format, outputDir)
+		targetFilename := filepath.Join(outputDir, "fact_orders_header.csv")
+		errChan <- formats.WriteStreamOrderHeadersToCSV(headersChan, targetFilename)
 	}()
 
-	// --- Goroutine for Writing Fact Order Items ---
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errChan <- formats.WriteStreamData(itemsInterfaceChan, "fact_order_items", format, outputDir)
+		targetFilename := filepath.Join(outputDir, "fact_order_items.csv")
+		errChan <- formats.WriteStreamOrderItemsToCSV(itemsChan, targetFilename)
 	}()
 
 	// --- Concurrent Dimension Generation with Correct Parallelism ---
@@ -164,13 +137,13 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productIDsForSampling[i] = p.ProductID
 		}
 
-		err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChunkChan, itemsChunkChan)
+		err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChan, itemsChan)
 		if err != nil {
 			errChan <- fmt.Errorf("error during fact table generation: %w", err)
 		}
 	}()
 
-	// --- Concurrent Dimension Writing ---
+	// --- Concurrent Dimension Writing (using high-performance writers via dispatcher) ---
 	wg.Add(5)
 	go func() {
 		defer wg.Done()

@@ -2,103 +2,67 @@ package formats
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"time"
 
 	"github.com/apache/arrow/go/v12/arrow"
 	"github.com/apache/arrow/go/v12/arrow/array"
+	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
+	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
+	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// WriteSliceData dispatches writing based on format.
+// WriteSliceData dispatches writing based on format and data type.
 func WriteSliceData(data interface{}, filenameBase, format, outputDir string) error {
 	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
-	
 
-	var writeErr error
 	switch format {
 	case "csv":
-		writeErr = writeSliceToCSV(data, targetFilename)
+		// For CSV, we use a type switch to call the correct high-performance writer.
+		switch v := data.(type) {
+		// E-commerce
+		case []ecommercemodels.Customer:
+			return WriteCustomersToCSV(v, targetFilename)
+		case []ecommercemodels.CustomerAddress:
+			return WriteCustomerAddressesToCSV(v, targetFilename)
+		case []ecommercemodels.Supplier:
+			return WriteSuppliersToCSV(v, targetFilename)
+		case []ecommercemodels.ProductCategory:
+			return WriteProductCategoriesToCSV(v, targetFilename)
+		case []ecommercemodels.Product:
+			return WriteProductsToCSV(v, targetFilename)
+		// Financial
+		case []financialmodels.Company:
+			return WriteCompaniesToCSV(v, targetFilename)
+		case []financialmodels.Exchange:
+			return WriteExchangesToCSV(v, targetFilename)
+		// Medical
+		case []medicalmodels.Patient:
+			return WritePatientsToCSV(v, targetFilename)
+		case []medicalmodels.Doctor:
+			return WriteDoctorsToCSV(v, targetFilename)
+		case []medicalmodels.Clinic:
+			return WriteClinicsToCSV(v, targetFilename)
+		case []financialmodels.DailyStockPrice:
+			return WriteDailyStockPricesToCSV(v, targetFilename)
+		case []medicalmodels.Appointment:
+			return WriteAppointmentsToCSV(v, targetFilename)
+		default:
+			return fmt.Errorf("unsupported data type for CSV writing: %T", data)
+		}
 	case "json":
-		writeErr = writeSliceToJSON(data, targetFilename)
+		// JSON and Parquet still use the old reflection-based method for now.
+		return writeSliceToJSON(data, targetFilename)
 	case "parquet":
-		writeErr = writeSliceToParquet(data, targetFilename)
+		return writeSliceToParquet(data, targetFilename)
 	default:
-		writeErr = fmt.Errorf("unsupported format '%s'", format)
-	}
-	if writeErr != nil {
-		return fmt.Errorf("error writing %s: %w", targetFilename, writeErr)
-	}
-	return nil
-}
-
-// WriteStreamData dispatches writing from a channel of slices based on format.
-func WriteStreamData(dataChan <-chan []interface{}, filenameBase, format, outputDir string) error {
-	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
-
-	var writeErr error
-	switch format {
-	case "csv":
-		writeErr = WriteStreamToCSV(dataChan, targetFilename)
-	// case "json":
-	// 	writeErr = writeStreamToJSON(dataChan, targetFilename) // Not implemented yet
-	// case "parquet":
-	// 	writeErr = writeStreamToParquet(dataChan, targetFilename) // Not implemented yet
-	default:
-		writeErr = fmt.Errorf("unsupported format '%s' for streaming", format)
-	}
-	if writeErr != nil {
-		return fmt.Errorf("error writing stream to %s: %w", targetFilename, writeErr)
-	}
-	return nil
-}
-
-// ValueToString converts a reflect.Value to its string representation, primarily for CSV.
-func ValueToString(v reflect.Value) string {
-	if !v.IsValid() {
-		return ""
-	}
-
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return ""
-		}
-		v = v.Elem()
-	}
-
-	if v.Kind() == reflect.Interface {
-		if v.IsNil() {
-			return ""
-		}
-		v = v.Elem()
-	}
-
-	switch v.Kind() {
-	case reflect.String:
-		return v.String()
-	case reflect.Int, reflect.Int8, reflect.Int64:
-		return strconv.FormatInt(v.Int(), 10)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return strconv.FormatUint(v.Uint(), 10)
-	case reflect.Float32, reflect.Float64:
-		return strconv.FormatFloat(v.Float(), 'f', -1, 64)
-	case reflect.Bool:
-		return strconv.FormatBool(v.Bool())
-	case reflect.Struct:
-		if t, ok := v.Interface().(time.Time); ok {
-			return t.Format(time.RFC3339)
-		}
-		fmt.Fprintf(os.Stderr, "Warning: encountered unhandled struct type %s in ValueToString\n", v.Type())
-		return fmt.Sprintf("[unhandled struct: %v]", v.Interface())
-	default:
-		fmt.Fprintf(os.Stderr, "Warning: encountered unhandled type %s in ValueToString\n", v.Kind())
-		return fmt.Sprintf("[unhandled type: %v]", v.Interface())
+		return fmt.Errorf("unsupported format '%s'", format)
 	}
 }
 
 // AppendValueToBuilder appends a Go value to the correct Arrow builder.
+// This is kept for the Parquet writer.
 func AppendValueToBuilder(bldr array.Builder, val reflect.Value) error {
 	if val.Kind() == reflect.Ptr {
 		if val.IsNil() {

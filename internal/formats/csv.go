@@ -4,210 +4,304 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
-	"reflect"
-	"strings"
+	"strconv"
+	"time"
+
+	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
+	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
+	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// createRecordMap creates a map from CSV header names to their column indices.
-func CreateRecordMap(records [][]string) map[string]int {
-	header := records[0]
-	rmap := make(map[string]int, len(header))
-	for i, h := range header {
-		rmap[h] = i
-	}
-	return rmap
-}
+// --- High-Performance, Type-Specific CSV Writers for E-commerce ---
 
-func writeSliceToCSV(data interface{}, targetFilename string) error {
-	sliceVal := reflect.ValueOf(data)
-	if sliceVal.Kind() != reflect.Slice {
-		return fmt.Errorf("writeSliceToCSV expected a slice, got %T", data)
-	}
-	sliceLen := sliceVal.Len()
-	if sliceLen == 0 {
-		fmt.Printf("Skipping CSV write for %s: slice is empty.\n", targetFilename)
-		return nil
-	}
-
+// writeCSVHeaderAndRecords is a helper to reduce boilerplate.
+func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [][]string) error {
 	file, err := os.Create(targetFilename)
 	if err != nil {
 		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	var fileCloseErr error
-	defer func() {
-		if err := file.Close(); err != nil {
-			fileCloseErr = fmt.Errorf("error closing csv file %s: %w", targetFilename, err)
-		}
-	}()
+	defer file.Close()
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-
-	elemType := sliceVal.Type().Elem()
-	if elemType.Kind() == reflect.Ptr {
-		elemType = elemType.Elem()
-	}
-	if elemType.Kind() != reflect.Struct {
-		return fmt.Errorf("expected slice of structs/pointers, got %s", elemType.Kind())
-	}
-
-	numFields := elemType.NumField()
-	headers := make([]string, numFields)
-	fieldIndices := make([]int, numFields)
-
-	for i := 0; i < numFields; i++ {
-		field := elemType.Field(i)
-		headerName := field.Name
-		jsonTag := field.Tag.Get("json")
-		if jsonTag != "" {
-			parts := strings.Split(jsonTag, ",")
-			if parts[0] != "" && parts[0] != "-" {
-				headerName = parts[0]
-			}
-		} else {
-			pqTag := field.Tag.Get("parquet")
-			if pqTag != "" {
-				parts := strings.Split(pqTag, ",")
-				if parts[0] != "" && parts[0] != "-" {
-					headerName = parts[0]
-				}
-			}
-		}
-		headers[i] = headerName
-		fieldIndices[i] = i
-	}
 
 	if err := writer.Write(headers); err != nil {
 		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
 	}
 
-	record := make([]string, numFields)
-	for i := 0; i < sliceLen; i++ {
-		elemVal := sliceVal.Index(i)
-		if elemVal.Kind() == reflect.Ptr {
-			if elemVal.IsNil() {
-				continue
-			}
-			elemVal = elemVal.Elem()
-		}
-		if !elemVal.IsValid() || elemVal.Kind() != reflect.Struct {
-			continue
-		}
-
-		for j := 0; j < numFields; j++ {
-			fieldVal := elemVal.Field(fieldIndices[j])
-			record[j] = ValueToString(fieldVal)
-		}
-		if err := writer.Write(record); err != nil {
-			return fmt.Errorf("failed to write csv record %d to %s: %w", i, targetFilename, err)
-		}
+	if err := writer.WriteAll(records); err != nil {
+		return fmt.Errorf("failed to write csv records to %s: %w", targetFilename, err)
 	}
 
 	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing/flushing to %s: %w", targetFilename, err)
+		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
 	}
 
-	if fileCloseErr != nil {
-		return fileCloseErr
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", sliceLen, targetFilename)
+	fmt.Printf("Successfully wrote %d records to %s\n", len(records), targetFilename)
 	return nil
 }
 
-// WriteStreamToCSV writes data from a channel of slices to a CSV file.
-func WriteStreamToCSV(dataChan <-chan []interface{}, targetFilename string) error {
+// WriteCustomersToCSV writes a slice of Customer structs to a CSV file.
+func WriteCustomersToCSV(customers []ecommercemodels.Customer, targetFilename string) error {
+	headers := []string{"customer_id", "first_name", "last_name", "email"}
+	records := make([][]string, len(customers))
+	for i, c := range customers {
+		records[i] = []string{
+			strconv.Itoa(c.CustomerID),
+			c.FirstName,
+			c.LastName,
+			c.Email,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteDailyStockPricesToCSV(prices []financialmodels.DailyStockPrice, targetFilename string) error {
+	headers := []string{"price_id", "date", "company_id", "exchange_id", "open_price", "high_price", "low_price", "close_price", "volume"}
+	records := make([][]string, len(prices))
+	for i, p := range prices {
+		records[i] = []string{
+			strconv.FormatInt(p.PriceID, 10),
+			p.Date.Format("2006-01-02"),
+			strconv.Itoa(p.CompanyID),
+			strconv.Itoa(p.ExchangeID),
+			strconv.FormatFloat(p.OpenPrice, 'f', 4, 64),
+			strconv.FormatFloat(p.HighPrice, 'f', 4, 64),
+			strconv.FormatFloat(p.LowPrice, 'f', 4, 64),
+			strconv.FormatFloat(p.ClosePrice, 'f', 4, 64),
+			strconv.Itoa(p.Volume),
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func WriteAppointmentsToCSV(appointments []medicalmodels.Appointment, targetFilename string) error {
+	headers := []string{"appointment_id", "patient_id", "doctor_id", "clinic_id", "appointment_date", "diagnosis"}
+	records := make([][]string, len(appointments))
+	for i, a := range appointments {
+		records[i] = []string{
+			strconv.FormatInt(a.AppointmentID, 10),
+			strconv.Itoa(a.PatientID),
+			strconv.Itoa(a.DoctorID),
+			strconv.Itoa(a.ClinicID),
+			a.AppointmentDate.Format(time.RFC3339),
+			a.Diagnosis,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// --- High-Performance, Type-Specific CSV Writers for Medical ---
+
+// WritePatientsToCSV writes a slice of Patient structs to a CSV file.
+func WritePatientsToCSV(patients []medicalmodels.Patient, targetFilename string) error {
+	headers := []string{"patient_id", "patient_name", "date_of_birth", "gender"}
+	records := make([][]string, len(patients))
+	for i, p := range patients {
+		records[i] = []string{
+			strconv.Itoa(p.PatientID),
+			p.PatientName,
+			p.DateOfBirth.Format(time.RFC3339),
+			p.Gender,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteDoctorsToCSV writes a slice of Doctor structs to a CSV file.
+func WriteDoctorsToCSV(doctors []medicalmodels.Doctor, targetFilename string) error {
+	headers := []string{"doctor_id", "doctor_name", "specialization"}
+	records := make([][]string, len(doctors))
+	for i, d := range doctors {
+		records[i] = []string{
+			strconv.Itoa(d.DoctorID),
+			d.DoctorName,
+			d.Specialization,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteClinicsToCSV writes a slice of Clinic structs to a CSV file.
+func WriteClinicsToCSV(clinics []medicalmodels.Clinic, targetFilename string) error {
+	headers := []string{"clinic_id", "clinic_name", "address"}
+	records := make([][]string, len(clinics))
+	for i, c := range clinics {
+		records[i] = []string{
+			strconv.Itoa(c.ClinicID),
+			c.ClinicName,
+			c.Address,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteCustomerAddressesToCSV writes a slice of CustomerAddress structs to a CSV file.
+func WriteCustomerAddressesToCSV(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
+	headers := []string{"address_id", "customer_id", "address_type", "address", "city", "state", "zip", "country"}
+	records := make([][]string, len(addresses))
+	for i, a := range addresses {
+		records[i] = []string{
+			strconv.Itoa(a.AddressID),
+			strconv.Itoa(a.CustomerID),
+			a.AddressType,
+			a.Address,
+			a.City,
+			a.State,
+			a.Zip,
+			a.Country,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteSuppliersToCSV writes a slice of Supplier structs to a CSV file.
+func WriteSuppliersToCSV(suppliers []ecommercemodels.Supplier, targetFilename string) error {
+	headers := []string{"supplier_id", "supplier_name", "country"}
+	records := make([][]string, len(suppliers))
+	for i, s := range suppliers {
+		records[i] = []string{
+			strconv.Itoa(s.SupplierID),
+			s.SupplierName,
+			s.Country,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteProductCategoriesToCSV writes a slice of ProductCategory structs to a CSV file.
+func WriteProductCategoriesToCSV(categories []ecommercemodels.ProductCategory, targetFilename string) error {
+	headers := []string{"category_id", "category_name"}
+	records := make([][]string, len(categories))
+	for i, c := range categories {
+		records[i] = []string{
+			strconv.Itoa(c.CategoryID),
+			c.CategoryName,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteProductsToCSV writes a slice of Product structs to a CSV file.
+func WriteProductsToCSV(products []ecommercemodels.Product, targetFilename string) error {
+	headers := []string{"product_id", "supplier_id", "product_name", "category_id", "base_price"}
+	records := make([][]string, len(products))
+	for i, p := range products {
+		records[i] = []string{
+			strconv.Itoa(p.ProductID),
+			strconv.Itoa(p.SupplierID),
+			p.ProductName,
+			strconv.Itoa(p.CategoryID),
+			strconv.FormatFloat(p.BasePrice, 'f', 2, 64),
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteStreamOrderHeadersToCSV writes OrderHeader structs from a channel to a CSV file.
+func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader, targetFilename string) error {
 	file, err := os.Create(targetFilename)
 	if err != nil {
 		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	var fileCloseErr error
-	defer func() {
-		if err := file.Close(); err != nil {
-			fileCloseErr = fmt.Errorf("error closing csv file %s: %w", targetFilename, err)
-		}
-	}()
+	defer file.Close()
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
+	headers := []string{"order_id", "customer_id", "shipping_address_id", "billing_address_id", "order_timestamp", "order_status"}
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	}
+
+	record := make([]string, len(headers))
 	var recordCount int64
-	headersWritten := false
-
-	for chunk := range dataChan {
-		if len(chunk) == 0 {
-			continue
+	for h := range headerChan {
+		record[0] = strconv.Itoa(h.OrderID)
+		record[1] = strconv.Itoa(h.CustomerID)
+		record[2] = strconv.Itoa(h.ShippingAddressID)
+		record[3] = strconv.Itoa(h.BillingAddressID)
+		record[4] = h.OrderTimestamp.Format(time.RFC3339)
+		record[5] = h.OrderStatus
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
-
-		// Write headers based on the first chunk
-		if !headersWritten {
-			firstItem := chunk[0]
-			elemVal := reflect.ValueOf(firstItem)
-			if elemVal.Kind() == reflect.Ptr {
-				elemVal = elemVal.Elem()
-			}
-			if !elemVal.IsValid() || elemVal.Kind() != reflect.Struct {
-				return fmt.Errorf("expected struct/pointer, got %T", firstItem)
-			}
-			elemType := elemVal.Type()
-
-			numFields := elemType.NumField()
-			headers := make([]string, numFields)
-			for i := 0; i < numFields; i++ {
-				field := elemType.Field(i)
-				headerName := field.Name
-				if jsonTag := field.Tag.Get("json"); jsonTag != "" {
-					parts := strings.Split(jsonTag, ",")
-					if parts[0] != "" && parts[0] != "-" {
-						headerName = parts[0]
-					}
-				} else if pqTag := field.Tag.Get("parquet"); pqTag != "" {
-					parts := strings.Split(pqTag, ",")
-					if parts[0] != "" && parts[0] != "-" {
-						headerName = parts[0]
-					}
-				}
-				headers[i] = headerName
-			}
-
-			if err := writer.Write(headers); err != nil {
-				return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-			}
-			headersWritten = true
-		}
-
-		// Write records in the chunk
-		for _, item := range chunk {
-			elemVal := reflect.ValueOf(item)
-			if elemVal.Kind() == reflect.Ptr {
-				if elemVal.IsNil() {
-					continue
-				}
-				elemVal = elemVal.Elem()
-			}
-			if !elemVal.IsValid() || elemVal.Kind() != reflect.Struct {
-				continue
-			}
-
-			numFields := elemVal.NumField()
-			record := make([]string, numFields)
-			for j := 0; j < numFields; j++ {
-				fieldVal := elemVal.Field(j)
-				record[j] = ValueToString(fieldVal)
-			}
-			if err := writer.Write(record); err != nil {
-				return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-			}
-			recordCount++
-		}
+		recordCount++
 	}
 
 	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing/flushing to %s: %w", targetFilename, err)
+		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
 	}
 
-	if fileCloseErr != nil {
-		return fileCloseErr
+	fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
+	return nil
+}
+
+// --- High-Performance, Type-Specific CSV Writers for Financial ---
+
+// WriteCompaniesToCSV writes a slice of Company structs to a CSV file.
+func WriteCompaniesToCSV(companies []financialmodels.Company, targetFilename string) error {
+	headers := []string{"company_id", "company_name", "ticker_symbol", "sector"}
+	records := make([][]string, len(companies))
+	for i, c := range companies {
+		records[i] = []string{
+			strconv.Itoa(c.CompanyID),
+			c.CompanyName,
+			c.TickerSymbol,
+			c.Sector,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteExchangesToCSV writes a slice of Exchange structs to a CSV file.
+func WriteExchangesToCSV(exchanges []financialmodels.Exchange, targetFilename string) error {
+	headers := []string{"exchange_id", "exchange_name", "country"}
+	records := make([][]string, len(exchanges))
+	for i, e := range exchanges {
+		records[i] = []string{
+			strconv.Itoa(e.ExchangeID),
+			e.ExchangeName,
+			e.Country,
+		}
+	}
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+// WriteStreamOrderItemsToCSV writes OrderItem structs from a channel to a CSV file.
+func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targetFilename string) error {
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	headers := []string{"order_item_id", "order_id", "product_id", "quantity", "unit_price", "discount", "total_price"}
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	}
+
+	record := make([]string, len(headers))
+	var recordCount int64
+	for item := range itemChan {
+		record[0] = strconv.Itoa(item.OrderItemID)
+		record[1] = strconv.Itoa(item.OrderID)
+		record[2] = strconv.Itoa(item.ProductID)
+		record[3] = strconv.Itoa(item.Quantity)
+		record[4] = strconv.FormatFloat(item.UnitPrice, 'f', 2, 64)
+		record[5] = strconv.FormatFloat(item.Discount, 'f', 4, 64)
+		record[6] = strconv.FormatFloat(item.TotalPrice, 'f', 4, 64)
+		if err := writer.Write(record); err != nil {
+			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
+		}
+		recordCount++
+	}
+
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
 	}
 
 	fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
