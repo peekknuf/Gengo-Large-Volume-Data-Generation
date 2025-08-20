@@ -94,8 +94,8 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 	}
 	defer file.Close()
 
-	// Use a buffered writer for performance
-	bufferedWriter := bufio.NewWriter(file)
+	// Use a larger buffered writer for better performance with high-volume data
+	bufferedWriter := bufio.NewWriterSize(file, 64*1024) // 64KB buffer
 	defer bufferedWriter.Flush()
 
 	writer := csv.NewWriter(bufferedWriter)
@@ -119,6 +119,14 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
 		recordCount++
+		
+		// Periodically flush to avoid memory buildup
+		if recordCount%10000 == 0 {
+			writer.Flush()
+			if err := writer.Error(); err != nil {
+				return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
+			}
+		}
 	}
 
 	if err := writer.Error(); err != nil {
@@ -137,8 +145,8 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 	}
 	defer file.Close()
 
-	// Use a buffered writer for performance
-	bufferedWriter := bufio.NewWriter(file)
+	// Use a larger buffered writer for better performance with high-volume data
+	bufferedWriter := bufio.NewWriterSize(file, 64*1024) // 64KB buffer
 	defer bufferedWriter.Flush()
 
 	writer := csv.NewWriter(bufferedWriter)
@@ -163,6 +171,14 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
 		recordCount++
+		
+		// Periodically flush to avoid memory buildup
+		if recordCount%10000 == 0 {
+			writer.Flush()
+			if err := writer.Error(); err != nil {
+				return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
+			}
+		}
 	}
 
 	if err := writer.Error(); err != nil {
@@ -233,15 +249,6 @@ func WriteCompaniesToCSV(companies []financialmodels.Company, targetFilename str
 	records := make([][]string, len(companies))
 	for i, c := range companies {
 		records[i] = []string{strconv.Itoa(c.CompanyID), c.CompanyName, c.TickerSymbol, c.Sector}
-	}
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
-}
-
-func WriteExchangesToCSV(exchanges []financialmodels.Exchange, targetFilename string) error {
-	headers := []string{"exchange_id", "exchange_name", "country"}
-	records := make([][]string, len(exchanges))
-	for i, e := range exchanges {
-		records[i] = []string{strconv.Itoa(e.ExchangeID), e.ExchangeName, e.Country}
 	}
 	return writeCSVHeaderAndRecords(targetFilename, headers, records)
 }

@@ -57,22 +57,25 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var productCategories []ecommercemodels.ProductCategory
 
 	// --- Fact Table Pipeline Setup ---
-	headersChan := make(chan ecommercemodels.OrderHeader, 1000)
-	itemsChan := make(chan ecommercemodels.OrderItem, 5000)
+	// Channels for byte chunks instead of structs
+	headersChunkChan := make(chan []byte, 100)
+	itemsChunkChan := make(chan []byte, 100)
 
 	// Launch Fact Writers Immediately
 	writersWg.Add(2)
 	go func() {
 		defer writersWg.Done()
 		target := filepath.Join(outputDir, "fact_orders_header.csv")
-		if err := formats.WriteStreamOrderHeadersToCSV(headersChan, target); err != nil {
+		header := "order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp_unix,order_status"
+		if err := formats.WriteCSVChunks(header, headersChunkChan, target); err != nil {
 			errChan <- err
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
 		target := filepath.Join(outputDir, "fact_order_items.csv")
-		if err := formats.WriteStreamOrderItemsToCSV(itemsChan, target); err != nil {
+		header := "order_item_id,order_id,product_id,quantity,unit_price,discount,total_price"
+		if err := formats.WriteCSVChunks(header, itemsChunkChan, target); err != nil {
 			errChan <- err
 		}
 	}()
@@ -151,20 +154,34 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	}()
 
 	// --- Fact Generation ---
+	// Start fact generation as soon as we have the required data, not waiting for dimension files to be written
 	go func() {
+		// Wait for customer and product data to be ready
 		customersWg.Wait()
 		productsWg.Wait()
+		
+		// Prepare data for fact generation
 		customerIDs := make([]int, len(customers))
 		for i, c := range customers {
 			customerIDs[i] = c.CustomerID
 		}
-		productInfo := make(map[int]ecommercemodels.ProductDetails, len(products))
+		
+		// Build slice instead of map for product details (optimization #5)
+		maxProductID := 0
+		for _, p := range products {
+			if p.ProductID > maxProductID {
+				maxProductID = p.ProductID
+			}
+		}
+		productDetails := make([]ecommercemodels.ProductDetails, maxProductID+1)
 		productIDsForSampling := make([]int, len(products))
 		for i, p := range products {
-			productInfo[p.ProductID] = ecommercemodels.ProductDetails{BasePrice: p.BasePrice}
+			productDetails[p.ProductID] = ecommercemodels.ProductDetails{BasePrice: p.BasePrice}
 			productIDsForSampling[i] = p.ProductID
 		}
-		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productInfo, productIDsForSampling, headersChan, itemsChan); err != nil {
+		
+		// Generate facts immediately without waiting for dimension files to be written
+		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, headersChunkChan, itemsChunkChan); err != nil {
 			errChan <- err
 		}
 	}()
