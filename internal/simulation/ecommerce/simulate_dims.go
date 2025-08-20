@@ -87,7 +87,18 @@ func GenerateSuppliers(count int) []ecommerce.Supplier {
 	return suppliers
 }
 
-func GenerateProducts(count int, supplierIDs []int) []ecommerce.Product {
+func GenerateProductCategories() []ecommerce.ProductCategory {
+	categories := make([]ecommerce.ProductCategory, len(productCategories))
+	for i, name := range productCategories {
+		categories[i] = ecommerce.ProductCategory{
+			CategoryID:   i + 1,
+			CategoryName: name,
+		}
+	}
+	return categories
+}
+
+func GenerateProducts(count int, supplierIDs []int, categoryIDs []int) []ecommerce.Product {
 	if count <= 0 || len(supplierIDs) == 0 {
 		return []ecommerce.Product{}
 	}
@@ -96,19 +107,18 @@ func GenerateProducts(count int, supplierIDs []int) []ecommerce.Product {
 	priceDist := distuv.Normal{Mu: 75, Sigma: 45}
 
 	for i := 0; i < count; i++ {
-		category := productCategories[rand.Intn(len(productCategories))]
 		productName := gf.ProductName()
 		price := priceDist.Rand()
 		if price < 5.0 {
 			price = gf.Float64Range(5.0, 25.0)
 		}
 
-				products[i] = ecommerce.Product{
-			ProductID:       i + 1,
-			SupplierID:      supplierIDs[rand.Intn(len(supplierIDs))],
-			ProductName:     productName,
-			ProductCategory: category,
-			BasePrice:       price,
+		products[i] = ecommerce.Product{
+			ProductID:   i + 1,
+			SupplierID:  supplierIDs[rand.Intn(len(supplierIDs))],
+			ProductName: productName,
+			CategoryID:  categoryIDs[rand.Intn(len(categoryIDs))],
+			BasePrice:   price,
 		}
 	}
 	return products

@@ -93,7 +93,6 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 		orderStatus := orderStatuses[rand.Intn(len(orderStatuses))]
 
 		numItems := rand.Intn(10) + 1
-		var totalOrderAmount float64
 
 		for j := 0; j < numItems; j++ {
 			productID := productSampler.Sample()
@@ -109,7 +108,6 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 				discount = gf.Float64Range(0.05, 0.25)
 			}
 			totalPrice := float64(quantity)*unitPrice*(1.0-discount)
-			totalOrderAmount += totalPrice
 
 			newItemID := atomic.AddInt64(orderItemIDCounter, 1)
 
@@ -132,7 +130,6 @@ func generateECommerceFactsChunk(startOrderID, numOrdersToGenerate int, orderIte
 			BillingAddressID:  billingAddressID,
 			OrderTimestamp:    orderTimestamp,
 			OrderStatus:       orderStatus,
-			TotalOrderAmount:  totalOrderAmount,
 		}
 	}
 	return headers, items

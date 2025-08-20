@@ -26,12 +26,17 @@ type Supplier struct {
 	Country      string `json:"country" parquet:"country"`
 }
 
+type ProductCategory struct {
+	CategoryID   int    `json:"category_id" parquet:"category_id"`
+	CategoryName string `json:"category_name" parquet:"category_name"`
+}
+
 type Product struct {
-	ProductID       int     `json:"product_id" parquet:"product_id"`
-	SupplierID      int     `json:"supplier_id" parquet:"supplier_id"`
-	ProductName     string  `json:"product_name" parquet:"product_name"`
-	ProductCategory string  `json:"product_category" parquet:"product_category"`
-	BasePrice       float64 `json:"base_price" parquet:"base_price"`
+	ProductID   int     `json:"product_id" parquet:"product_id"`
+	SupplierID  int     `json:"supplier_id" parquet:"supplier_id"`
+	ProductName string  `json:"product_name" parquet:"product_name"`
+	CategoryID  int     `json:"category_id" parquet:"category_id"`
+	BasePrice   float64 `json:"base_price" parquet:"base_price"`
 }
 
 type OrderHeader struct {
@@ -41,7 +46,6 @@ type OrderHeader struct {
 	BillingAddressID  int       `json:"billing_address_id" parquet:"billing_address_id"`
 	OrderTimestamp    time.Time `json:"order_timestamp" parquet:"order_timestamp"`
 	OrderStatus       string    `json:"order_status" parquet:"order_status"`
-	TotalOrderAmount  float64   `json:"total_order_amount" parquet:"total_order_amount"`
 }
 
 type OrderItem struct {

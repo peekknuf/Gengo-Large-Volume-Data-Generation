@@ -53,9 +53,10 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var suppliers []ecommercemodels.Supplier
 	var customerAddresses []ecommercemodels.CustomerAddress
 	var products []ecommercemodels.Product
+	var productCategories []ecommercemodels.ProductCategory
 
 	var genWg sync.WaitGroup
-	genWg.Add(2)
+	genWg.Add(3)
 
 	go func() {
 		defer genWg.Done()
@@ -70,13 +71,22 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		for i, s := range suppliers {
 			supplierIDs[i] = s.SupplierID
 		}
-		products = ecommerce.GenerateProducts(counts.Products, supplierIDs)
+		categoryIDs := make([]int, len(productCategories))
+		for i, pc := range productCategories {
+			categoryIDs[i] = pc.CategoryID
+		}
+		products = ecommerce.GenerateProducts(counts.Products, supplierIDs, categoryIDs)
+	}()
+
+	go func() {
+		defer genWg.Done()
+		productCategories = ecommerce.GenerateProductCategories()
 	}()
 
 	genWg.Wait() // Wait for all dimension data to be generated
 
 	// --- Concurrent Dimension Writing ---
-	wg.Add(4)
+	wg.Add(5)
 	go func() {
 		defer wg.Done()
 		errChan <- formats.WriteSliceData(customers, "dim_customers", format, outputDir)
@@ -92,6 +102,10 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	go func() {
 		defer wg.Done()
 		errChan <- formats.WriteSliceData(products, "dim_products", format, outputDir)
+	}()
+	go func() {
+		defer wg.Done()
+		errChan <- formats.WriteSliceData(productCategories, "dim_product_categories", format, outputDir)
 	}()
 
 	// --- Fact Table Generation (can run while dimensions are writing) ---
