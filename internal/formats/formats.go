@@ -13,13 +13,11 @@ import (
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// WriteSliceData dispatches writing based on format and data type.
 func WriteSliceData(data interface{}, filenameBase, format, outputDir string) error {
 	targetFilename := filepath.Join(outputDir, filenameBase+"."+format)
 
 	switch format {
 	case "csv":
-		// For CSV, we use a type switch to call the correct high-performance writer.
 		switch v := data.(type) {
 		// E-commerce
 		case []ecommercemodels.Customer:

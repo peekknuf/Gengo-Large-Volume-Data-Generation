@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 )
@@ -77,7 +78,7 @@ func TestE2EEcommerceGeneration(t *testing.T) {
 	suppliers := readCsvFile(t, filepath.Join(tempDir, "dim_suppliers.csv"))
 	products := readCsvFile(t, filepath.Join(tempDir, "dim_products.csv"))
 	headers := readCsvFile(t, filepath.Join(tempDir, "fact_orders_header.csv"))
-	items := readCsvFile(t, filepath.Join(tempDir, "fact_order_items.csv"))
+	items := readShardedCsvFiles(t, tempDir, "fact_order_items")
 
 	// --- Create maps for FK lookups ---
 	customerPKs := createPrimaryKeySet(t, customers, "customer_id")
@@ -381,6 +382,62 @@ func verify3NFFinancial(t *testing.T, companies, exchanges, stockPrices [][]stri
 }
 
 // --- Test Helper Functions ---
+
+// readShardedCsvFiles reads multiple sharded CSV files and combines them into a single dataset.
+// It looks for files matching the pattern: {baseName}_*.csv (e.g., fact_order_items_0.csv, fact_order_items_1.csv)
+// If no sharded files exist, it falls back to trying a single file: {baseName}.csv
+func readShardedCsvFiles(t *testing.T, dir string, baseName string) [][]string {
+	// First, try to find sharded files
+	files, err := filepath.Glob(filepath.Join(dir, baseName+"_*.csv"))
+	if err != nil {
+		t.Fatalf("Failed to glob for sharded files %s_*.csv: %v", baseName, err)
+	}
+
+	if len(files) == 0 {
+		// No sharded files found, try single file
+		singleFile := filepath.Join(dir, baseName+".csv")
+		if _, err := os.Stat(singleFile); err == nil {
+			t.Logf("No sharded files found, using single file: %s", singleFile)
+			return readCsvFile(t, singleFile)
+		}
+		t.Fatalf("No sharded files (%s_*.csv) or single file (%s.csv) found in %s", baseName, baseName, dir)
+	}
+
+	// Sort files to ensure consistent order (fact_order_items_0.csv, fact_order_items_1.csv, etc.)
+	sort.Strings(files)
+	t.Logf("Found %d sharded files for %s: %v", len(files), baseName, files)
+
+	var allRecords [][]string
+	var header []string
+
+	for i, file := range files {
+		records := readCsvFile(t, file)
+		if len(records) == 0 {
+			continue // Skip empty files
+		}
+
+		if i == 0 {
+			// First file: keep header and all records
+			header = records[0]
+			allRecords = append(allRecords, records...)
+		} else {
+			// Subsequent files: verify header matches and append data rows only
+			if len(records[0]) != len(header) {
+				t.Fatalf("Header mismatch in file %s: expected %d columns, got %d", file, len(header), len(records[0]))
+			}
+			for j, col := range records[0] {
+				if col != header[j] {
+					t.Fatalf("Header mismatch in file %s: column %d expected '%s', got '%s'", file, j, header[j], col)
+				}
+			}
+			// Append data rows (skip header)
+			allRecords = append(allRecords, records[1:]...)
+		}
+	}
+
+	t.Logf("Combined %d files into %d total records (including header)", len(files), len(allRecords))
+	return allRecords
+}
 
 func readCsvFile(t *testing.T, path string) [][]string {
 	file, err := os.Open(path)

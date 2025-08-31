@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 )
 
 func WriteCSVChunks(header string, chunk <-chan []byte, targetFilename string) error {
+    startTime := time.Now()
     f, err := os.Create(targetFilename)
     if err != nil { return fmt.Errorf("create %s: %w", targetFilename, err) }
     defer f.Close()
@@ -30,6 +32,7 @@ func WriteCSVChunks(header string, chunk <-chan []byte, targetFilename string) e
             }
         }
     }
-    fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
+    duration := time.Since(startTime)
+    fmt.Printf("Successfully wrote %d records to %s in %s\n", recordCount, targetFilename, duration.Round(time.Millisecond))
     return nil
 }

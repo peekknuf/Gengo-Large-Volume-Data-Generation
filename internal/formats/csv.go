@@ -2,7 +2,6 @@ package formats
 
 import (
 	"bufio"
-	"encoding/csv"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,28 +12,67 @@ import (
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-// writeCSVHeaderAndRecords is a helper to reduce boilerplate.
+
+// writeCSVHeaderAndRecords writes CSV data using direct byte formatting instead of encoding/csv
+// for better performance with large datasets
 func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [][]string) error {
+	startTime := time.Now()
 	file, err := os.Create(targetFilename)
 	if err != nil {
 		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
 	defer file.Close()
 
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
+	// Use large buffer for better I/O performance
+	bufferedWriter := bufio.NewWriterSize(file, 1024*1024) // 1MB buffer
+	defer bufferedWriter.Flush()
 
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
+	// Write header directly with byte operations
+	for i, header := range headers {
+		if i > 0 {
+			bufferedWriter.WriteByte(',')
+		}
+		bufferedWriter.WriteString(header)
 	}
-	if err := writer.WriteAll(records); err != nil {
-		return fmt.Errorf("failed to write csv records to %s: %w", targetFilename, err)
+	bufferedWriter.WriteByte('\n')
+
+	// Write records directly with byte operations
+	for _, record := range records {
+		for i, field := range record {
+			if i > 0 {
+				bufferedWriter.WriteByte(',')
+			}
+			// Simple field writing - escape if contains comma or quote
+			if needsQuoting(field) {
+				bufferedWriter.WriteByte('"')
+				for _, r := range field {
+					if r == '"' {
+						bufferedWriter.WriteString("\"\"")
+					} else {
+						bufferedWriter.WriteRune(r)
+					}
+				}
+				bufferedWriter.WriteByte('"')
+			} else {
+				bufferedWriter.WriteString(field)
+			}
+		}
+		bufferedWriter.WriteByte('\n')
 	}
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-	fmt.Printf("Successfully wrote %d records to %s\n", len(records), targetFilename)
+
+	duration := time.Since(startTime)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(records), targetFilename, duration.Round(time.Millisecond))
 	return nil
+}
+
+// needsQuoting checks if a field needs CSV quoting
+func needsQuoting(field string) bool {
+	for _, r := range field {
+		if r == ',' || r == '"' || r == '\n' || r == '\r' {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Dimension Writers (kept as original for focus) ---
@@ -87,6 +125,7 @@ func WriteProductsToCSV(products []ecommercemodels.Product, targetFilename strin
 // --- Fact Table Streaming Writers ---
 
 // WriteStreamOrderHeadersToCSV writes OrderHeader structs from a channel to a CSV file using a buffered writer.
+// WriteStreamOrderHeadersToCSV writes order headers using direct byte formatting for better performance
 func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader, targetFilename string) error {
 	file, err := os.Create(targetFilename)
 	if err != nil {
@@ -94,50 +133,70 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 	}
 	defer file.Close()
 
-	// Use a larger buffered writer for better performance with high-volume data
-	bufferedWriter := bufio.NewWriterSize(file, 64*1024) // 64KB buffer
+	// Use large buffered writer for better performance with high-volume data
+	bufferedWriter := bufio.NewWriterSize(file, 2*1024*1024) // 2MB buffer
 	defer bufferedWriter.Flush()
 
-	writer := csv.NewWriter(bufferedWriter)
-	defer writer.Flush()
+	// Write header directly
+	bufferedWriter.WriteString("order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp,order_status\n")
 
-	headers := []string{"order_id", "customer_id", "shipping_address_id", "billing_address_id", "order_timestamp", "order_status"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
+	// Pre-allocate buffer for row construction to reduce allocations
+	rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
 	var recordCount int64
+	
 	for h := range headerChan {
-		record[0] = strconv.Itoa(h.OrderID)
-		record[1] = strconv.Itoa(h.CustomerID)
-		record[2] = strconv.Itoa(h.ShippingAddressID)
-		record[3] = strconv.Itoa(h.BillingAddressID)
-		record[4] = h.OrderTimestamp.Format(time.RFC3339)
-		record[5] = h.OrderStatus
-		if err := writer.Write(record); err != nil {
+		// Reset buffer for reuse
+		rowBuf = rowBuf[:0]
+		
+		// Build row with direct byte operations
+		rowBuf = strconv.AppendInt(rowBuf, int64(h.OrderID), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendInt(rowBuf, int64(h.CustomerID), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendInt(rowBuf, int64(h.ShippingAddressID), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendInt(rowBuf, int64(h.BillingAddressID), 10)
+		rowBuf = append(rowBuf, ',')
+		
+		// Format timestamp
+		timestamp := h.OrderTimestamp.Format(time.RFC3339)
+		rowBuf = append(rowBuf, timestamp...)
+		rowBuf = append(rowBuf, ',')
+		
+		// Add order status (escape if needed)
+		if needsQuoting(h.OrderStatus) {
+			rowBuf = append(rowBuf, '"')
+			for _, r := range h.OrderStatus {
+				if r == '"' {
+					rowBuf = append(rowBuf, '"', '"')
+				} else {
+					rowBuf = append(rowBuf, byte(r))
+				}
+			}
+			rowBuf = append(rowBuf, '"')
+		} else {
+			rowBuf = append(rowBuf, h.OrderStatus...)
+		}
+		rowBuf = append(rowBuf, '\n')
+		
+		// Write the row
+		if _, err := bufferedWriter.Write(rowBuf); err != nil {
 			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
 		recordCount++
 		
 		// Periodically flush to avoid memory buildup
-		if recordCount%10000 == 0 {
-			writer.Flush()
-			if err := writer.Error(); err != nil {
-				return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-			}
+		if recordCount%20000 == 0 {
+			bufferedWriter.Flush()
 		}
 	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
+	
+	fmt.Printf("Successfully wrote %d order header records to %s\n", recordCount, targetFilename)
 	return nil
 }
 
 // WriteStreamOrderItemsToCSV writes OrderItem structs from a channel to a CSV file using a buffered writer.
+// WriteStreamOrderItemsToCSV writes order items using direct byte formatting for better performance
 func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targetFilename string) error {
 	file, err := os.Create(targetFilename)
 	if err != nil {
@@ -145,47 +204,48 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 	}
 	defer file.Close()
 
-	// Use a larger buffered writer for better performance with high-volume data
-	bufferedWriter := bufio.NewWriterSize(file, 64*1024) // 64KB buffer
+	// Use large buffered writer for better performance with high-volume data
+	bufferedWriter := bufio.NewWriterSize(file, 2*1024*1024) // 2MB buffer
 	defer bufferedWriter.Flush()
 
-	writer := csv.NewWriter(bufferedWriter)
-	defer writer.Flush()
+	// Write header directly
+	bufferedWriter.WriteString("order_item_id,order_id,product_id,quantity,unit_price,discount\n")
 
-	headers := []string{"order_item_id", "order_id", "product_id", "quantity", "unit_price", "discount", "total_price"}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write csv header to %s: %w", targetFilename, err)
-	}
-
-	record := make([]string, len(headers))
+	// Pre-allocate buffer for row construction to reduce allocations
+	rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
 	var recordCount int64
+	
 	for item := range itemChan {
-		record[0] = strconv.Itoa(item.OrderItemID)
-		record[1] = strconv.Itoa(item.OrderID)
-		record[2] = strconv.Itoa(item.ProductID)
-		record[3] = strconv.Itoa(item.Quantity)
-		record[4] = strconv.FormatFloat(item.UnitPrice, 'f', 2, 64)
-		record[5] = strconv.FormatFloat(item.Discount, 'f', 4, 64)
-		record[6] = strconv.FormatFloat(item.TotalPrice, 'f', 4, 64)
-		if err := writer.Write(record); err != nil {
+		// Reset buffer for reuse
+		rowBuf = rowBuf[:0]
+		
+		// Build row with direct byte operations
+		rowBuf = strconv.AppendInt(rowBuf, int64(item.OrderItemID), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendInt(rowBuf, int64(item.OrderID), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendInt(rowBuf, int64(item.ProductID), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendInt(rowBuf, int64(item.Quantity), 10)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendFloat(rowBuf, item.UnitPrice, 'f', 2, 64)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendFloat(rowBuf, item.Discount, 'f', 4, 64)
+		rowBuf = append(rowBuf, '\n')
+		
+		// Write the row
+		if _, err := bufferedWriter.Write(rowBuf); err != nil {
 			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
 		recordCount++
 		
 		// Periodically flush to avoid memory buildup
-		if recordCount%10000 == 0 {
-			writer.Flush()
-			if err := writer.Error(); err != nil {
-				return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-			}
+		if recordCount%20000 == 0 {
+			bufferedWriter.Flush()
 		}
 	}
-
-	if err := writer.Error(); err != nil {
-		return fmt.Errorf("error occurred during csv writing to %s: %w", targetFilename, err)
-	}
-
-	fmt.Printf("Successfully wrote %d records to %s\n", recordCount, targetFilename)
+	
+	fmt.Printf("Successfully wrote %d order item records to %s\n", recordCount, targetFilename)
 	return nil
 }
 
