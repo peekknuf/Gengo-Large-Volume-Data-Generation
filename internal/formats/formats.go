@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/apache/arrow/go/v12/arrow"
-	"github.com/apache/arrow/go/v12/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
 	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
 	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
