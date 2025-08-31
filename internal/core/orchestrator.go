@@ -41,8 +41,27 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 		return err
 	}
 
-	fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
-	return nil
+		fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
+		
+		// List all generated files for verification
+		fmt.Println("\nGenerated files:")
+		files, err := os.ReadDir(outputDir)
+		if err == nil {
+			for _, file := range files {
+				if !file.IsDir() {
+					info, err := file.Info()
+					if err == nil {
+						sizeKB := float64(info.Size()) / 1024.0
+						if sizeKB >= 1024 {
+							fmt.Printf("  %s (%.1f MB)\n", file.Name(), sizeKB/1024.0)
+						} else {
+							fmt.Printf("  %s (%.1f KB)\n", file.Name(), sizeKB)
+						}
+					}
+				}
+			}
+		}
+		return nil
 }
 
 func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string) error {
@@ -57,28 +76,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var productCategories []ecommercemodels.ProductCategory
 
 	// --- Fact Table Pipeline Setup ---
-	// Channels for byte chunks instead of structs
-	headersChunkChan := make(chan []byte, 100)
-	itemsChunkChan := make(chan []byte, 100)
-
-	// Launch Fact Writers Immediately
-	writersWg.Add(2)
-	go func() {
-		defer writersWg.Done()
-		target := filepath.Join(outputDir, "fact_orders_header.csv")
-		header := "order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp_unix,order_status"
-		if err := formats.WriteCSVChunks(header, headersChunkChan, target); err != nil {
-			errChan <- err
-		}
-	}()
-	go func() {
-		defer writersWg.Done()
-		target := filepath.Join(outputDir, "fact_order_items.csv")
-		header := "order_item_id,order_id,product_id,quantity,unit_price,discount,total_price"
-		if err := formats.WriteCSVChunks(header, itemsChunkChan, target); err != nil {
-			errChan <- err
-		}
-	}()
+	// Direct file sharding - no channels needed
 
 	// --- Concurrent Dimension Generation with Correct Parallelism ---
 	var customersWg, suppliersWg, categoriesWg, productsWg sync.WaitGroup
@@ -155,7 +153,9 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 
 	// --- Fact Generation ---
 	// Start fact generation as soon as we have the required data, not waiting for dimension files to be written
+	writersWg.Add(1) // Add fact generation to the wait group
 	go func() {
+		defer writersWg.Done() // Mark fact generation as done
 		// Wait for customer and product data to be ready
 		customersWg.Wait()
 		productsWg.Wait()
@@ -180,8 +180,8 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productIDsForSampling[i] = p.ProductID
 		}
 		
-		// Generate facts immediately without waiting for dimension files to be written
-		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, headersChunkChan, itemsChunkChan); err != nil {
+		// Generate facts directly to shard files
+		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir); err != nil {
 			errChan <- err
 		}
 	}()

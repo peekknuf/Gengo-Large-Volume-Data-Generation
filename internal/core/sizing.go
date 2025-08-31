@@ -56,7 +56,7 @@ func estimateAvgRowSizeBytes(tableType string) (int, error) {
 	case "order_header":
 		return 111, nil
 	case "order_item":
-		return 63, nil
+		return 53, nil // Reduced by ~10 bytes after removing total_price column
 	// Financial (empirical estimates based on CSV output from calibration run)
 	case "company":
 		return 78, nil
@@ -88,7 +88,7 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
 	// Empirical effective size per order item (includes proportional share of all dimensions and header)
-	const effectiveSizePerOrderItem = 148.0 // Bytes/item, derived from calibration
+	const effectiveSizePerOrderItem = 65.0 // Bytes/item, recalibrated after removing total_price column
 
 	numOrderItems := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerOrderItem)))
 
