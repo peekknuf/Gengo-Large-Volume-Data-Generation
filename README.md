@@ -139,6 +139,17 @@ These improvements were achieved through:
 5. Slice instead of map for product details
 6. Optimized buffer sizes (16MB vs 64KB)
 
+### Multi-Core Scaling
+
+Gengo's worker-based architecture scales efficiently across multiple CPU cores:
+
+| Target Size | 4 Cores | 64 Cores (Projected) |
+|-------------|---------|----------------------|
+| **1TB**     | ~73 min | **6-9 minutes**      |
+| **10TB**    | ~12 hrs | **1-1.5 hours**      |
+
+Optimal scaling requires high-end NVMe storage (4-8GB/s) and sufficient RAM for concurrent workers.
+
 _(Note: Actual performance will vary based on your hardware.)_
 
 Happy generating and playing around with the data!
