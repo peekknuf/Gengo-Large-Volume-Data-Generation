@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -12,6 +14,126 @@ import (
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
 
+// WriteStream writes data from a channel to a CSV file.
+func WriteStream(data <-chan interface{}, filename, format, outputDir string) error {
+	switch format {
+	case "csv":
+		return writeStreamToCSV(data, filepath.Join(outputDir, filename+".csv"))
+	// Add other formats here if needed
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+}
+
+func writeStreamToCSV(data <-chan interface{}, targetFilename string) error {
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
+	}
+	defer file.Close()
+
+	bufferedWriter := bufio.NewWriterSize(file, 1024*1024) // 1MB buffer
+	defer bufferedWriter.Flush()
+
+	first := true
+	for v := range data {
+		if first {
+			headers := getCSVHeaders(v)
+			for i, header := range headers {
+				if i > 0 {
+					bufferedWriter.WriteByte(',')
+				}
+				bufferedWriter.WriteString(header)
+			}
+			bufferedWriter.WriteByte('\n')
+			first = false
+		}
+
+		record := toCSVRecord(v)
+		for i, field := range record {
+			if i > 0 {
+				bufferedWriter.WriteByte(',')
+			}
+			if needsQuoting(field) {
+				bufferedWriter.WriteByte('"')
+				for _, r := range field {
+					if r == '"' {
+						bufferedWriter.WriteString("\"")
+					} else {
+						bufferedWriter.WriteRune(r)
+					}
+				}
+				bufferedWriter.WriteByte('"')
+			} else {
+				bufferedWriter.WriteString(field)
+			}
+		}
+		bufferedWriter.WriteByte('\n')
+	}
+
+	return nil
+}
+
+// WriteSliceData writes any slice of structs to a CSV file.
+func WriteSliceData(data interface{}, filename, format, outputDir string) error {
+	switch format {
+	case "csv":
+		return writeSliceToCSV(data, filepath.Join(outputDir, filename+".csv"))
+	// Add other formats here if needed
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+}
+
+func writeSliceToCSV(data interface{}, targetFilename string) error {
+	slice := reflect.ValueOf(data)
+	if slice.Kind() != reflect.Slice {
+		return fmt.Errorf("data is not a slice")
+	}
+
+	if slice.Len() == 0 {
+		return nil // Nothing to write
+	}
+
+	headers := getCSVHeaders(slice.Index(0).Interface())
+	records := make([][]string, slice.Len())
+
+	for i := 0; i < slice.Len(); i++ {
+		records[i] = toCSVRecord(slice.Index(i).Interface())
+	}
+
+	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+}
+
+func getCSVHeaders(v interface{}) []string {
+	t := reflect.TypeOf(v)
+	headers := make([]string, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		headers[i] = t.Field(i).Tag.Get("csv")
+	}
+	return headers
+}
+
+func toCSVRecord(v interface{}) []string {
+	val := reflect.ValueOf(v)
+	record := make([]string, val.NumField())
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		switch field.Kind() {
+		case reflect.Int, reflect.Int64:
+			record[i] = strconv.FormatInt(field.Int(), 10)
+		case reflect.Float64:
+			record[i] = strconv.FormatFloat(field.Float(), 'f', -1, 64)
+		case reflect.String:
+			record[i] = field.String()
+		case reflect.Struct:
+			if t, ok := field.Interface().(time.Time); ok {
+				record[i] = t.Format(time.RFC3339)
+			}
+		}
+	}
+	return record
+}
 
 // writeCSVHeaderAndRecords writes CSV data using direct byte formatting instead of encoding/csv
 // for better performance with large datasets
@@ -47,7 +169,7 @@ func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [
 				bufferedWriter.WriteByte('"')
 				for _, r := range field {
 					if r == '"' {
-						bufferedWriter.WriteString("\"\"")
+						bufferedWriter.WriteString("\"")
 					} else {
 						bufferedWriter.WriteRune(r)
 					}
