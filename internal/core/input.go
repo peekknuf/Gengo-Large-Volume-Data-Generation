@@ -12,7 +12,7 @@ import (
 
 
 func GetUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
-	fmt.Print("Enter the data model to generate (ecommerce/financial/medical): ")
+	fmt.Print("Enter the data model to generate (ecommerce/ecommerce-ds/financial/medical): ")
 	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
 		err = fmt.Errorf("error reading model type: %w", scanErr)
 		return
@@ -58,6 +58,16 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		fmt.Printf("Product Categories: %s\n", utils.AddUnderscores(ecommerceCounts.ProductCategories))
 		fmt.Printf("Order Headers:     %s\n", utils.AddUnderscores(ecommerceCounts.OrderHeaders))
 		fmt.Printf("Order Items:       %s\n", utils.AddUnderscores(ecommerceCounts.OrderItems))
+	case "ecommerce-ds":
+		var ecommerceDSCounts ECommerceDSRowCounts
+		ecommerceDSCounts, err = CalculateECommerceDSRowCounts(targetGB)
+		if err != nil {
+			err = fmt.Errorf("error calculating e-commerce-ds row counts: %w", err)
+			return
+		}
+		counts = ecommerceDSCounts
+		fmt.Println("\n--- Estimated E-commerce DS Row Counts ---")
+		// ... print counts for ecommerce-ds
 	case "financial":
 		var financialCounts financialsimulation.FinancialRowCounts
 		financialCounts, err = CalculateFinancialRowCounts(targetGB)
@@ -117,6 +127,8 @@ func matchModelType(input string) (string, error) {
 	switch strings.ToLower(input) {
 	case "ecommerce", "ecom", "e-commerce", "e":
 		return "ecommerce", nil
+	case "ecommerce-ds", "ecom-ds", "e-commerce-ds", "eds":
+		return "ecommerce-ds", nil
 	case "financial", "fin", "f":
 		return "financial", nil
 	case "medical", "med", "m":

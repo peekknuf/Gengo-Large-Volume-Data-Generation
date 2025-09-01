@@ -41,6 +41,48 @@ type ECommerceRowCounts struct {
 	ProductCategories int
 }
 
+// CalculateECommerceDSRowCounts determines the target number of rows for each e-commerce-ds table.
+func CalculateECommerceDSRowCounts(targetGB float64) (ECommerceDSRowCounts, error) {
+	if targetGB <= 0 {
+		return ECommerceDSRowCounts{}, fmt.Errorf("target size must be positive")
+	}
+
+	targetBytes := targetGB * 1024 * 1024 * 1024
+
+	// Empirical effective size per store sale (recalibrated based on actual output)
+	const effectiveSizePerStoreSale = 123.0 // Bytes/sale, updated from 200 to 123 based on actual measurements
+
+	numStoreSales := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerStoreSale)))
+
+	counts := ECommerceDSRowCounts{
+		StoreSales: numStoreSales,
+		// ... other counts are placeholders
+		Customers:             1000,
+		CustomerAddresses:     1500,
+		CustomerDemographics:  1000,
+		HouseholdDemographics: 1000,
+		Items:                 1000,
+		Promotions:            100,
+		Stores:                10,
+		CallCenters:           5,
+		CatalogPages:          100,
+		WebSites:              10,
+		WebPages:              1000,
+		Warehouses:            10,
+		Reasons:               20,
+		ShipModes:             5,
+		IncomeBands:           10,
+		StoreReturns:          numStoreSales / 10,
+		CatalogSales:          numStoreSales / 2,
+		CatalogReturns:        numStoreSales / 20,
+		WebSales:              numStoreSales,
+		WebReturns:            numStoreSales / 10,
+		Inventory:             10000,
+	}
+
+	return counts, nil
+}
+
 // estimateAvgRowSizeBytes estimates the average uncompressed size of a single row for a given table type.
 func estimateAvgRowSizeBytes(tableType string) (int, error) {
 	switch tableType {
