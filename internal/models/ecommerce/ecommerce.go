@@ -55,7 +55,6 @@ type OrderItem struct {
 	Quantity    int     `json:"quantity" parquet:"quantity"`
 	UnitPrice   float64 `json:"unit_price" parquet:"unit_price"`
 	Discount    float64 `json:"discount" parquet:"discount"`
-	TotalPrice  float64 `json:"total_price" parquet:"total_price"`
 }
 
 type ProductDetails struct {
