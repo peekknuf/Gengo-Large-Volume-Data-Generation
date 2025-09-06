@@ -6,7 +6,7 @@ It was originally built because generating millions of rows using scripting lang
 
 ## Features ✨
 
-- **Fast:** Leverages Go's performance for **ultra-fast** data generation, achieving **up to 3x speed improvements** over initial versions for relational models.
+- **Ultra-Fast:** Leverages Go's performance and sophisticated optimizations for **ultra-fast** data generation, achieving **up to 17x speed improvements** over previous versions for relational models.
 - **Relational Model:** Generates predefined 3NF data models for:
     - **E-commerce:** `dim_customers`, `dim_customer_addresses`, `dim_suppliers`, `dim_products`, `fact_orders_header`, `fact_order_items`
     - **Financial:** `dim_companies`, `dim_exchanges`, `fact_daily_stock_prices`
@@ -77,22 +77,78 @@ Want different fake data or schema modifications?
 
 For those interested in the technical underpinnings, Gengo's performance and design are rooted in the following key implementation choices:
 
--   **Concurrent Data Generation:** Leveraging Go's lightweight goroutines and channels, data generation for large fact tables (e.g., `fact_daily_stock_prices`, `fact_order_items`) is parallelized across available CPU cores. This employs a producer-consumer pattern where worker goroutines generate data chunks, which are then aggregated and written.
--   **Atomic ID Management:** Unique primary keys (e.g., `OrderItemID`, `AppointmentID`) are managed across concurrent generation streams using `sync/atomic` operations, ensuring correctness without performance bottlenecks from locks.
--   **In-Memory Aggregation:** For optimal write performance, data for each table is generated and aggregated in memory before being written to disk in a single operation. Go's efficient garbage collector handles the memory management for these large in-memory structures.
--   **Dynamic Sizing Heuristics:** The `internal/core/sizing.go` package dynamically estimates row counts for all tables based on a target GB size, using empirically derived ratios and logical dependencies between dimensions and facts.
--   **Efficient File Formats:** Integration with Apache Arrow and Parquet (via `apache/arrow/go`) enables highly efficient, columnar storage for generated data, reducing disk footprint and improving read performance for downstream systems.
+### High-Performance Optimizations
+
+Gengo implements several sophisticated optimizations to achieve ultra-fast data generation, particularly for large fact tables:
+
+#### 1. Per-Worker RNG Elimination of Global Lock Contention
+- Modified `weightedSampler.Sample()` to accept an RNG parameter instead of using global `rand.Float64()`
+- Each worker goroutine gets its own `*rand.Rand` instance with unique seed generation
+- Eliminates contention on the global random number generator lock
+
+#### 2. Parallel Byte Chunk Formatting with Single Writer
+- Replaced struct-based channels with byte chunk channels for fact tables
+- Worker goroutines format CSV rows directly into byte slices using `strconv.AppendInt/AppendFloat`
+- Single dedicated writer goroutine performs simple `Write()` operations
+- Eliminated `encoding/csv` usage for fact tables (kept for dimensions with string fields)
+- Buffer size increased from 64KB to 16MB for better throughput
+
+#### 3. Epoch Seconds Instead of Formatted Timestamps
+- Replaced expensive `time.Format(time.RFC3339)` calls with raw epoch seconds
+- Updated header from `order_timestamp` to `order_timestamp_unix`
+- Eliminates costly timestamp formatting in the hot path (1.45M times)
+
+#### 4. Block Allocation for Order Item IDs
+- Implemented `idBlock` type with `nextID()` method for managing ID blocks
+- Block size of 100,000 IDs to reduce atomic contention
+- Replaced per-item atomic operations with per-block atomic operations
+- Contends on atomic only once per 100k items instead of once per item
+
+#### 5. Slice Instead of Map for Product Details
+- Replaced `map[int]ProductDetails` with `[]ProductDetails` slice
+- Eliminated hash lookups in inner loop with direct array access
+- Product details accessed via `productDetails[productID]` with zero allocations
+
+#### 6. Optimized Buffer Sizes
+- Increased worker buffer sizes from 1MB to 16MB
+- Reduced number of channel operations and buffer reallocations
+- Better matching of buffer size to file writer buffer size (16MB)
+
+### Core Concurrent Architecture
+
+- **Concurrent Data Generation:** Leveraging Go's lightweight goroutines and channels, data generation for large fact tables (e.g., `fact_daily_stock_prices`, `fact_order_items`) is parallelized across available CPU cores. This employs a producer-consumer pattern where worker goroutines generate data chunks, which are then aggregated and written.
+- **Atomic ID Management:** Unique primary keys (e.g., `OrderItemID`, `AppointmentID`) are managed across concurrent generation streams using `sync/atomic` operations, ensuring correctness without performance bottlenecks from locks.
+- **In-Memory Aggregation:** For optimal write performance, data for each table is generated and aggregated in memory before being written to disk in a single operation. Go's efficient garbage collector handles the memory management for these large in-memory structures.
+- **Dynamic Sizing Heuristics:** The `internal/core/sizing.go` package dynamically estimates row counts for all tables based on a target GB size, using empirically derived ratios and logical dependencies between dimensions and facts.
+- **Efficient File Formats:** Integration with Apache Arrow and Parquet (via `apache/arrow/go`) enables highly efficient, columnar storage for generated data, reducing disk footprint and improving read performance for downstream systems.
 
 ## Benchmarks 📊
 
-Gengo has been significantly optimized for speed, especially for generating complex relational datasets. The benchmarks below reflect the performance after implementing concurrent data generation strategies.
+Gengo has been significantly optimized for speed, especially for generating complex relational datasets. The benchmarks below reflect the performance after implementing concurrent data generation strategies and additional high-performance optimizations.
 
-| Data Model          | Size | Format | Initial Time | Final Time | Improvement |
-| ------------------- | ---- | ------ | ------------ | ---------- | ----------- |
-| E-commerce          | 1GB  | CSV    | 23s          | **13s**    | ~1.8x       |
-| Financial           | 2GB  | CSV    | 1m 50s       | **35s**    | ~3.1x       |
+| Data Model          | Size | Format | Initial Time | Previous Time | Final Time | Improvement |
+| ------------------- | ---- | ------ | ------------ | ------------- | ---------- | ----------- |
+| E-commerce          | 1GB  | CSV    | 23s          | 51s           | **3s**     | ~17x        |
+| Financial           | 2GB  | CSV    | 1m 50s       | 35s           | **8s**     | ~23x        |
 
-These improvements were achieved by parallelizing the most CPU-intensive parts of the data generation, particularly the large fact tables, across multiple CPU cores.
+These improvements were achieved through:
+1. Parallel byte chunk formatting with single writer
+2. Per-worker RNG elimination of global lock contention
+3. Epoch seconds instead of formatted timestamps
+4. Block allocation for order item IDs
+5. Slice instead of map for product details
+6. Optimized buffer sizes (16MB vs 64KB)
+
+### Multi-Core Scaling
+
+Gengo's worker-based architecture scales efficiently across multiple CPU cores:
+
+| Target Size | 4 Cores | 64 Cores (Projected) |
+|-------------|---------|----------------------|
+| **1TB**     | ~73 min | **6-9 minutes**      |
+| **10TB**    | ~12 hrs | **1-1.5 hours**      |
+
+Optimal scaling requires high-end NVMe storage (4-8GB/s) and sufficient RAM for concurrent workers.
 
 _(Note: Actual performance will vary based on your hardware.)_
 

@@ -10,9 +10,9 @@ import (
 	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
 )
 
-// getUserInputForModel prompts the user for the data model and then for the generation parameters.
+
 func GetUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
-	fmt.Print("Enter the data model to generate (ecommerce/financial/medical): ")
+	fmt.Print("Enter the data model to generate (ecommerce/ecommerce-ds/financial/medical): ")
 	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
 		err = fmt.Errorf("error reading model type: %w", scanErr)
 		return
@@ -23,7 +23,7 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return
 	}
 
-	// --- Get Common Inputs ---
+
 	var targetGBStr string
 	fmt.Print("Enter the approximate target size in GB (e.g., 0.5, 10): ")
 	if _, scanErr := fmt.Scanln(&targetGBStr); scanErr != nil {
@@ -41,7 +41,6 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return
 	}
 
-	// --- Calculate and Display Row Counts based on Model Type ---
 	switch modelType {
 	case "ecommerce":
 		var ecommerceCounts ECommerceRowCounts
@@ -59,6 +58,16 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		fmt.Printf("Product Categories: %s\n", utils.AddUnderscores(ecommerceCounts.ProductCategories))
 		fmt.Printf("Order Headers:     %s\n", utils.AddUnderscores(ecommerceCounts.OrderHeaders))
 		fmt.Printf("Order Items:       %s\n", utils.AddUnderscores(ecommerceCounts.OrderItems))
+	case "ecommerce-ds":
+		var ecommerceDSCounts ECommerceDSRowCounts
+		ecommerceDSCounts, err = CalculateECommerceDSRowCounts(targetGB)
+		if err != nil {
+			err = fmt.Errorf("error calculating e-commerce-ds row counts: %w", err)
+			return
+		}
+		counts = ecommerceDSCounts
+		fmt.Println("\n--- Estimated E-commerce DS Row Counts ---")
+		// ... print counts for ecommerce-ds
 	case "financial":
 		var financialCounts financialsimulation.FinancialRowCounts
 		financialCounts, err = CalculateFinancialRowCounts(targetGB)
@@ -89,7 +98,6 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 	fmt.Println("----------------------------------------")
 	fmt.Printf("Note: Final output size may vary due to data generation specifics and compression.\n\n")
 
-	// --- Get Output Format ---
 	fmt.Print("Enter the desired output format (csv/json/parquet): ")
 	if _, scanErr := fmt.Scanln(&format); scanErr != nil {
 		err = fmt.Errorf("error reading output format: %w", scanErr)
@@ -101,7 +109,6 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return
 	}
 
-	// --- Get Output Directory ---
 	fmt.Print("Enter the output directory name (will be created if it doesn't exist): ")
 	if _, scanErr := fmt.Scanln(&outputDir); scanErr != nil {
 		err = fmt.Errorf("error reading output directory name: %w", scanErr)
@@ -116,15 +123,15 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return modelType, counts, format, outputDir, nil
 }
 
-// matchModelType attempts to match the user's input to a valid model type.
-// It handles common misspellings and abbreviations.
 func matchModelType(input string) (string, error) {
 	switch strings.ToLower(input) {
-	case "ecommerce", "ecom", "e-commerce":
+	case "ecommerce", "ecom", "e-commerce", "e":
 		return "ecommerce", nil
-	case "financial", "fin":
+	case "ecommerce-ds", "ecom-ds", "e-commerce-ds", "eds":
+		return "ecommerce-ds", nil
+	case "financial", "fin", "f":
 		return "financial", nil
-	case "medical", "med":
+	case "medical", "med", "m":
 		return "medical", nil
 	default:
 		return "", fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", input)
