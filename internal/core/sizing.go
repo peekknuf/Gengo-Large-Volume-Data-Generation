@@ -49,35 +49,55 @@ func CalculateECommerceDSRowCounts(targetGB float64) (ECommerceDSRowCounts, erro
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
-	// Empirical effective size per store sale (recalibrated based on actual output)
-	const effectiveSizePerStoreSale = 123.0 // Bytes/sale, updated from 200 to 123 based on actual measurements
+	// Average effective size of a fact row, assuming a mix of store, web, and catalog sales.
+	const effectiveSizePerFactRow = 150.0 // Adjusted based on the mix of fact tables
 
-	numStoreSales := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerStoreSale)))
+	// The relative weights of each fact table. Ratios are approximately 2:1:2 for store:catalog:web.
+	const totalFactRatio = 2.0 + 1.0 + 2.0 // Store + Catalog + Web
+
+	totalFactRows := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerFactRow)))
+
+	// Distribute total rows according to the defined ratios
+	numStoreSales := int(float64(totalFactRows) * (2.0 / totalFactRatio))
+	numCatalogSales := int(float64(totalFactRows) * (1.0 / totalFactRatio))
+	numWebSales := int(float64(totalFactRows) * (2.0 / totalFactRatio))
+
+	// --- Derive Dimension Counts from Fact Counts for Realism ---
+	numCustomers := int(math.Max(100.0, float64(totalFactRows)/25.0))      // Avg 25 sales events per customer
+	numItems := int(math.Max(100.0, float64(totalFactRows)/100.0))        // Avg 100 sales per item
+	numCustomerAddresses := int(float64(numCustomers) * 1.5)
+	numPromotions := int(math.Max(20.0, float64(numItems)/10.0))
+	numWebPages := int(math.Max(100.0, float64(numCustomers)/2.0)) // Half of customers have web activity
 
 	counts := ECommerceDSRowCounts{
-		StoreSales: numStoreSales,
-		// ... other counts are placeholders
-		Customers:             1000,
-		CustomerAddresses:     1500,
+		StoreSales:   numStoreSales,
+		CatalogSales: numCatalogSales,
+		WebSales:     numWebSales,
+
+		// Scaled Dimensions
+		Customers:             numCustomers,
+		CustomerAddresses:     numCustomerAddresses,
+		Items:                 numItems,
+		Promotions:            numPromotions,
+		WebPages:              numWebPages,
+
+		// Fixed-size or slowly growing dimensions
 		CustomerDemographics:  1000,
 		HouseholdDemographics: 1000,
-		Items:                 1000,
-		Promotions:            100,
 		Stores:                10,
 		CallCenters:           5,
 		CatalogPages:          100,
 		WebSites:              10,
-		WebPages:              1000,
 		Warehouses:            10,
 		Reasons:               20,
 		ShipModes:             5,
 		IncomeBands:           10,
-		StoreReturns:          numStoreSales / 10,
-		CatalogSales:          numStoreSales / 2,
-		CatalogReturns:        numStoreSales / 20,
-		WebSales:              numStoreSales,
-		WebReturns:            numStoreSales / 10,
-		Inventory:             10000,
+
+		// Derived Counts
+		StoreReturns:   numStoreSales / 10,
+		CatalogReturns: numCatalogSales / 10,
+		WebReturns:     numWebSales / 10,
+		Inventory:      numItems * 5, // Inventory for 5x the number of items
 	}
 
 	return counts, nil
