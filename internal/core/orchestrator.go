@@ -174,17 +174,40 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(dateDim, "dim_date", format, outputDir) }()
 
 	// --- Fact Table Generation (Optimized with Direct File Sharding) ---
-	// Replace channel-based approach with worker-based file sharding for better performance
+	dimSKs := map[string][]int64{
+		"items":                   getSKsFromSlice(items),
+		"customers":               getSKsFromSlice(customers),
+		"customer_addresses":      getSKsFromSlice(customerAddresses),
+		"customer_demographics":   getSKsFromSlice(customerDemographics),
+		"household_demographics":  getSKsFromSlice(householdDemographics),
+		"promotions":              getSKsFromSlice(promotions),
+		"stores":                  getSKsFromSlice(stores),
+		"call_centers":            getSKsFromSlice(callCenters),
+		"catalog_pages":           getSKsFromSlice(catalogPages),
+		"web_sites":               getSKsFromSlice(webSites),
+		"web_pages":               getSKsFromSlice(webPages),
+		"warehouses":              getSKsFromSlice(warehouses),
+		"ship_modes":              getSKsFromSlice(shipModes),
+	}
 
-	writersWg.Add(1) // Add optimized fact generation
+	writersWg.Add(3) // One for each fact table generator
 	go func() {
 		defer writersWg.Done()
-		// Use optimized generation functions with direct file writing
-		if err := ecommercedssimulation.GenerateStoreSalesOptimized(counts.StoreSales, getSKsFromSlice(items), getSKsFromSlice(customers), getSKsFromSlice(stores), getSKsFromSlice(promotions), outputDir); err != nil {
-			errChan <- fmt.Errorf("store sales generation failed: %w", err)
+		if err := ecommercedssimulation.GenerateStoreSalesOptimized(counts.StoreSales, dimSKs["items"], dimSKs["customers"], dimSKs["stores"], dimSKs["promotions"], outputDir); err != nil {
+			errChan <- fmt.Errorf("failed to generate store sales: %w", err)
 		}
-		// TODO: Add other optimized fact generators (catalog sales, web sales, etc.)
-		// For now, using legacy channel-based approach for other fact tables
+	}()
+	go func() {
+		defer writersWg.Done()
+		if err := ecommercedssimulation.GenerateCatalogSalesOptimized(counts.CatalogSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["call_centers"], dimSKs["catalog_pages"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir); err != nil {
+			errChan <- fmt.Errorf("failed to generate catalog sales: %w", err)
+		}
+	}()
+	go func() {
+		defer writersWg.Done()
+		if err := ecommercedssimulation.GenerateWebSalesOptimized(counts.WebSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["web_pages"], dimSKs["web_sites"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir); err != nil {
+			errChan <- fmt.Errorf("failed to generate web sales: %w", err)
+		}
 	}()
 
 	// Wait for all writers to finish
