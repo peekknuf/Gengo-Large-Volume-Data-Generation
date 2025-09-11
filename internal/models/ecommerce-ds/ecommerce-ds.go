@@ -198,35 +198,32 @@ type Inventory struct {
 
 // Store represents details of a store.
 type Store struct {
-	S_StoreSK         int64   `csv:"s_store_sk"`
-	S_StoreID         string  `csv:"s_store_id"`
-	S_RecStartDate    string  `csv:"s_rec_start_date"`
-	S_RecEndDate      string  `csv:"s_rec_end_date"`
-	S_ClosedDateSK    int64   `csv:"s_closed_date_sk"`
-	S_StoreName       string  `csv:"s_store_name"`
-	S_NumberOfEmployees int     `csv:"s_number_of_employees"`
-	S_FloorSpace      int     `csv:"s_floor_space"`
-	S_Hours           string  `csv:"s_hours"`
-	S_Manager         string  `csv:"s_manager"`
-	S_MarketID        int     `csv:"s_market_id"`
-	S_GeographyClass  string  `csv:"s_geography_class"`
-	S_MarketDesc      string  `csv:"s_market_desc"`
-	S_MarketManager   string  `csv:"s_market_manager"`
-	S_DivisionID      int     `csv:"s_division_id"`
-	S_DivisionName    string  `csv:"s_division_name"`
-	S_CompanyID       int     `csv:"s_company_id"`
-	S_CompanyName     string  `csv:"s_company_name"`
-	S_StreetNumber    string  `csv:"s_street_number"`
-	S_StreetName      string  `csv:"s_street_name"`
-	S_StreetType      string  `csv:"s_street_type"`
-	S_SuiteNumber     string  `csv:"s_suite_number"`
-	S_City            string  `csv:"s_city"`
-	S_County          string  `csv:"s_county"`
-	S_State           string  `csv:"s_state"`
-	S_Zip             string  `csv:"s_zip"`
-	S_Country         string  `csv:"s_country"`
-	S_GmtOffset       float64 `csv:"s_gmt_offset"`
-	S_TaxPercentage   float64 `csv:"s_tax_percentage"`
+	S_StoreSK        int64   `csv:"s_store_sk"`
+	S_StoreID        string  `csv:"s_store_id"`
+	S_StoreName      string  `csv:"s_store_name"`
+	S_StoreNumber    int     `csv:"s_store_number"` // Added missing field
+	S_StreetNumber   string  `csv:"s_street_number"`
+	S_StreetName     string  `csv:"s_street_name"`
+	S_StreetType     string  `csv:"s_street_type"`
+	S_SuiteNumber    string  `csv:"s_suite_number"`
+	S_City           string  `csv:"s_city"`
+	S_County         string  `csv:"s_county"`
+	S_State          string  `csv:"s_state"`
+	S_Zip            string  `csv:"s_zip"`
+	S_Country        string  `csv:"s_country"`
+	S_GmtOffset      float64 `csv:"s_gmt_offset"`
+	S_TaxPrecentage float64 `csv:"s_tax_precentage"` // Fixed field name
+	S_FloorSpace     int     `csv:"s_floor_space"`
+	S_Hours          string  `csv:"s_hours"`
+	S_Manager        string  `csv:"s_manager"`
+	S_MarketID       int     `csv:"s_market_id"`
+	S_GeographyClass string `csv:"s_geography_class"`
+	S_MarketDesc     string  `csv:"s_market_desc"`
+	S_MarketManager  string  `csv:"s_market_manager"`
+	S_DivisionID     int     `csv:"s_division_id"`
+	S_DivisionName   string  `csv:"s_division_name"`
+	S_CompanyID      int     `csv:"s_company_id"`
+	S_CompanyName    string  `csv:"s_company_name"`
 }
 
 // CallCenter represents details of a call center.
@@ -341,6 +338,7 @@ type Warehouse struct {
 	W_Zip              string  `csv:"w_zip"`
 	W_Country          string  `csv:"w_country"`
 	W_GmtOffset        float64 `csv:"w_gmt_offset"`
+	W_TaxPercentage   float64 `csv:"w_tax_percentage"` // Added missing field
 }
 
 // Customer represents a customer.
@@ -362,13 +360,14 @@ type Customer struct {
 	C_BirthCountry        string `csv:"c_birth_country"`
 	C_Login               string `csv:"c_login"`
 	C_EmailAddress        string `csv:"c_email_address"`
-	C_LastReviewDate      string `csv:"c_last_review_date"`
+	C_LastReviewDateSK    int64  `csv:"c_last_review_date_sk"` // Fixed field name
 }
 
 // CustomerAddress represents a unique customer address.
 type CustomerAddress struct {
 	CA_AddressSK     int64   `csv:"ca_address_sk"`
 	CA_AddressID     string  `csv:"ca_address_id"`
+	CA_AddressDateSK int64   `csv:"ca_address_date_sk"` // Added missing field
 	CA_StreetNumber  string  `csv:"ca_street_number"`
 	CA_StreetName    string  `csv:"ca_street_name"`
 	CA_StreetType    string  `csv:"ca_street_type"`
@@ -393,6 +392,9 @@ type CustomerDemographics struct {
 	CD_DepCount            int    `csv:"cd_dep_count"`
 	CD_DepEmployedCount    int    `csv:"cd_dep_employed_count"`
 	CD_DepCollegeCount     int    `csv:"cd_dep_college_count"`
+	CD_HouseholdSize       int    `csv:"cd_household_size"` // Added missing field
+	CD_AverageYearlyIncome int64  `csv:"cd_average_yearly_income"` // Added missing field
+	CD_CustomerSegment     string `csv:"cd_customer_segment"` // Added missing field
 }
 
 // DateDim represents one calendar day.
@@ -429,37 +431,37 @@ type DateDim struct {
 
 // HouseholdDemographics defines a household demographic profile.
 type HouseholdDemographics struct {
-	HD_DemoSK      int64 `csv:"hd_demo_sk"`
-	HD_IncomeBandSK int64 `csv:"hd_income_band_sk"`
-	HD_BuyPotential string `csv:"hd_buy_potential"`
-	HD_DepCount    int    `csv:"hd_dep_count"`
-	HD_VehicleCount int    `csv:"hd_vehicle_count"`
+	HD_DemoSK       int64  `csv:"hd_demo_sk"`
+	HD_IncomeBandSK  int64  `csv:"hd_income_band_sk"`
+	HD_BuyPotential  string `csv:"hd_buy_potential"`
+	HD_DepCount      int    `csv:"hd_dep_count"`
+	HD_VehicleCount  int    `csv:"hd_vehicle_count"`
 }
 
 // Item represents a unique product formulation.
 type Item struct {
-	I_ItemSK        int64   `csv:"i_item_sk"`
-	I_ItemID        string  `csv:"i_item_id"`
-	I_RecStartDate  string  `csv:"i_rec_start_date"`
-	I_RecEndDate    string  `csv:"i_rec_end_date"`
-	I_ItemDesc      string  `csv:"i_item_desc"`
-	I_CurrentPrice  float64 `csv:"i_current_price"`
-	I_WholesaleCost float64 `csv:"i_wholesale_cost"`
-	I_BrandID       int     `csv:"i_brand_id"`
-	I_Brand         string  `csv:"i_brand"`
-	I_ClassID       int     `csv:"i_class_id"`
-	I_Class         string  `csv:"i_class"`
-	I_CategoryID    int     `csv:"i_category_id"`
-	I_Category      string  `csv:"i_category"`
-	I_ManufactID    int     `csv:"i_manufact_id"`
-	I_Manufact      string  `csv:"i_manufact"`
-	I_Size          string  `csv:"i_size"`
-	I_Formulation   string  `csv:"i_formulation"`
-	I_Color         string  `csv:"i_color"`
-	I_Units         string  `csv:"i_units"`
-	I_Container     string  `csv:"i_container"`
-	I_ManagerID     int     `csv:"i_manager_id"`
-	I_ProductName   string  `csv:"i_product_name"`
+	I_ItemSK         int64   `csv:"i_item_sk"`
+	I_ItemID         string  `csv:"i_item_id"`
+	I_RecStartDate   string  `csv:"i_rec_start_date"`
+	I_RecEndDate     string  `csv:"i_rec_end_date"`
+	I_ItemDesc       string  `csv:"i_item_desc"`
+	I_CurrentPrice   float64 `csv:"i_current_price"`
+	I_WholesaleCost  float64 `csv:"i_wholesale_cost"`
+	I_BrandID        int     `csv:"i_brand_id"`
+	I_Brand          string  `csv:"i_brand"`
+	I_ClassID        int     `csv:"i_class_id"`
+	I_Class          string  `csv:"i_class"`
+	I_CategoryID     int     `csv:"i_category_id"`
+	I_Category       string  `csv:"i_category"`
+	I_ManufactID     int     `csv:"i_manufact_id"`
+	I_Manufact       string  `csv:"i_manufact"`
+	I_Size           string  `csv:"i_size"`
+	I_Formulation    string  `csv:"i_formulation"`
+	I_Color          string  `csv:"i_color"`
+	I_Units          string  `csv:"i_units"`
+	I_Container      string  `csv:"i_container"`
+	I_ManagerID      int     `csv:"i_manager_id"`
+	I_ProductName    string  `csv:"i_product_name"`
 }
 
 // IncomeBand represents details of an income range.
@@ -471,13 +473,13 @@ type IncomeBand struct {
 
 // Promotion represents details of a specific product promotion.
 type Promotion struct {
-	P_PromoSK         int64   `csv:"p_promo_sk"`
-	P_PromoID         string  `csv:"p_promo_id"`
-	P_StartDateSK     int64   `csv:"p_start_date_sk"`
-	P_EndDateSK       int64   `csv:"p_end_date_sk"`
-	P_ItemSK          int64   `csv:"p_item_sk"`
-	P_Cost            float64 `csv:"p_cost"`
-	P_ResponseTarget  int     `csv:"p_response_target"`
+	P_PromoSK        int64   `csv:"p_promo_sk"`
+	P_PromoID        string  `csv:"p_promo_id"`
+	P_StartDateSK    int64   `csv:"p_start_date_sk"`
+	P_EndDateSK      int64   `csv:"p_end_date_sk"`
+	P_ItemSK         int64   `csv:"p_item_sk"`
+	P_Cost           float64 `csv:"p_cost"`
+	P_TargetMarketClass string `csv:"p_target_market_class"` // Fixed field name
 	P_PromoName       string  `csv:"p_promo_name"`
 	P_ChannelDmail    string  `csv:"p_channel_dmail"`
 	P_ChannelEmail    string  `csv:"p_channel_email"`
@@ -487,7 +489,6 @@ type Promotion struct {
 	P_ChannelPress    string  `csv:"p_channel_press"`
 	P_ChannelEvent    string  `csv:"p_channel_event"`
 	P_ChannelDemo     string  `csv:"p_channel_demo"`
-	P_ChannelDetails  string  `csv:"p_channel_details"`
 	P_Purpose         string  `csv:"p_purpose"`
 	P_DiscountActive  string  `csv:"p_discount_active"`
 }
@@ -511,14 +512,15 @@ type ShipMode struct {
 
 // TimeDim represents one second.
 type TimeDim struct {
-	T_TimeSK      int64  `csv:"t_time_sk"`
-	T_TimeID      string `csv:"t_time_id"`
-	T_Time        int    `csv:"t_time"`
-	T_Hour        int    `csv:"t_hour"`
-	T_Minute      int    `csv:"t_minute"`
-	T_Second      int    `csv:"t_second"`
-	T_AmPm        string `csv:"t_am_pm"`
-	T_Shift       string `csv:"t_shift"`
-	T_SubShift    string `csv:"t_sub_shift"`
-	T_MealTime    string `csv:"t_meal_time"`
+	T_TimeSK       int64  `csv:"t_time_sk"`
+	T_TimeID       string `csv:"t_time_id"`
+	T_Time         int    `csv:"t_time"`
+	T_Hour         int    `csv:"t_hour"`
+	T_Minute       int    `csv:"t_minute"`
+	T_Second       int    `csv:"t_second"`
+	T_TimezoneID   int    `csv:"t_timezone_id"` // Added missing field
+	T_AmPm         string `csv:"t_am_pm"`
+	T_Shift        string `csv:"t_shift"`
+	T_SubShift     string `csv:"t_sub_shift"`
+	T_MealTime     string `csv:"t_meal_time"`
 }

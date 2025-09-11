@@ -66,8 +66,54 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 			return
 		}
 		counts = ecommerceDSCounts
-		fmt.Println("\n--- Estimated E-commerce DS Row Counts ---")
-		// ... print counts for ecommerce-ds
+		fmt.Println("\n--- Estimated E-commerce DS (TPC-DS) Row Counts ---")
+		fmt.Println("\n📊 FACT TABLES:")
+		fmt.Printf("Store Sales:       %s\n", utils.AddUnderscores(ecommerceDSCounts.StoreSales))
+		fmt.Printf("Web Sales:         %s\n", utils.AddUnderscores(ecommerceDSCounts.WebSales))
+		fmt.Printf("Catalog Sales:     %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogSales))
+		fmt.Printf("Store Returns:     %s\n", utils.AddUnderscores(ecommerceDSCounts.StoreReturns))
+		fmt.Printf("Web Returns:       %s\n", utils.AddUnderscores(ecommerceDSCounts.WebReturns))
+		fmt.Printf("Catalog Returns:   %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogReturns))
+		fmt.Printf("Inventory:         %s\n", utils.AddUnderscores(ecommerceDSCounts.Inventory))
+		
+		fmt.Println("\n🏢 CORE DIMENSIONS:")
+		fmt.Printf("Customers:         %s\n", utils.AddUnderscores(ecommerceDSCounts.Customers))
+		fmt.Printf("Items:             %s\n", utils.AddUnderscores(ecommerceDSCounts.Items))
+		fmt.Printf("Customer Addresses: %s\n", utils.AddUnderscores(ecommerceDSCounts.CustomerAddresses))
+		fmt.Printf("Promotions:        %s\n", utils.AddUnderscores(ecommerceDSCounts.Promotions))
+		fmt.Printf("Web Pages:         %s\n", utils.AddUnderscores(ecommerceDSCounts.WebPages))
+		
+		fmt.Println("\n🏪 BUSINESS DIMENSIONS:")
+		fmt.Printf("Stores:            %s\n", utils.AddUnderscores(ecommerceDSCounts.Stores))
+		fmt.Printf("Warehouses:        %s\n", utils.AddUnderscores(ecommerceDSCounts.Warehouses))
+		fmt.Printf("Call Centers:      %s\n", utils.AddUnderscores(ecommerceDSCounts.CallCenters))
+		fmt.Printf("Web Sites:         %s\n", utils.AddUnderscores(ecommerceDSCounts.WebSites))
+		fmt.Printf("Catalog Pages:     %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogPages))
+		
+		fmt.Println("\n👥 DEMOGRAPHIC DIMENSIONS:")
+		fmt.Printf("Customer Demographics: %s\n", utils.AddUnderscores(ecommerceDSCounts.CustomerDemographics))
+		fmt.Printf("Household Demographics: %s\n", utils.AddUnderscores(ecommerceDSCounts.HouseholdDemographics))
+		fmt.Printf("Income Bands:      %s\n", utils.AddUnderscores(ecommerceDSCounts.IncomeBands))
+		
+		fmt.Println("\n🚚 OPERATIONAL DIMENSIONS:")
+		fmt.Printf("Reasons:           %s\n", utils.AddUnderscores(ecommerceDSCounts.Reasons))
+		fmt.Printf("Ship Modes:        %s\n", utils.AddUnderscores(ecommerceDSCounts.ShipModes))
+		
+		// Calculate business metrics
+		totalSales := ecommerceDSCounts.StoreSales + ecommerceDSCounts.WebSales + ecommerceDSCounts.CatalogSales
+		totalReturns := ecommerceDSCounts.StoreReturns + ecommerceDSCounts.WebReturns + ecommerceDSCounts.CatalogReturns
+		avgOrdersPerCustomer := float64(totalSales) / float64(ecommerceDSCounts.Customers)
+		overallReturnRate := float64(totalReturns) / float64(totalSales) * 100
+		
+		fmt.Println("\n📈 BUSINESS METRICS:")
+		fmt.Printf("Total Sales:       %s\n", utils.AddUnderscores(totalSales))
+		fmt.Printf("Total Returns:      %s\n", utils.AddUnderscores(totalReturns))
+		fmt.Printf("Orders/Customer:   %.1f\n", avgOrdersPerCustomer)
+		fmt.Printf("Return Rate:       %.1f%%\n", overallReturnRate)
+		fmt.Printf("Sales Distribution: Store %.0f%%, Web %.0f%%, Catalog %.0f%%\n", 
+			float64(ecommerceDSCounts.StoreSales)/float64(totalSales)*100,
+			float64(ecommerceDSCounts.WebSales)/float64(totalSales)*100,
+			float64(ecommerceDSCounts.CatalogSales)/float64(totalSales)*100)
 	case "financial":
 		var financialCounts financialsimulation.FinancialRowCounts
 		financialCounts, err = CalculateFinancialRowCounts(targetGB)
