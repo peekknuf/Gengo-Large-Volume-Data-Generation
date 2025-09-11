@@ -42,6 +42,7 @@ type ECommerceRowCounts struct {
 }
 
 // CalculateECommerceDSRowCounts determines the target number of rows for each e-commerce-ds table.
+// This enhanced version uses realistic TPC-DS sizing based on business patterns and accurate row size estimates.
 func CalculateECommerceDSRowCounts(targetGB float64) (ECommerceDSRowCounts, error) {
 	if targetGB <= 0 {
 		return ECommerceDSRowCounts{}, fmt.Errorf("target size must be positive")
@@ -49,55 +50,112 @@ func CalculateECommerceDSRowCounts(targetGB float64) (ECommerceDSRowCounts, erro
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
-	// Average effective size of a fact row, assuming a mix of store, web, and catalog sales.
-	const effectiveSizePerFactRow = 150.0 // Adjusted based on the mix of fact tables
+	// Realistic row size estimates based on TPC-DS schema analysis
+	// Updated for complete schema implementation with all fields
+	const (
+		storeSalesRowSize     = 245.0 // Updated: complete TPC-DS store_sales with all fields
+		storeReturnsRowSize   = 195.0 // Updated: complete TPC-DS store_returns with all fields
+		catalogSalesRowSize   = 305.0 // Updated: complete TPC-DS catalog_sales with all fields
+		catalogReturnsRowSize = 255.0 // Updated: complete TPC-DS catalog_returns with all fields
+		webSalesRowSize       = 285.0 // Updated: complete TPC-DS web_sales with all fields
+		webReturnsRowSize     = 215.0 // Updated: complete TPC-DS web_returns with all fields
+		inventoryRowSize      = 48.0  // Updated: complete TPC-DS inventory with all fields
+	)
 
-	// The relative weights of each fact table. Ratios are approximately 2:1:2 for store:catalog:web.
-	const totalFactRatio = 2.0 + 1.0 + 2.0 // Store + Catalog + Web
+	// Business-realistic sales channel distribution (modern e-commerce patterns)
+	const (
+		storeSalesRatio   = 0.55 // 55% traditional retail
+		webSalesRatio     = 0.30 // 30% e-commerce
+		catalogSalesRatio = 0.15 // 15% catalog sales
+	)
 
-	totalFactRows := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerFactRow)))
+	// Return rates by channel (industry averages)
+	const (
+		storeReturnRate   = 0.08 // 8% for in-store purchases
+		webReturnRate     = 0.12 // 12% for online purchases
+		catalogReturnRate = 0.10 // 10% for catalog purchases
+	)
 
-	// Distribute total rows according to the defined ratios
-	numStoreSales := int(float64(totalFactRows) * (2.0 / totalFactRatio))
-	numCatalogSales := int(float64(totalFactRows) * (1.0 / totalFactRatio))
-	numWebSales := int(float64(totalFactRows) * (2.0 / totalFactRatio))
+	// Calculate base fact table distribution
+	// Use weighted average row size for initial calculation
+	avgFactRowSize := storeSalesRowSize*storeSalesRatio + 
+					  webSalesRowSize*webSalesRatio + 
+					  catalogSalesRowSize*catalogSalesRatio
+	
+	// Adjust divisor for complete TPC-DS schema (17 dimensions + 7 fact tables)
+	// Updated from 0.9 to 0.7 to achieve target 1GB (was generating 793MB)
+	totalSalesRows := int(math.Max(1.0, math.Round(targetBytes / avgFactRowSize / 0.7)))
+
+	// Calculate sales fact table counts
+	numStoreSales := int(float64(totalSalesRows) * storeSalesRatio)
+	numWebSales := int(float64(totalSalesRows) * webSalesRatio)
+	numCatalogSales := int(float64(totalSalesRows) * catalogSalesRatio)
+
+	// Calculate returns fact table counts
+	numStoreReturns := int(float64(numStoreSales) * storeReturnRate)
+	numWebReturns := int(float64(numWebSales) * webReturnRate)
+	numCatalogReturns := int(float64(numCatalogSales) * catalogReturnRate)
 
 	// --- Derive Dimension Counts from Fact Counts for Realism ---
-	numCustomers := int(math.Max(100.0, float64(totalFactRows)/25.0))      // Avg 25 sales events per customer
-	numItems := int(math.Max(100.0, float64(totalFactRows)/100.0))        // Avg 100 sales per item
-	numCustomerAddresses := int(float64(numCustomers) * 1.5)
-	numPromotions := int(math.Max(20.0, float64(numItems)/10.0))
-	numWebPages := int(math.Max(100.0, float64(numCustomers)/2.0)) // Half of customers have web activity
+	// Business-driven dimension scaling for complete TPC-DS schema
+	numCustomers := int(math.Max(1000.0, float64(numStoreSales+numWebSales+numCatalogSales) / 25.0)) // 25 transactions per customer annually (updated)
+	numItems := int(math.Max(2000.0, float64(numStoreSales+numWebSales+numCatalogSales) / 120.0)) // 120 sales per item annually (updated)
+	numCustomerAddresses := int(float64(numCustomers) * 2.2) // More addresses per customer (updated)
+	numPromotions := int(math.Max(150.0, float64(numItems) / 6.0)) // More promotions per item (updated)
+	numWebPages := int(math.Max(8000.0, float64(numCustomers) / 2.5)) // More web engagement (updated)
+
+	// Scale fixed dimensions based on business size - updated for complete schema
+	businessScaleFactor := math.Sqrt(float64(numCustomers) / 100000.0) // Normalize to 100K customer base
+	
+	stores := int(math.Max(8.0, 15.0 * businessScaleFactor)) // More stores (updated)
+	warehouses := int(math.Max(5.0, 12.0 * businessScaleFactor)) // More warehouses (updated)
+	callCenters := int(math.Max(3.0, 8.0 * businessScaleFactor)) // More call centers (updated)
+	webSites := int(math.Max(3.0, 10.0 * businessScaleFactor)) // More web sites (updated)
+	catalogPages := int(math.Max(80.0, 200.0 * businessScaleFactor)) // More catalog pages (updated)
+
+	// Customer and household demographics scale with customer base - updated
+	customerDemographics := int(math.Max(800.0, float64(numCustomers) * 0.025)) // 2.5% of customers (updated)
+	householdDemographics := int(math.Max(500.0, float64(numCustomers) * 0.018)) // 1.8% of customers (updated)
+	incomeBands := int(math.Max(10.0, 15.0 * businessScaleFactor)) // More income bands (updated)
+	reasons := int(math.Max(20.0, 35.0 * businessScaleFactor)) // More reasons (updated)
+	shipModes := int(math.Max(6.0, 10.0 * businessScaleFactor)) // More ship modes (updated)
+
+	// Inventory: track weekly inventory for all items across warehouses
+	inventoryWeeks := 52 // One year of weekly snapshots
+	numInventory := numItems * warehouses * inventoryWeeks / 4 // Quarterly snapshots
 
 	counts := ECommerceDSRowCounts{
-		StoreSales:   numStoreSales,
-		CatalogSales: numCatalogSales,
-		WebSales:     numWebSales,
+		// Primary Fact Tables
+		StoreSales:     numStoreSales,
+		WebSales:       numWebSales,
+		CatalogSales:   numCatalogSales,
 
-		// Scaled Dimensions
+		// Returns Fact Tables
+		StoreReturns:   numStoreReturns,
+		WebReturns:     numWebReturns,
+		CatalogReturns: numCatalogReturns,
+
+		// Inventory Fact Table
+		Inventory:      numInventory,
+
+		// Core Dimensions
 		Customers:             numCustomers,
-		CustomerAddresses:     numCustomerAddresses,
 		Items:                 numItems,
+		CustomerAddresses:     numCustomerAddresses,
 		Promotions:            numPromotions,
 		WebPages:              numWebPages,
 
-		// Fixed-size or slowly growing dimensions
-		CustomerDemographics:  1000,
-		HouseholdDemographics: 1000,
-		Stores:                10,
-		CallCenters:           5,
-		CatalogPages:          100,
-		WebSites:              10,
-		Warehouses:            10,
-		Reasons:               20,
-		ShipModes:             5,
-		IncomeBands:           10,
-
-		// Derived Counts
-		StoreReturns:   numStoreSales / 10,
-		CatalogReturns: numCatalogSales / 10,
-		WebReturns:     numWebSales / 10,
-		Inventory:      numItems * 5, // Inventory for 5x the number of items
+		// Fixed Dimensions (scaled by business size)
+		CustomerDemographics:  customerDemographics,
+		HouseholdDemographics: householdDemographics,
+		Stores:                stores,
+		CallCenters:           callCenters,
+		CatalogPages:          catalogPages,
+		WebSites:              webSites,
+		Warehouses:            warehouses,
+		Reasons:               reasons,
+		ShipModes:             shipModes,
+		IncomeBands:           incomeBands,
 	}
 
 	return counts, nil
