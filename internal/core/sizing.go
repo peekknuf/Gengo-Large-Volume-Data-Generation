@@ -51,15 +51,14 @@ func CalculateECommerceDSRowCounts(targetGB float64) (ECommerceDSRowCounts, erro
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
 	// Realistic row size estimates based on TPC-DS schema analysis
-	// Updated for complete schema implementation with all fields
 	const (
-		storeSalesRowSize     = 245.0 // Updated: complete TPC-DS store_sales with all fields
-		storeReturnsRowSize   = 195.0 // Updated: complete TPC-DS store_returns with all fields
-		catalogSalesRowSize   = 305.0 // Updated: complete TPC-DS catalog_sales with all fields
-		catalogReturnsRowSize = 255.0 // Updated: complete TPC-DS catalog_returns with all fields
-		webSalesRowSize       = 285.0 // Updated: complete TPC-DS web_sales with all fields
-		webReturnsRowSize     = 215.0 // Updated: complete TPC-DS web_returns with all fields
-		inventoryRowSize      = 48.0  // Updated: complete TPC-DS inventory with all fields
+		storeSalesRowSize     = 245.0 // Complete TPC-DS store_sales with all fields
+		storeReturnsRowSize   = 195.0 // Complete TPC-DS store_returns with all fields
+		catalogSalesRowSize   = 305.0 // Complete TPC-DS catalog_sales with all fields
+		catalogReturnsRowSize = 255.0 // Complete TPC-DS catalog_returns with all fields
+		webSalesRowSize       = 285.0 // Complete TPC-DS web_sales with all fields
+		webReturnsRowSize     = 215.0 // Complete TPC-DS web_returns with all fields
+		inventoryRowSize      = 48.0  // Complete TPC-DS inventory with all fields
 	)
 
 	// Business-realistic sales channel distribution (modern e-commerce patterns)
@@ -76,76 +75,63 @@ func CalculateECommerceDSRowCounts(targetGB float64) (ECommerceDSRowCounts, erro
 		catalogReturnRate = 0.10 // 10% for catalog purchases
 	)
 
-	// Calculate base fact table distribution
-	// Use weighted average row size for initial calculation
-	avgFactRowSize := storeSalesRowSize*storeSalesRatio + 
-					  webSalesRowSize*webSalesRatio + 
+	// Calculate base fact table distribution using weighted average row size
+	avgFactRowSize := storeSalesRowSize*storeSalesRatio +
+					  webSalesRowSize*webSalesRatio +
 					  catalogSalesRowSize*catalogSalesRatio
-	
+
 	// Adjust divisor for complete TPC-DS schema (17 dimensions + 7 fact tables)
-	// Updated from 0.9 to 0.7 to achieve target 1GB (was generating 793MB)
+	// Reduced from 0.9 to 0.7 to achieve target 1GB (was generating 793MB)
 	totalSalesRows := int(math.Max(1.0, math.Round(targetBytes / avgFactRowSize / 0.7)))
 
-	// Calculate sales fact table counts
 	numStoreSales := int(float64(totalSalesRows) * storeSalesRatio)
 	numWebSales := int(float64(totalSalesRows) * webSalesRatio)
 	numCatalogSales := int(float64(totalSalesRows) * catalogSalesRatio)
 
-	// Calculate returns fact table counts
 	numStoreReturns := int(float64(numStoreSales) * storeReturnRate)
 	numWebReturns := int(float64(numWebSales) * webReturnRate)
 	numCatalogReturns := int(float64(numCatalogSales) * catalogReturnRate)
 
-	// --- Derive Dimension Counts from Fact Counts for Realism ---
 	// Business-driven dimension scaling for complete TPC-DS schema
-	numCustomers := int(math.Max(1000.0, float64(numStoreSales+numWebSales+numCatalogSales) / 25.0)) // 25 transactions per customer annually (updated)
-	numItems := int(math.Max(2000.0, float64(numStoreSales+numWebSales+numCatalogSales) / 120.0)) // 120 sales per item annually (updated)
-	numCustomerAddresses := int(float64(numCustomers) * 2.2) // More addresses per customer (updated)
-	numPromotions := int(math.Max(150.0, float64(numItems) / 6.0)) // More promotions per item (updated)
-	numWebPages := int(math.Max(8000.0, float64(numCustomers) / 2.5)) // More web engagement (updated)
+	numCustomers := int(math.Max(1000.0, float64(numStoreSales+numWebSales+numCatalogSales) / 25.0)) // 25 transactions per customer annually
+	numItems := int(math.Max(2000.0, float64(numStoreSales+numWebSales+numCatalogSales) / 120.0)) // 120 sales per item annually
+	numCustomerAddresses := int(float64(numCustomers) * 2.2) // Average 2.2 addresses per customer
+	numPromotions := int(math.Max(150.0, float64(numItems) / 6.0)) // Average 6 items per promotion
+	numWebPages := int(math.Max(8000.0, float64(numCustomers) / 2.5)) // Average 2.5 customers per web page
 
-	// Scale fixed dimensions based on business size - updated for complete schema
+	// Scale fixed dimensions based on business size
 	businessScaleFactor := math.Sqrt(float64(numCustomers) / 100000.0) // Normalize to 100K customer base
-	
-	stores := int(math.Max(8.0, 15.0 * businessScaleFactor)) // More stores (updated)
-	warehouses := int(math.Max(5.0, 12.0 * businessScaleFactor)) // More warehouses (updated)
-	callCenters := int(math.Max(3.0, 8.0 * businessScaleFactor)) // More call centers (updated)
-	webSites := int(math.Max(3.0, 10.0 * businessScaleFactor)) // More web sites (updated)
-	catalogPages := int(math.Max(80.0, 200.0 * businessScaleFactor)) // More catalog pages (updated)
 
-	// Customer and household demographics scale with customer base - updated
-	customerDemographics := int(math.Max(800.0, float64(numCustomers) * 0.025)) // 2.5% of customers (updated)
-	householdDemographics := int(math.Max(500.0, float64(numCustomers) * 0.018)) // 1.8% of customers (updated)
-	incomeBands := int(math.Max(10.0, 15.0 * businessScaleFactor)) // More income bands (updated)
-	reasons := int(math.Max(20.0, 35.0 * businessScaleFactor)) // More reasons (updated)
-	shipModes := int(math.Max(6.0, 10.0 * businessScaleFactor)) // More ship modes (updated)
+	stores := int(math.Max(8.0, 15.0 * businessScaleFactor))
+	warehouses := int(math.Max(5.0, 12.0 * businessScaleFactor))
+	callCenters := int(math.Max(3.0, 8.0 * businessScaleFactor))
+	webSites := int(math.Max(3.0, 10.0 * businessScaleFactor))
+	catalogPages := int(math.Max(80.0, 200.0 * businessScaleFactor))
+
+	// Customer and household demographics scale with customer base
+	customerDemographics := int(math.Max(800.0, float64(numCustomers) * 0.025)) // 2.5% of customers
+	householdDemographics := int(math.Max(500.0, float64(numCustomers) * 0.018)) // 1.8% of customers
+	incomeBands := int(math.Max(10.0, 15.0 * businessScaleFactor))
+	reasons := int(math.Max(20.0, 35.0 * businessScaleFactor))
+	shipModes := int(math.Max(6.0, 10.0 * businessScaleFactor))
 
 	// Inventory: track weekly inventory for all items across warehouses
 	inventoryWeeks := 52 // One year of weekly snapshots
 	numInventory := numItems * warehouses * inventoryWeeks / 4 // Quarterly snapshots
 
 	counts := ECommerceDSRowCounts{
-		// Primary Fact Tables
 		StoreSales:     numStoreSales,
 		WebSales:       numWebSales,
 		CatalogSales:   numCatalogSales,
-
-		// Returns Fact Tables
 		StoreReturns:   numStoreReturns,
 		WebReturns:     numWebReturns,
 		CatalogReturns: numCatalogReturns,
-
-		// Inventory Fact Table
 		Inventory:      numInventory,
-
-		// Core Dimensions
 		Customers:             numCustomers,
 		Items:                 numItems,
 		CustomerAddresses:     numCustomerAddresses,
 		Promotions:            numPromotions,
 		WebPages:              numWebPages,
-
-		// Fixed Dimensions (scaled by business size)
 		CustomerDemographics:  customerDemographics,
 		HouseholdDemographics: householdDemographics,
 		Stores:                stores,
@@ -176,7 +162,7 @@ func estimateAvgRowSizeBytes(tableType string) (int, error) {
 	case "order_header":
 		return 111, nil
 	case "order_item":
-		return 53, nil // Reduced by ~10 bytes after removing total_price column
+		return 53, nil // Optimized after removing total_price column
 	// Financial (empirical estimates based on CSV output from calibration run)
 	case "company":
 		return 78, nil
@@ -184,7 +170,6 @@ func estimateAvgRowSizeBytes(tableType string) (int, error) {
 		return 37, nil
 	case "daily_stock_price":
 		return 120, nil
-	// Medical (placeholder estimates)
 	case "patient":
 		return 80, nil
 	case "doctor":
@@ -207,22 +192,19 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
-	// Empirical effective size per order item (includes proportional share of all dimensions and header)
-	const effectiveSizePerOrderItem = 65.0 // Bytes/item, recalibrated after removing total_price column
+	const effectiveSizePerOrderItem = 65.0 // Bytes/item, includes proportional share of all dimensions and header
 
 	numOrderItems := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerOrderItem)))
 
-	// Derive other counts based on numOrderItems and original ratios
 	numOrderHeaders := int(math.Max(1.0, math.Round(float64(numOrderItems)/AvgItemsPerOrder)))
 	numCustomers := int(math.Max(1.0, math.Round(float64(numOrderHeaders)/DefaultOrdersPerCustomerRatio)))
 	numCustomerAddresses := int(math.Max(1.0, math.Round(float64(numCustomers)*AvgAddressesPerCustomer)))
 
-	// New logic: Derive suppliers from customers, and products from suppliers.
-	// This creates a more realistic hierarchy and decouples products from orders.
-	numSuppliers := int(math.Max(1.0, math.Round(float64(numCustomers)/100.0))) // Assume 100 customers per supplier
+	// Create realistic business hierarchy: suppliers → products → customers
+	numSuppliers := int(math.Max(1.0, math.Round(float64(numCustomers)/100.0))) // 100 customers per supplier
 	numProducts := int(math.Max(1.0, math.Round(float64(numSuppliers)*DefaultProductsPerSupplierRatio)))
 
-	// Ensure minimums if calculations result in zero
+	// Ensure minimum values for edge cases
 	if numOrderItems == 0 && targetGB > 0 {
 		numOrderItems = 1
 		numOrderHeaders = 1
@@ -259,16 +241,14 @@ func CalculateFinancialRowCounts(targetGB float64) (financialsimulation.Financia
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
-	// Empirical effective size per daily stock price (includes proportional share of all dimensions)
-	const effectiveSizePerDailyStockPrice = 139.0 // Bytes/price, derived from calibration
+	const effectiveSizePerDailyStockPrice = 139.0 // Bytes/price, includes proportional share of all dimensions
 
 	numPrices := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerDailyStockPrice)))
 
-	// Derive other counts based on numPrices and original ratios
 	numCompanies := int(math.Max(1.0, math.Round(float64(numPrices)/(AvgTradingDaysPerYear*NumYearsOfData))))
 	numExchanges := 5 // Fixed number of exchanges
 
-	// Ensure minimums
+	// Ensure minimum values for edge cases
 	if numCompanies == 0 && numPrices > 0 {
 		numCompanies = 1
 	} else if numCompanies == 0 && numPrices == 0 {
@@ -293,8 +273,7 @@ func CalculateMedicalRowCounts(targetGB float64) (medicalsimulation.MedicalRowCo
 
 	targetBytes := targetGB * 1024 * 1024 * 1024
 
-	// Placeholder logic for sizing the medical model
-	const effectiveSizePerAppointment = 200.0 // Bytes/appointment, placeholder
+	const effectiveSizePerAppointment = 200.0 // Bytes/appointment, estimate for medical data
 
 	numAppointments := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerAppointment)))
 	numPatients := int(math.Max(1.0, math.Round(float64(numAppointments)/5.0))) // 5 appointments per patient

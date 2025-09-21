@@ -74,8 +74,7 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 
 		fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
 		
-		// List all generated files for verification
-		fmt.Println("\nGenerated files:")
+				fmt.Println("\nGenerated files:")
 		files, err := os.ReadDir(outputDir)
 		if err == nil {
 			for _, file := range files {
@@ -98,7 +97,7 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format string, outputDir string) error {
 	errChan := make(chan error, 30) // Buffer for all goroutines
 
-	// --- Dimension Data Holders ---
+
 	var items []interface{}
 	var customers []interface{}
 	var customerAddresses []interface{}
@@ -118,7 +117,6 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	var dateDim []interface{}
 
 	// --- Dimension Generation (Serial) ---
-	// Independent dimensions
 	items = ecommercedssimulation.GenerateItems(counts.Items)
 	customerAddresses = ecommercedssimulation.GenerateCustomerAddresses(counts.CustomerAddresses)
 	customerDemographics = ecommercedssimulation.GenerateCustomerDemographics(counts.CustomerDemographics)
@@ -134,13 +132,11 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	timeDim = ecommercedssimulation.GenerateTimeDim()
 	dateDim = ecommercedssimulation.GenerateDateDim(2020, 2025)
 
-	// Dependent dimensions
 	householdDemographics = ecommercedssimulation.GenerateHouseholdDemographics(counts.HouseholdDemographics, getSKsFromSlice(incomeBands))
 	promotions = ecommercedssimulation.GeneratePromotions(counts.Promotions, getSKsFromSlice(items))
 	customers = ecommercedssimulation.GenerateCustomers(counts.Customers, getSKsFromSlice(customerDemographics), getSKsFromSlice(householdDemographics), getSKsFromSlice(customerAddresses))
 
-	// --- Dimension Writing ---
-	var writersWg sync.WaitGroup
+		var writersWg sync.WaitGroup
 	writersWg.Add(17) // All dimension writers
 
 	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(items, "dim_items", format, outputDir) }()
@@ -173,8 +169,7 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(timeDim, "dim_time", format, outputDir) }()
 	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(dateDim, "dim_date", format, outputDir) }()
 
-	// --- Fact Table Generation (Optimized with Direct File Sharding) ---
-	dimSKs := map[string][]int64{
+		dimSKs := map[string][]int64{
 		"items":                   getSKsFromSlice(items),
 		"customers":               getSKsFromSlice(customers),
 		"customer_addresses":      getSKsFromSlice(customerAddresses),
@@ -210,11 +205,9 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 		}
 	}()
 
-	// Wait for all writers to finish
 	writersWg.Wait()
 	close(errChan)
 
-	// Process errors from the channel
 	for err := range errChan {
 		if err != nil {
 			return err // Return the first error encountered
@@ -249,15 +242,11 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var writersWg sync.WaitGroup
 	errChan := make(chan error, 10)
 
-	// --- Dimension Data Holders ---
-	var customers []ecommercemodels.Customer
+		var customers []ecommercemodels.Customer
 	var suppliers []ecommercemodels.Supplier
 	var customerAddresses []ecommercemodels.CustomerAddress
 	var products []ecommercemodels.Product
 	var productCategories []ecommercemodels.ProductCategory
-
-	// --- Fact Table Pipeline Setup ---
-	// Direct file sharding - no channels needed
 
 	// --- Concurrent Dimension Generation with Correct Parallelism ---
 	var customersWg, suppliersWg, categoriesWg, productsWg sync.WaitGroup
@@ -294,7 +283,6 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		products = ecommerce.GenerateProducts(counts.Products, supplierIDs, categoryIDs)
 	}()
 
-	// --- Concurrent Dimension Writing ---
 	writersWg.Add(5)
 	go func() {
 		defer writersWg.Done()
@@ -332,8 +320,6 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		}
 	}()
 
-	// --- Fact Generation ---
-	// Start fact generation as soon as we have the required data, not waiting for dimension files to be written
 	writersWg.Add(1) // Add fact generation to the wait group
 	go func() {
 		defer writersWg.Done() // Mark fact generation as done
@@ -341,8 +327,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		customersWg.Wait()
 		productsWg.Wait()
 		
-		// Prepare data for fact generation
-		customerIDs := make([]int, len(customers))
+				customerIDs := make([]int, len(customers))
 		for i, c := range customers {
 			customerIDs[i] = c.CustomerID
 		}
@@ -361,13 +346,11 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productIDsForSampling[i] = p.ProductID
 		}
 		
-		// Generate facts directly to shard files
-		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir); err != nil {
+				if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir); err != nil {
 			errChan <- err
 		}
 	}()
 
-	// --- Final Synchronization ---
 	writersWg.Wait()
 	close(errChan)
 
@@ -383,8 +366,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 	var wg sync.WaitGroup
 	errChan := make(chan error, 3) // 2 dims + 1 fact operation
 
-	// --- Concurrent Dimension Generation ---
-	var companies []financialmodels.Company
+		var companies []financialmodels.Company
 	var exchanges []financialmodels.Exchange
 
 	var genWg sync.WaitGroup
@@ -402,8 +384,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 
 	genWg.Wait()
 
-	// --- Concurrent Dimension Writing ---
-	wg.Add(2)
+		wg.Add(2)
 	go func() {
 		defer wg.Done()
 		errChan <- formats.WriteSliceData(companies, "dim_companies", format, outputDir)
@@ -413,10 +394,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 		errChan <- formats.WriteSliceData(exchanges, "dim_exchanges", format, outputDir)
 	}()
 
-	// --- Fact Table Generation and Writing ---
-	// This runs after dimension generation is complete.
-	// The financial simulation function handles its own writing.
-	err := financialsimulation.GenerateFinancialModelData(counts, companies, exchanges, format, outputDir)
+		err := financialsimulation.GenerateFinancialModelData(counts, companies, exchanges, format, outputDir)
 	if err != nil {
 		errChan <- err
 	}
@@ -437,8 +415,7 @@ func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, 
 	var wg sync.WaitGroup
 	errChan := make(chan error, 4) // 3 dims + 1 fact operation
 
-	// --- Concurrent Dimension Generation ---
-	var patients []medicalmodels.Patient
+		var patients []medicalmodels.Patient
 	var doctors []medicalmodels.Doctor
 	var clinics []medicalmodels.Clinic
 
@@ -462,8 +439,7 @@ func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, 
 
 	genWg.Wait()
 
-	// --- Concurrent Dimension Writing ---
-	wg.Add(3)
+		wg.Add(3)
 	go func() {
 		defer wg.Done()
 		errChan <- formats.WriteSliceData(patients, "dim_patients", format, outputDir)
@@ -477,9 +453,6 @@ func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, 
 		errChan <- formats.WriteSliceData(clinics, "dim_clinics", format, outputDir)
 	}()
 
-	// --- Fact Table Generation and Writing ---
-	// This runs after dimension generation is complete.
-	// The medical simulation function handles its own writing.
 	err := medicalsimulation.GenerateMedicalModelData(counts, patients, doctors, clinics, format, outputDir)
 	if err != nil {
 		errChan <- err

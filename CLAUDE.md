@@ -28,6 +28,9 @@ go test -bench=. ./tests/
 
 ### Development Commands
 ```bash
+# Build the binary (run after making changes)
+go build
+
 # Format code
 go fmt ./...
 
@@ -45,7 +48,7 @@ go test ./internal/core/
 **Main Entry Point**: `main.go:76`
 - Uses Cobra CLI framework
 - Single `gen` command that orchestrates the entire generation process
-- Seeds random generators for consistent runs
+- No random seeding - uses system randomness for synthetic data generation
 
 **Core Orchestrator**: `internal/core/orchestrator.go:48`
 - Central coordinator for all data generation

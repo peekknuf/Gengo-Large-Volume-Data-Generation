@@ -2,11 +2,8 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
-	"time"
 
-	gf "github.com/brianvoe/gofakeit/v6"
 	"github.com/peekknuf/Gengo/internal/core"
 	"github.com/spf13/cobra"
 )
@@ -46,13 +43,6 @@ Example:
 		}
 
 		fmt.Printf("\nConfiguration:\n Target Format: %s\n Output Directory: %s\n", outputFormat, outputDir)
-
-		// --- Seed Random Generators Once ---
-		// Seeding here ensures consistency for a single run across different generators.
-		seed := time.Now().UnixNano()
-		rand.Seed(seed) // Seed math/rand used by weighted sampler & potentially others
-		gf.Seed(seed)   // Seed gofakeit used in simulation functions
-		fmt.Println("Random generators seeded.")
 
 		fmt.Println("\nStarting generation (this might take a while)...")
 
