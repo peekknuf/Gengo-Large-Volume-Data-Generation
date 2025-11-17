@@ -1,4 +1,4 @@
-# Gengo 🚀 - TPC-DS Data Generator for Large-Scale Analytics
+# Gengo - TPC-DS Data Generator for Large-Scale Analytics
 
 Gengo is a high-performance command-line tool written in Go for generating **TPC-DS benchmark datasets** - the industry standard for testing data warehousing and analytics systems. It generates complete star schemas with realistic business data at scale, perfect for benchmarking database performance, testing BI tools, and validating data pipelines.
 
