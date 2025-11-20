@@ -10,12 +10,15 @@ import (
 	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
 )
 
-
-func GetUserInputForModel() (modelType string, counts interface{}, format string, outputDir string, err error) {
-	fmt.Print("Enter the data model to generate (ecommerce/ecommerce-ds/financial/medical): ")
-	if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
-		err = fmt.Errorf("error reading model type: %w", scanErr)
-		return
+func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, outputDirFlag string) (modelType string, counts interface{}, format string, outputDir string, err error) {
+	// --- Model Type ---
+	modelType = modelTypeFlag
+	if modelType == "" {
+		fmt.Print("Enter the data model to generate (ecommerce/ecommerce-ds/financial/medical): ")
+		if _, scanErr := fmt.Scanln(&modelType); scanErr != nil {
+			err = fmt.Errorf("error reading model type: %w", scanErr)
+			return
+		}
 	}
 	modelType = strings.ToLower(strings.TrimSpace(modelType))
 	modelType, err = matchModelType(modelType)
@@ -23,24 +26,27 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return
 	}
 
-
-	var targetGBStr string
-	fmt.Print("Enter the approximate target size in GB (e.g., 0.5, 10): ")
-	if _, scanErr := fmt.Scanln(&targetGBStr); scanErr != nil {
-		err = fmt.Errorf("error reading target size: %w", scanErr)
-		return
-	}
-
-	targetGB, convErr := strconv.ParseFloat(strings.TrimSpace(targetGBStr), 64)
-	if convErr != nil {
-		err = fmt.Errorf("invalid number format for GB: %w", convErr)
-		return
+	// --- Target Size ---
+	targetGB := targetGBFlag
+	if targetGB == 0 {
+		var targetGBStr string
+		fmt.Print("Enter the approximate target size in GB (e.g., 0.5, 10): ")
+		if _, scanErr := fmt.Scanln(&targetGBStr); scanErr != nil {
+			err = fmt.Errorf("error reading target size: %w", scanErr)
+			return
+		}
+		targetGB, err = strconv.ParseFloat(strings.TrimSpace(targetGBStr), 64)
+		if err != nil {
+			err = fmt.Errorf("invalid number format for GB: %w", err)
+			return
+		}
 	}
 	if targetGB <= 0 {
 		err = fmt.Errorf("target size must be positive")
 		return
 	}
 
+	// --- Calculate Row Counts ---
 	switch modelType {
 	case "ecommerce":
 		var ecommerceCounts ECommerceRowCounts
@@ -144,10 +150,14 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 	fmt.Println("----------------------------------------")
 	fmt.Printf("Note: Final output size may vary due to data generation specifics and compression.\n\n")
 
-	fmt.Print("Enter the desired output format (csv/json/parquet): ")
-	if _, scanErr := fmt.Scanln(&format); scanErr != nil {
-		err = fmt.Errorf("error reading output format: %w", scanErr)
-		return
+	// --- Output Format ---
+	format = formatFlag
+	if format == "" {
+		fmt.Print("Enter the desired output format (csv/json/parquet): ")
+		if _, scanErr := fmt.Scanln(&format); scanErr != nil {
+			err = fmt.Errorf("error reading output format: %w", scanErr)
+			return
+		}
 	}
 	format = strings.ToLower(strings.TrimSpace(format))
 	if format != "csv" && format != "json" && format != "parquet" {
@@ -155,10 +165,14 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return
 	}
 
-	fmt.Print("Enter the output directory name (will be created if it doesn't exist): ")
-	if _, scanErr := fmt.Scanln(&outputDir); scanErr != nil {
-		err = fmt.Errorf("error reading output directory name: %w", scanErr)
-		return
+	// --- Output Directory ---
+	outputDir = outputDirFlag
+	if outputDir == "" {
+		fmt.Print("Enter the output directory name (will be created if it doesn't exist): ")
+		if _, scanErr := fmt.Scanln(&outputDir); scanErr != nil {
+			err = fmt.Errorf("error reading output directory name: %w", scanErr)
+			return
+		}
 	}
 	outputDir = strings.TrimSpace(outputDir)
 	if outputDir == "" {
@@ -166,7 +180,7 @@ func GetUserInputForModel() (modelType string, counts interface{}, format string
 		return
 	}
 
-		return modelType, counts, format, outputDir, nil
+	return modelType, counts, format, outputDir, nil
 }
 
 func matchModelType(input string) (string, error) {
@@ -183,3 +197,4 @@ func matchModelType(input string) (string, error) {
 		return "", fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", input)
 	}
 }
+

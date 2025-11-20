@@ -8,6 +8,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	modelType  string
+	targetGB   float64
+	format     string
+	outputDir  string
+)
+
 var RootCmd = &cobra.Command{
 	Use:   "Gengo",
 	Short: "A brief description of your application",
@@ -31,24 +38,23 @@ based on an estimated target size and saves it to the specified format
 (CSV, JSON Lines, Parquet) within a directory.
 
 Example:
-  ./Gengo gen`,
+  ./Gengo gen --model ecommerce-ds --size 0.5 --format parquet --output my-data`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Starting data model generation process...")
 
-		// --- Get User Input ---
-		modelType, counts, outputFormat, outputDir, err := core.GetUserInputForModel() // Assumes getUserInputForModel is in input.go or similar
+		// --- Get User Input from flags or interactive prompts ---
+		model, counts, outputFormat, dir, err := core.GetUserInput(modelType, targetGB, format, outputDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nError getting user input: %v\n", err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("\nConfiguration:\n Target Format: %s\n Output Directory: %s\n", outputFormat, outputDir)
+		fmt.Printf("\nConfiguration:\n Target Format: %s\n Output Directory: %s\n", outputFormat, dir)
 
 		fmt.Println("\nStarting generation (this might take a while)...")
 
 		// --- Call the Main Generation Orchestrator ---
-		// Assumes GenerateModelData is in orchestrator.go or similar
-		err = core.GenerateModelData(modelType, counts, outputFormat, outputDir)
+		err = core.GenerateModelData(model, counts, outputFormat, dir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nError during data generation: %v\n", err)
 			os.Exit(1)
@@ -61,6 +67,10 @@ Example:
 
 func init() {
 	RootCmd.AddCommand(generateCmd)
+	generateCmd.Flags().StringVarP(&modelType, "model", "m", "", "Data model to generate (ecommerce, ecommerce-ds, financial, medical)")
+	generateCmd.Flags().Float64VarP(&targetGB, "size", "s", 0, "Approximate target size in GB (e.g., 0.5, 10)")
+	generateCmd.Flags().StringVarP(&format, "format", "f", "", "Output format (csv, json, parquet)")
+	generateCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory name")
 }
 
 func main() {
