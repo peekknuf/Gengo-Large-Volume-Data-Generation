@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
-	
+	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
+	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
+	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -120,9 +122,9 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 			rowsInCurrentBatch = 0
 		}
 		// if (i+1)%progressStep == 0 || i == sliceLen-1 {
-            // fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
-        // }
-	} 
+		// fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
+		// }
+	}
 
 	if rowsInCurrentBatch > 0 {
 		fmt.Printf("Writing final %d rows for %s parquet...\n", rowsInCurrentBatch, targetFilename)
@@ -221,4 +223,64 @@ func buildArrowSchema(structType reflect.Type) (*arrow.Schema, error) {
 	return arrow.NewSchema(fields, nil), nil
 }
 
+// Parquet writer functions for e-commerce models
 
+func WriteCustomersToParquet(customers []ecommercemodels.Customer, targetFilename string) error {
+	return writeSliceToParquet(customers, targetFilename)
+}
+
+func WriteCustomerAddressesToParquet(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
+	return writeSliceToParquet(addresses, targetFilename)
+}
+
+func WriteSuppliersToParquet(suppliers []ecommercemodels.Supplier, targetFilename string) error {
+	return writeSliceToParquet(suppliers, targetFilename)
+}
+
+func WriteProductCategoriesToParquet(categories []ecommercemodels.ProductCategory, targetFilename string) error {
+	return writeSliceToParquet(categories, targetFilename)
+}
+
+func WriteProductsToParquet(products []ecommercemodels.Product, targetFilename string) error {
+	return writeSliceToParquet(products, targetFilename)
+}
+
+func WriteOrderHeadersToParquet(headers []ecommercemodels.OrderHeader, targetFilename string) error {
+	return writeSliceToParquet(headers, targetFilename)
+}
+
+func WriteOrderItemsToParquet(items []ecommercemodels.OrderItem, targetFilename string) error {
+	return writeSliceToParquet(items, targetFilename)
+}
+
+// Parquet writer functions for financial models
+
+func WriteCompaniesToParquet(companies []financialmodels.Company, targetFilename string) error {
+	return writeSliceToParquet(companies, targetFilename)
+}
+
+func WriteExchangesToParquet(exchanges []financialmodels.Exchange, targetFilename string) error {
+	return writeSliceToParquet(exchanges, targetFilename)
+}
+
+func WriteDailyStockPricesToParquet(prices []financialmodels.DailyStockPrice, targetFilename string) error {
+	return writeSliceToParquet(prices, targetFilename)
+}
+
+// Parquet writer functions for medical models
+
+func WritePatientsToParquet(patients []medicalmodels.Patient, targetFilename string) error {
+	return writeSliceToParquet(patients, targetFilename)
+}
+
+func WriteDoctorsToParquet(doctors []medicalmodels.Doctor, targetFilename string) error {
+	return writeSliceToParquet(doctors, targetFilename)
+}
+
+func WriteClinicsToParquet(clinics []medicalmodels.Clinic, targetFilename string) error {
+	return writeSliceToParquet(clinics, targetFilename)
+}
+
+func WriteAppointmentsToParquet(appointments []medicalmodels.Appointment, targetFilename string) error {
+	return writeSliceToParquet(appointments, targetFilename)
+}

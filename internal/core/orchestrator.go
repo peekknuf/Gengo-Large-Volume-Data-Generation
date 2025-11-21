@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"path/filepath"
 	"os"
 	"reflect"
 	"sync"
@@ -31,7 +30,7 @@ type ECommerceDSRowCounts struct {
 	CallCenters           int
 	CatalogPages          int
 	WebSites              int
-	WebPages              int	
+	WebPages              int
 	Warehouses            int
 	Reasons               int
 	ShipModes             int
@@ -72,31 +71,30 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 		return err
 	}
 
-		fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
-		
-				fmt.Println("\nGenerated files:")
-		files, err := os.ReadDir(outputDir)
-		if err == nil {
-			for _, file := range files {
-				if !file.IsDir() {
-					info, err := file.Info()
-					if err == nil {
-						sizeKB := float64(info.Size()) / 1024.0
-						if sizeKB >= 1024 {
-							fmt.Printf("  %s (%.1f MB)\n", file.Name(), sizeKB/1024.0)
-						} else {
-							fmt.Printf("  %s (%.1f KB)\n", file.Name(), sizeKB)
-						}
+	fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
+
+	fmt.Println("\nGenerated files:")
+	files, err := os.ReadDir(outputDir)
+	if err == nil {
+		for _, file := range files {
+			if !file.IsDir() {
+				info, err := file.Info()
+				if err == nil {
+					sizeKB := float64(info.Size()) / 1024.0
+					if sizeKB >= 1024 {
+						fmt.Printf("  %s (%.1f MB)\n", file.Name(), sizeKB/1024.0)
+					} else {
+						fmt.Printf("  %s (%.1f KB)\n", file.Name(), sizeKB)
 					}
 				}
 			}
 		}
-		return nil
+	}
+	return nil
 }
 
 func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format string, outputDir string) error {
 	errChan := make(chan error, 30) // Buffer for all goroutines
-
 
 	var items []interface{}
 	var customers []interface{}
@@ -136,11 +134,17 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	promotions = ecommercedssimulation.GeneratePromotions(counts.Promotions, getSKsFromSlice(items))
 	customers = ecommercedssimulation.GenerateCustomers(counts.Customers, getSKsFromSlice(customerDemographics), getSKsFromSlice(householdDemographics), getSKsFromSlice(customerAddresses))
 
-		var writersWg sync.WaitGroup
+	var writersWg sync.WaitGroup
 	writersWg.Add(17) // All dimension writers
 
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(items, "dim_items", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(customers, "dim_customers", format, outputDir) }()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(items, "dim_items", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(customers, "dim_customers", format, outputDir)
+	}()
 	go func() {
 		defer writersWg.Done()
 		errChan <- formats.WriteSliceData(customerAddresses, "dim_customer_addresses", format, outputDir)
@@ -153,36 +157,69 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 		defer writersWg.Done()
 		errChan <- formats.WriteSliceData(householdDemographics, "dim_household_demographics", format, outputDir)
 	}()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(promotions, "dim_promotions", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(stores, "dim_stores", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(callCenters, "dim_call_centers", format, outputDir) }()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(promotions, "dim_promotions", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(stores, "dim_stores", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(callCenters, "dim_call_centers", format, outputDir)
+	}()
 	go func() {
 		defer writersWg.Done()
 		errChan <- formats.WriteSliceData(catalogPages, "dim_catalog_pages", format, outputDir)
 	}()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(webSites, "dim_web_sites", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(webPages, "dim_web_pages", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(warehouses, "dim_warehouses", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(reasons, "dim_reasons", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(shipModes, "dim_ship_modes", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(incomeBands, "dim_income_bands", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(timeDim, "dim_time", format, outputDir) }()
-	go func() { defer writersWg.Done(); errChan <- formats.WriteSliceData(dateDim, "dim_date", format, outputDir) }()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(webSites, "dim_web_sites", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(webPages, "dim_web_pages", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(warehouses, "dim_warehouses", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(reasons, "dim_reasons", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(shipModes, "dim_ship_modes", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(incomeBands, "dim_income_bands", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(timeDim, "dim_time", format, outputDir)
+	}()
+	go func() {
+		defer writersWg.Done()
+		errChan <- formats.WriteSliceData(dateDim, "dim_date", format, outputDir)
+	}()
 
-		dimSKs := map[string][]int64{
-		"items":                   getSKsFromSlice(items),
-		"customers":               getSKsFromSlice(customers),
-		"customer_addresses":      getSKsFromSlice(customerAddresses),
-		"customer_demographics":   getSKsFromSlice(customerDemographics),
-		"household_demographics":  getSKsFromSlice(householdDemographics),
-		"promotions":              getSKsFromSlice(promotions),
-		"stores":                  getSKsFromSlice(stores),
-		"call_centers":            getSKsFromSlice(callCenters),
-		"catalog_pages":           getSKsFromSlice(catalogPages),
-		"web_sites":               getSKsFromSlice(webSites),
-		"web_pages":               getSKsFromSlice(webPages),
-		"warehouses":              getSKsFromSlice(warehouses),
-		"ship_modes":              getSKsFromSlice(shipModes),
+	dimSKs := map[string][]int64{
+		"items":                  getSKsFromSlice(items),
+		"customers":              getSKsFromSlice(customers),
+		"customer_addresses":     getSKsFromSlice(customerAddresses),
+		"customer_demographics":  getSKsFromSlice(customerDemographics),
+		"household_demographics": getSKsFromSlice(householdDemographics),
+		"promotions":             getSKsFromSlice(promotions),
+		"stores":                 getSKsFromSlice(stores),
+		"call_centers":           getSKsFromSlice(callCenters),
+		"catalog_pages":          getSKsFromSlice(catalogPages),
+		"web_sites":              getSKsFromSlice(webSites),
+		"web_pages":              getSKsFromSlice(webPages),
+		"warehouses":             getSKsFromSlice(warehouses),
+		"ship_modes":             getSKsFromSlice(shipModes),
 	}
 
 	writersWg.Add(3) // One for each fact table generator
@@ -242,7 +279,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var writersWg sync.WaitGroup
 	errChan := make(chan error, 10)
 
-		var customers []ecommercemodels.Customer
+	var customers []ecommercemodels.Customer
 	var suppliers []ecommercemodels.Supplier
 	var customerAddresses []ecommercemodels.CustomerAddress
 	var products []ecommercemodels.Product
@@ -287,35 +324,35 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	go func() {
 		defer writersWg.Done()
 		customersWg.Wait()
-		if err := formats.WriteCustomersToCSV(customers, filepath.Join(outputDir, "dim_customers.csv")); err != nil {
+		if err := formats.WriteCustomers(customers, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
 		customersWg.Wait()
-		if err := formats.WriteCustomerAddressesToCSV(customerAddresses, filepath.Join(outputDir, "dim_customer_addresses.csv")); err != nil {
+		if err := formats.WriteCustomerAddresses(customerAddresses, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
 		suppliersWg.Wait()
-		if err := formats.WriteSuppliersToCSV(suppliers, filepath.Join(outputDir, "dim_suppliers.csv")); err != nil {
+		if err := formats.WriteSuppliers(suppliers, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
 		categoriesWg.Wait()
-		if err := formats.WriteProductCategoriesToCSV(productCategories, filepath.Join(outputDir, "dim_product_categories.csv")); err != nil {
+		if err := formats.WriteProductCategories(productCategories, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
 		productsWg.Wait()
-		if err := formats.WriteProductsToCSV(products, filepath.Join(outputDir, "dim_products.csv")); err != nil {
+		if err := formats.WriteProducts(products, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
@@ -326,12 +363,12 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		// Wait for customer and product data to be ready
 		customersWg.Wait()
 		productsWg.Wait()
-		
-				customerIDs := make([]int, len(customers))
+
+		customerIDs := make([]int, len(customers))
 		for i, c := range customers {
 			customerIDs[i] = c.CustomerID
 		}
-		
+
 		// Build slice instead of map for product details (optimization #5)
 		maxProductID := 0
 		for _, p := range products {
@@ -345,8 +382,8 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productDetails[p.ProductID] = ecommercemodels.ProductDetails{BasePrice: p.BasePrice}
 			productIDsForSampling[i] = p.ProductID
 		}
-		
-				if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir); err != nil {
+
+		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
@@ -366,7 +403,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 	var wg sync.WaitGroup
 	errChan := make(chan error, 3) // 2 dims + 1 fact operation
 
-		var companies []financialmodels.Company
+	var companies []financialmodels.Company
 	var exchanges []financialmodels.Exchange
 
 	var genWg sync.WaitGroup
@@ -384,7 +421,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 
 	genWg.Wait()
 
-		wg.Add(2)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		errChan <- formats.WriteSliceData(companies, "dim_companies", format, outputDir)
@@ -394,7 +431,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 		errChan <- formats.WriteSliceData(exchanges, "dim_exchanges", format, outputDir)
 	}()
 
-		err := financialsimulation.GenerateFinancialModelData(counts, companies, exchanges, format, outputDir)
+	err := financialsimulation.GenerateFinancialModelData(counts, companies, exchanges, format, outputDir)
 	if err != nil {
 		errChan <- err
 	}
@@ -415,7 +452,7 @@ func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, 
 	var wg sync.WaitGroup
 	errChan := make(chan error, 4) // 3 dims + 1 fact operation
 
-		var patients []medicalmodels.Patient
+	var patients []medicalmodels.Patient
 	var doctors []medicalmodels.Doctor
 	var clinics []medicalmodels.Clinic
 
@@ -439,7 +476,7 @@ func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, 
 
 	genWg.Wait()
 
-		wg.Add(3)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		errChan <- formats.WriteSliceData(patients, "dim_patients", format, outputDir)

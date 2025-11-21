@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/peekknuf/Gengo/internal/formats"
 	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
 )
 
@@ -48,7 +49,7 @@ func appendDiscount(buf []byte, basisPoints int64) []byte {
 
 	buf = strconv.AppendInt(buf, intPart, 10)
 	buf = append(buf, '.')
-	
+
 	// Always 4 decimal places for discount
 	if fracPart < 1000 {
 		buf = append(buf, '0')
@@ -83,9 +84,16 @@ func (g *localIDGen) nextID() int64 {
 type idBlock struct{ next, end int64 }
 
 func (b *idBlock) nextID() int64 {
-    if b.next == b.end { return -1 }
-    v := b.next; b.next++
-    return v
+	if b.next == b.end {
+		return -1
+	}
+	v := b.next
+	b.next++
+	return v
+}
+
+func newIDGenerator(start int64) *idBlock {
+	return &idBlock{next: start, end: start + blockSize}
 }
 
 // Remove global ID counter - no longer needed with partitioning
@@ -216,7 +224,7 @@ func generateECommerceFactsChunkBytes(startOrderID, numOrdersToGenerate int, sta
 
 	// Batched header writing for better NVMe throughput
 	headerBatch := make([]byte, 0, 1024*64) // 64KB header batch buffer (increased from 16KB)
-	const headerBatchSize = 100                // Batch 100 headers before writing (increased from 50)
+	const headerBatchSize = 100             // Batch 100 headers before writing (increased from 50)
 	headerBatchCount := 0
 
 	// Item row counter for batched flushing (NVMe optimization)
@@ -259,7 +267,7 @@ func generateECommerceFactsChunkBytes(startOrderID, numOrdersToGenerate int, sta
 		headerBuf = append(headerBuf, ',')
 		headerBuf = strconv.AppendInt(headerBuf, int64(billingAddressID), 10)
 		headerBuf = append(headerBuf, ',')
-		headerBuf = strconv.AppendInt(headerBuf, randomTimestamp, 10)  // epoch seconds
+		headerBuf = strconv.AppendInt(headerBuf, randomTimestamp, 10) // epoch seconds
 		headerBuf = append(headerBuf, ',')
 		headerBuf = append(headerBuf, orderStatus...)
 		headerBuf = append(headerBuf, '\n')
@@ -287,7 +295,7 @@ func generateECommerceFactsChunkBytes(startOrderID, numOrdersToGenerate int, sta
 			// Convert base price to cents upfront to avoid float operations
 			priceCents := int64(details.BasePrice * 100)
 			quantity := rng.Intn(15) + 1
-			
+
 			// Discount in basis points (0–2500 = 0.00%–25.00%)
 			discountBP := int64(0)
 			if rng.Intn(100) < 30 {
@@ -341,7 +349,7 @@ func generateECommerceFactsChunkBytes(startOrderID, numOrdersToGenerate int, sta
 }
 
 // GenerateECommerceModelData generates the e-commerce fact tables with direct file sharding.
-func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
+func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string, format string) error {
 	if numOrders <= 0 {
 		return nil
 	}
@@ -350,10 +358,10 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 	}
 
 	// Setup shared resources - moved after address map creation
-	productSampler, err := NewAliasSampler(productIDsForSampling)
-	if err != nil {
-		return fmt.Errorf("failed to set up product sampler: %w", err)
-	}
+	// productSampler, err := NewAliasSampler(productIDsForSampling)
+	// if err != nil {
+	//	return fmt.Errorf("failed to set up product sampler: %w", err)
+	// }
 
 	// Optimized address map creation to prevent slice reallocations, a key performance bottleneck.
 	// First pass: count addresses per customer to determine exact slice sizes.
@@ -384,13 +392,44 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		}
 	}
 
-	// Now create customer sampler using only valid customers
-	customerSampler, err := NewAliasSampler(validCustomerIDs)
+	if format == "csv" {
+		return generateECommerceModelDataCSV(numOrders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir)
+	} else {
+		return generateECommerceModelDataParquet(numOrders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir)
+	}
+}
+
+// generateECommerceModelDataCSV implements the original optimized CSV generation logic
+func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
+	// Setup shared resources
+	productSampler, err := NewAliasSampler(productIDsForSampling)
+	if err != nil {
+		return fmt.Errorf("failed to set up product sampler: %w", err)
+	}
+
+	// Optimized address map creation
+	addressCounts := make(map[int]int, len(customerIDs))
+	for _, addr := range customerAddresses {
+		addressCounts[addr.CustomerID]++
+	}
+
+	customerAddressMap := make(map[int][]int, len(addressCounts))
+	addressIndices := make(map[int]int)
+	for _, addr := range customerAddresses {
+		if _, ok := customerAddressMap[addr.CustomerID]; !ok {
+			customerAddressMap[addr.CustomerID] = make([]int, addressCounts[addr.CustomerID])
+		}
+		idx := addressIndices[addr.CustomerID]
+		customerAddressMap[addr.CustomerID][idx] = addr.AddressID
+		addressIndices[addr.CustomerID]++
+	}
+
+	customerSampler, err := NewAliasSampler(customerIDs)
 	if err != nil {
 		return fmt.Errorf("failed to set up customer sampler: %w", err)
 	}
 
-	// Concurrency setup with sharding
+	// Concurrency setup
 	numWorkers := runtime.NumCPU()
 	ordersPerWorker := (numOrders + numWorkers - 1) / numWorkers
 
@@ -401,35 +440,29 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 	}
 	defer headerFile.Close()
 
-	sharedHeaderWriter := bufio.NewWriterSize(headerFile, 64<<20) // 64MB buffer for NVMe optimization
+	sharedHeaderWriter := bufio.NewWriterSize(headerFile, 64<<20)
 	defer sharedHeaderWriter.Flush()
 
 	// Write header for order headers
 	sharedHeaderWriter.WriteString("order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp_unix,order_status\n")
 
-	// Mutex for coordinating header writes across workers
 	var headerMutex sync.Mutex
 
-	// Generate item shard filenames (headers now use single file)
+	// Generate item shard filenames
 	itemShardFilenames := make([]string, numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		itemShardFilenames[i] = fmt.Sprintf("%s/fact_order_items_%d.csv", outputDir, i)
 	}
 
 	// Pre-calculate total order items for ID partitioning
-	// Using average of 5.0 items per order (matches sizing.go constant)
 	const avgItemsPerOrder = 5.0
 	totalItems := int64(float64(numOrders) * avgItemsPerOrder)
 	itemsPerWorker := totalItems / int64(numWorkers)
 	extraItems := totalItems % int64(numWorkers)
 
 	var wg sync.WaitGroup
-
-	// Create a base seed for generating per-worker seeds
 	baseSeed := time.Now().UnixNano()
-
-	// Start partitioning item IDs
-	startItemID := int64(1) // Start from 1 for order item IDs
+	startItemID := int64(1)
 
 	for i := 0; i < numWorkers; i++ {
 		startOrderID := (i * ordersPerWorker) + 1
@@ -439,30 +472,249 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 		}
 
 		if numToGen > 0 {
-			// Calculate this worker's item ID range
 			endItemID := startItemID + itemsPerWorker
 			if i < int(extraItems) {
-				endItemID++ // distribute remainder
+				endItemID++
 			}
 
 			wg.Add(1)
-			// Create a per-worker RNG to eliminate global lock contention
-			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
-			rng := rand.New(rand.NewSource(workerSeed))
-			go func(startID, count int, startItem, endItem int64, itemShard string, workerRNG *rand.Rand) {
+			go func(workerID, startOrderID, numToGen int, startItemID, endItemID int64) {
 				defer wg.Done()
-				if err := generateECommerceFactsChunkBytes(startID, count, startItem, endItem, sharedHeaderWriter, &headerMutex, itemShard, customerSampler, productSampler, customerAddressMap, productDetails, workerRNG); err != nil {
-					// Note: In production, you'd want better error handling
-					// For now, we'll print and continue
-					_ = err
-				}
-			}(startOrderID, numToGen, startItemID, endItemID, itemShardFilenames[i], rng)
 
-			// Update start for next worker
+				rng := rand.New(rand.NewSource(baseSeed + int64(workerID)))
+				idGen := newIDGenerator(startItemID)
+
+				// Create item file for this worker
+				itemFile, err := os.Create(itemShardFilenames[workerID])
+				if err != nil {
+					return
+				}
+				defer itemFile.Close()
+
+				itemWriter := bufio.NewWriterSize(itemFile, 64<<20)
+				defer itemWriter.Flush()
+
+				// Write header for order items
+				itemWriter.WriteString("order_item_id,order_id,product_id,quantity,unit_price,discount\n")
+
+				headerBatchSize := 1000
+				headerBatch := make([]byte, 0, 64*1024)
+				headerBatchCount := 0
+				var headerBuf, itemBuf []byte
+
+				for orderID := startOrderID; orderID < startOrderID+numToGen; orderID++ {
+					customerID := customerSampler.Sample(rng)
+					addresses := customerAddressMap[customerID]
+					shippingAddressID := addresses[rng.Intn(len(addresses))]
+					billingAddressID := addresses[rng.Intn(len(addresses))]
+
+					orderTimestamp := time.Unix(rng.Int63n(31536000)+31536000, 0)
+					orderStatus := orderStatuses[rng.Intn(len(orderStatuses))]
+
+					// Build header row
+					headerBuf = headerBuf[:0]
+					headerBuf = strconv.AppendInt(headerBuf, int64(orderID), 10)
+					headerBuf = append(headerBuf, ',')
+					headerBuf = strconv.AppendInt(headerBuf, int64(customerID), 10)
+					headerBuf = append(headerBuf, ',')
+					headerBuf = strconv.AppendInt(headerBuf, int64(shippingAddressID), 10)
+					headerBuf = append(headerBuf, ',')
+					headerBuf = strconv.AppendInt(headerBuf, int64(billingAddressID), 10)
+					headerBuf = append(headerBuf, ',')
+					headerBuf = strconv.AppendInt(headerBuf, orderTimestamp.Unix(), 10)
+					headerBuf = append(headerBuf, ',')
+					headerBuf = append(headerBuf, orderStatus...)
+					headerBuf = append(headerBuf, '\n')
+
+					headerBatch = append(headerBatch, headerBuf...)
+					headerBatchCount++
+
+					if headerBatchCount >= headerBatchSize {
+						headerMutex.Lock()
+						sharedHeaderWriter.Write(headerBatch)
+						headerMutex.Unlock()
+						headerBatch = headerBatch[:0]
+						headerBatchCount = 0
+					}
+
+					// Generate order items
+					numItems := rng.Intn(10) + 1
+					for j := 0; j < numItems; j++ {
+						productID := productSampler.Sample(rng)
+						details := productDetails[productID]
+
+						priceCents := int64(details.BasePrice * 100)
+						quantity := rng.Intn(15) + 1
+
+						discountBP := int64(0)
+						if rng.Intn(100) < 30 {
+							discountBP = int64(rng.Intn(2001) + 500)
+						}
+
+						id := idGen.nextID()
+
+						// Build item row
+						itemBuf = itemBuf[:0]
+						itemBuf = strconv.AppendInt(itemBuf, id, 10)
+						itemBuf = append(itemBuf, ',')
+						itemBuf = strconv.AppendInt(itemBuf, int64(orderID), 10)
+						itemBuf = append(itemBuf, ',')
+						itemBuf = strconv.AppendInt(itemBuf, int64(productID), 10)
+						itemBuf = append(itemBuf, ',')
+						itemBuf = strconv.AppendInt(itemBuf, int64(quantity), 10)
+						itemBuf = append(itemBuf, ',')
+						itemBuf = appendPrice(itemBuf, priceCents)
+						itemBuf = append(itemBuf, ',')
+						itemBuf = appendDiscount(itemBuf, discountBP)
+						itemBuf = append(itemBuf, '\n')
+
+						itemWriter.Write(itemBuf)
+					}
+				}
+
+				// Flush remaining header batch
+				if headerBatchCount > 0 {
+					headerMutex.Lock()
+					sharedHeaderWriter.Write(headerBatch)
+					headerMutex.Unlock()
+				}
+			}(i, startOrderID, numToGen, startItemID, endItemID)
+
 			startItemID = endItemID
 		}
 	}
 
 	wg.Wait()
+	return nil
+}
+
+// generateECommerceModelDataParquet implements parquet generation for fact tables
+func generateECommerceModelDataParquet(numOrders int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
+	// Setup shared resources
+	productSampler, err := NewAliasSampler(productIDsForSampling)
+	if err != nil {
+		return fmt.Errorf("failed to set up product sampler: %w", err)
+	}
+
+	// Optimized address map creation
+	addressCounts := make(map[int]int, len(customerIDs))
+	for _, addr := range customerAddresses {
+		addressCounts[addr.CustomerID]++
+	}
+
+	customerAddressMap := make(map[int][]int, len(addressCounts))
+	addressIndices := make(map[int]int)
+	for _, addr := range customerAddresses {
+		if _, ok := customerAddressMap[addr.CustomerID]; !ok {
+			customerAddressMap[addr.CustomerID] = make([]int, addressCounts[addr.CustomerID])
+		}
+		idx := addressIndices[addr.CustomerID]
+		customerAddressMap[addr.CustomerID][idx] = addr.AddressID
+		addressIndices[addr.CustomerID]++
+	}
+
+	customerSampler, err := NewAliasSampler(customerIDs)
+	if err != nil {
+		return fmt.Errorf("failed to set up customer sampler: %w", err)
+	}
+
+	// Generate data in memory first, then write to parquet
+	var orderHeaders []ecommercemodels.OrderHeader
+	var orderItems []ecommercemodels.OrderItem
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	orderItemID := 1
+	for orderID := 1; orderID <= numOrders; orderID++ {
+		customerID := customerSampler.Sample(rng)
+		addresses := customerAddressMap[customerID]
+		shippingAddressID := addresses[rng.Intn(len(addresses))]
+		billingAddressID := addresses[rng.Intn(len(addresses))]
+
+		orderTimestamp := time.Unix(rng.Int63n(31536000)+31536000, 0)
+		orderStatus := orderStatuses[rng.Intn(len(orderStatuses))]
+
+		orderHeader := ecommercemodels.OrderHeader{
+			OrderID:           orderID,
+			CustomerID:        customerID,
+			ShippingAddressID: shippingAddressID,
+			BillingAddressID:  billingAddressID,
+			OrderTimestamp:    orderTimestamp,
+			OrderStatus:       orderStatus,
+		}
+		orderHeaders = append(orderHeaders, orderHeader)
+
+		// Generate order items
+		numItems := rng.Intn(10) + 1
+		for i := 0; i < numItems; i++ {
+			productID := productSampler.Sample(rng)
+			details := productDetails[productID]
+
+			quantity := rng.Intn(15) + 1
+			unitPrice := details.BasePrice
+
+			discount := 0.0
+			if rng.Intn(100) < 30 {
+				discount = float64(rng.Intn(2001)+500) / 10000.0 // 5.00% to 25.00%
+			}
+
+			orderItem := ecommercemodels.OrderItem{
+				OrderItemID: orderItemID,
+				OrderID:     orderID,
+				ProductID:   productID,
+				Quantity:    quantity,
+				UnitPrice:   unitPrice,
+				Discount:    discount,
+			}
+			orderItems = append(orderItems, orderItem)
+			orderItemID++
+		}
+	}
+
+	// Write to parquet files using the formats package
+	if err := formats.WriteOrderHeaders(orderHeaders, outputDir, "parquet"); err != nil {
+		return fmt.Errorf("failed to write order headers: %w", err)
+	}
+
+	// For order items, we need to handle them in slices due to current implementation
+	// Split into chunks for parallel processing
+	numWorkers := runtime.NumCPU()
+	itemsPerWorker := len(orderItems) / numWorkers
+	if itemsPerWorker == 0 {
+		itemsPerWorker = 1
+	}
+
+	var wg sync.WaitGroup
+	errChan := make(chan error, numWorkers)
+
+	for i := 0; i < numWorkers && i*itemsPerWorker < len(orderItems); i++ {
+		start := i * itemsPerWorker
+		end := start + itemsPerWorker
+		if i == numWorkers-1 || end > len(orderItems) {
+			end = len(orderItems)
+		}
+
+		wg.Add(1)
+		go func(workerID, start, end int) {
+			defer wg.Done()
+
+			workerItems := orderItems[start:end]
+			filename := fmt.Sprintf("%s/fact_order_items_%d.parquet", outputDir, workerID)
+
+			if err := formats.WriteOrderItemsToParquet(workerItems, filename); err != nil {
+				errChan <- fmt.Errorf("failed to write order items for worker %d: %w", workerID, err)
+			}
+		}(i, start, end)
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	for err := range errChan {
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

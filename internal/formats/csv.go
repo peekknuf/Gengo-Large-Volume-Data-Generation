@@ -79,7 +79,8 @@ func WriteSliceData(data interface{}, filename, format, outputDir string) error 
 	switch format {
 	case "csv":
 		return writeSliceToCSV(data, filepath.Join(outputDir, filename+".csv"))
-	// Add other formats here if needed
+	case "parquet":
+		return writeSliceToParquet(data, filepath.Join(outputDir, filename+".parquet"))
 	default:
 		return fmt.Errorf("unsupported format: %s", format)
 	}
@@ -265,11 +266,11 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 	// Pre-allocate buffer for row construction to reduce allocations
 	rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
 	var recordCount int64
-	
+
 	for h := range headerChan {
 		// Reset buffer for reuse
 		rowBuf = rowBuf[:0]
-		
+
 		// Build row with direct byte operations
 		rowBuf = strconv.AppendInt(rowBuf, int64(h.OrderID), 10)
 		rowBuf = append(rowBuf, ',')
@@ -279,12 +280,12 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, int64(h.BillingAddressID), 10)
 		rowBuf = append(rowBuf, ',')
-		
+
 		// Format timestamp
 		timestamp := h.OrderTimestamp.Format(time.RFC3339)
 		rowBuf = append(rowBuf, timestamp...)
 		rowBuf = append(rowBuf, ',')
-		
+
 		// Add order status (escape if needed)
 		if needsQuoting(h.OrderStatus) {
 			rowBuf = append(rowBuf, '"')
@@ -300,19 +301,19 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 			rowBuf = append(rowBuf, h.OrderStatus...)
 		}
 		rowBuf = append(rowBuf, '\n')
-		
+
 		// Write the row
 		if _, err := bufferedWriter.Write(rowBuf); err != nil {
 			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
 		recordCount++
-		
+
 		// Periodically flush to avoid memory buildup
 		if recordCount%20000 == 0 {
 			bufferedWriter.Flush()
 		}
 	}
-	
+
 	fmt.Printf("Successfully wrote %d order header records to %s\n", recordCount, targetFilename)
 	return nil
 }
@@ -336,11 +337,11 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 	// Pre-allocate buffer for row construction to reduce allocations
 	rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
 	var recordCount int64
-	
+
 	for item := range itemChan {
 		// Reset buffer for reuse
 		rowBuf = rowBuf[:0]
-		
+
 		// Build row with direct byte operations
 		rowBuf = strconv.AppendInt(rowBuf, int64(item.OrderItemID), 10)
 		rowBuf = append(rowBuf, ',')
@@ -354,19 +355,19 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendFloat(rowBuf, item.Discount, 'f', 4, 64)
 		rowBuf = append(rowBuf, '\n')
-		
+
 		// Write the row
 		if _, err := bufferedWriter.Write(rowBuf); err != nil {
 			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
 		}
 		recordCount++
-		
+
 		// Periodically flush to avoid memory buildup
 		if recordCount%20000 == 0 {
 			bufferedWriter.Flush()
 		}
 	}
-	
+
 	fmt.Printf("Successfully wrote %d order item records to %s\n", recordCount, targetFilename)
 	return nil
 }
