@@ -34,11 +34,29 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 		return nil
 	}
 
-	elemType := sliceVal.Type().Elem()
-	isPointer := elemType.Kind() == reflect.Ptr
-	if isPointer {
-		elemType = elemType.Elem()
+	// Handle []interface{} case by getting the type of the first element
+	var elemType reflect.Type
+	var isPointer bool
+
+	if sliceVal.Type().Elem().Kind() == reflect.Interface {
+		if sliceLen > 0 {
+			firstElem := sliceVal.Index(0).Interface()
+			elemType = reflect.TypeOf(firstElem)
+			isPointer = elemType.Kind() == reflect.Ptr
+			if isPointer {
+				elemType = elemType.Elem()
+			}
+		} else {
+			return fmt.Errorf("writeSliceToParquet cannot determine type from empty []interface{}")
+		}
+	} else {
+		elemType = sliceVal.Type().Elem()
+		isPointer = elemType.Kind() == reflect.Ptr
+		if isPointer {
+			elemType = elemType.Elem()
+		}
 	}
+
 	if elemType.Kind() != reflect.Struct {
 		return fmt.Errorf("writeSliceToParquet expected slice of structs/pointers, got %s", elemType.Kind())
 	}
@@ -90,12 +108,31 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 	}
 	for i := 0; i < sliceLen; i++ {
 		elemVal := sliceVal.Index(i)
-		if isPointer {
+
+		// Handle []interface{} case - need to extract the actual value from the interface
+		if sliceVal.Type().Elem().Kind() == reflect.Interface {
 			if elemVal.IsNil() {
 				continue
 			}
-			elemVal = elemVal.Elem()
+			// Get the actual value from the interface
+			actualValue := elemVal.Interface()
+			elemVal = reflect.ValueOf(actualValue)
+			if isPointer {
+				if elemVal.IsNil() {
+					continue
+				}
+				elemVal = elemVal.Elem()
+			}
+		} else {
+			// Regular slice case
+			if isPointer {
+				if elemVal.IsNil() {
+					continue
+				}
+				elemVal = elemVal.Elem()
+			}
 		}
+
 		if !elemVal.IsValid() || elemVal.Kind() != reflect.Struct {
 			continue
 		}
