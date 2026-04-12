@@ -225,19 +225,19 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	writersWg.Add(3) // One for each fact table generator
 	go func() {
 		defer writersWg.Done()
-		if err := ecommercedssimulation.GenerateStoreSalesOptimized(counts.StoreSales, dimSKs["items"], dimSKs["customers"], dimSKs["stores"], dimSKs["promotions"], outputDir); err != nil {
+		if err := ecommercedssimulation.GenerateStoreSalesOptimized(counts.StoreSales, dimSKs["items"], dimSKs["customers"], dimSKs["stores"], dimSKs["promotions"], outputDir, format); err != nil {
 			errChan <- fmt.Errorf("failed to generate store sales: %w", err)
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
-		if err := ecommercedssimulation.GenerateCatalogSalesOptimized(counts.CatalogSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["call_centers"], dimSKs["catalog_pages"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir); err != nil {
+		if err := ecommercedssimulation.GenerateCatalogSalesOptimized(counts.CatalogSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["call_centers"], dimSKs["catalog_pages"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir, format); err != nil {
 			errChan <- fmt.Errorf("failed to generate catalog sales: %w", err)
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
-		if err := ecommercedssimulation.GenerateWebSalesOptimized(counts.WebSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["web_pages"], dimSKs["web_sites"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir); err != nil {
+		if err := ecommercedssimulation.GenerateWebSalesOptimized(counts.WebSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["web_pages"], dimSKs["web_sites"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir, format); err != nil {
 			errChan <- fmt.Errorf("failed to generate web sales: %w", err)
 		}
 	}()

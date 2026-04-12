@@ -16,7 +16,7 @@ func GenerateStores(count int) []interface{} {
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
 	states := []string{"NY", "CA", "IL", "TX", "AZ", "PA", "TX", "CA", "TX", "CA"}
 	counties := []string{"Manhattan", "Los Angeles County", "Cook County", "Harris County", "Maricopa County", "Philadelphia County", "Bexar County", "San Diego County", "Dallas County", "Santa Clara County"}
-	
+
 	for i := 0; i < count; i++ {
 		cityIdx := i % len(cities)
 		stores[i] = ecommerceds.Store{
@@ -54,29 +54,44 @@ func GenerateStores(count int) []interface{} {
 // GenerateCallCenters generates a number of call centers.
 func GenerateCallCenters(count int) []interface{} {
 	centers := make([]interface{}, count)
-	
+
 	for i := 0; i < count; i++ {
 		employees := 50 + rand.Intn(200)
 		hours := []string{"24/7", "8am-8pm", "9am-9pm", "7am-11pm", "6am-10pm"}
 		hourIdx := rand.Intn(len(hours))
-		
+
 		centers[i] = ecommerceds.CallCenter{
-			CC_CallCenterSK:     int64(i + 1),
-			CC_CallCenterID:     fmt.Sprintf("cc_%d", i+1),
-			CC_Name:             fmt.Sprintf("Call Center %d", i+1),
-			CC_Class:            fmt.Sprintf("Class %d", rand.Intn(5)+1),
-			CC_Employees:        employees,
-			CC_SqFt:             5000 + rand.Intn(15000),
-			CC_Hours:            hours[hourIdx],
-			CC_Manager:          fmt.Sprintf("Manager %d", i+1),
-			CC_MktID:            rand.Intn(10) + 1,
-			CC_MktClass:         fmt.Sprintf("Market Class %d", rand.Intn(3)+1),
-			CC_MktDesc:          fmt.Sprintf("Market Description %d", rand.Intn(5)+1),
-			CC_MarketManager:    fmt.Sprintf("Market Manager %d", i+1),
-			CC_Division:         rand.Intn(5) + 1,
-			CC_DivisionName:     fmt.Sprintf("Division %d", rand.Intn(5)+1),
-			CC_Company:          rand.Intn(3) + 1,
-			CC_CompanyName:      fmt.Sprintf("Company %d", rand.Intn(3)+1),
+			CC_CallCenterSK:  int64(i + 1),
+			CC_CallCenterID:  fmt.Sprintf("cc_%d", i+1),
+			CC_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
+			CC_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
+			CC_ClosedDateSK:  int64(0),
+			CC_OpenDateSK:    int64(2451545 + rand.Intn(1825)),
+			CC_Name:          fmt.Sprintf("Call Center %d", i+1),
+			CC_Class:         fmt.Sprintf("Class %d", rand.Intn(5)+1),
+			CC_Employees:     employees,
+			CC_SqFt:          5000 + rand.Intn(15000),
+			CC_Hours:         hours[hourIdx],
+			CC_Manager:       fmt.Sprintf("Manager %d", i+1),
+			CC_MktID:         rand.Intn(10) + 1,
+			CC_MktClass:      fmt.Sprintf("Market Class %d", rand.Intn(3)+1),
+			CC_MktDesc:       fmt.Sprintf("Market Description %d", rand.Intn(5)+1),
+			CC_MarketManager: fmt.Sprintf("Market Manager %d", i+1),
+			CC_Division:      rand.Intn(5) + 1,
+			CC_DivisionName:  fmt.Sprintf("Division %d", rand.Intn(5)+1),
+			CC_Company:       rand.Intn(3) + 1,
+			CC_CompanyName:   fmt.Sprintf("Company %d", rand.Intn(3)+1),
+			CC_StreetNumber:  fmt.Sprintf("%d", 1000+rand.Intn(9000)),
+			CC_StreetName:    fmt.Sprintf("Street %d", rand.Intn(500)+1),
+			CC_StreetType:    "Street",
+			CC_SuiteNumber:   fmt.Sprintf("Suite %d", rand.Intn(200)+1),
+			CC_City:          fmt.Sprintf("City %d", rand.Intn(50)+1),
+			CC_County:        fmt.Sprintf("County %d", rand.Intn(30)+1),
+			CC_State:         fmt.Sprintf("ST%d", rand.Intn(50)+1),
+			CC_Zip:           fmt.Sprintf("%05d", rand.Intn(100000)),
+			CC_Country:       "United States",
+			CC_GmtOffset:     float64(rand.Intn(5) - 5),
+			CC_TaxPercentage: 0.05 + rand.Float64()*0.15,
 		}
 	}
 	return centers
@@ -88,17 +103,17 @@ func GenerateCatalogPages(count int) []interface{} {
 	departments := []string{"Electronics", "Clothing", "Home", "Sports", "Books", "Toys", "Beauty", "Automotive", "Garden", "Health"}
 	startYear := 2020
 	endYear := 2025
-	
+
 	for i := 0; i < count; i++ {
 		deptIdx := i % len(departments)
 		catalogNum := rand.Intn(5) + 1
 		pageNum := rand.Intn(100) + 1
 		pageType := []string{"Regular", "Sale", "Clearance", "Featured", "New"}
 		typeIdx := rand.Intn(len(pageType))
-		
+
 		startDate := time.Date(startYear+rand.Intn(endYear-startYear), time.Month(rand.Intn(12)+1), 1, 0, 0, 0, 0, time.UTC)
 		endDate := startDate.AddDate(0, 3, 0)
-		
+
 		pages[i] = ecommerceds.CatalogPage{
 			CP_CatalogPageSK:     int64(i + 1),
 			CP_CatalogPageID:     fmt.Sprintf("cp_%d_%d_%d", catalogNum, pageNum, i+1),
@@ -117,17 +132,37 @@ func GenerateCatalogPages(count int) []interface{} {
 // GenerateWebSites generates a number of web sites.
 func GenerateWebSites(count int) []interface{} {
 	sites := make([]interface{}, count)
-	
+
 	for i := 0; i < count; i++ {
 		managerID := rand.Intn(20) + 1
-		
+
 		sites[i] = ecommerceds.WebSite{
 			Web_SiteSK:        int64(i + 1),
 			Web_SiteID:        fmt.Sprintf("web_%d", i+1),
+			Web_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
+			Web_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
 			Web_Name:          fmt.Sprintf("Web Site %d", i+1),
+			Web_OpenDateSK:    int64(2451545 + rand.Intn(1825)),
+			Web_CloseDateSK:   int64(0),
+			Web_Class:         fmt.Sprintf("Class %d", rand.Intn(5)+1),
 			Web_Manager:       fmt.Sprintf("Web Manager %d", managerID),
+			Web_MktID:         rand.Intn(10) + 1,
+			Web_MktClass:      fmt.Sprintf("Market Class %d", rand.Intn(5)+1),
+			Web_MktDesc:       fmt.Sprintf("Market Description %d", rand.Intn(10)+1),
+			Web_MarketManager: fmt.Sprintf("Market Manager %d", rand.Intn(20)+1),
 			Web_CompanyID:     rand.Intn(10) + 1,
 			Web_CompanyName:   fmt.Sprintf("Web Company %d", rand.Intn(10)+1),
+			Web_StreetNumber:  fmt.Sprintf("%d", 100+rand.Intn(9900)),
+			Web_StreetName:    fmt.Sprintf("Street %d", rand.Intn(500)+1),
+			Web_StreetType:    "Street",
+			Web_SuiteNumber:   fmt.Sprintf("Suite %d", rand.Intn(200)+1),
+			Web_City:          fmt.Sprintf("City %d", rand.Intn(50)+1),
+			Web_County:        fmt.Sprintf("County %d", rand.Intn(30)+1),
+			Web_State:         fmt.Sprintf("ST%d", rand.Intn(50)+1),
+			Web_Zip:           fmt.Sprintf("%05d", rand.Intn(100000)),
+			Web_Country:       "United States",
+			Web_GmtOffset:     float64(rand.Intn(5) - 5),
+			Web_TaxPercentage: 0.05 + rand.Float64()*0.15,
 		}
 	}
 	return sites
@@ -137,19 +172,25 @@ func GenerateWebSites(count int) []interface{} {
 func GenerateWebPages(count int) []interface{} {
 	pages := make([]interface{}, count)
 	pageTypes := []string{"Product", "Category", "Search", "Checkout", "Account", "Home", "About", "Contact"}
-	
+
 	for i := 0; i < count; i++ {
 		typeIdx := rand.Intn(len(pageTypes))
-		
+
 		pages[i] = ecommerceds.WebPage{
 			WP_WebPageSK:      int64(i + 1),
 			WP_WebPageID:      fmt.Sprintf("wp_%d", i+1),
-			WP_CreationDateSK: int64(2451545 + i), // Placeholder date
-			WP_AccessDateSK:   int64(2451545 + i + 1), // Placeholder date
+			WP_RecStartDate:   fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
+			WP_RecEndDate:     fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
+			WP_CreationDateSK: int64(2451545 + i),
+			WP_AccessDateSK:   int64(2451545 + i + 1),
 			WP_AutogenFlag:    "N",
-			WP_CustomerSK:     int64(rand.Intn(1000) + 1), // Random customer
+			WP_CustomerSK:     int64(rand.Intn(1000) + 1),
 			WP_URL:            fmt.Sprintf("http://example.com/page%d", i+1),
 			WP_Type:           pageTypes[typeIdx],
+			WP_CharCount:      rand.Intn(50000) + 1000,
+			WP_LinkCount:      rand.Intn(200) + 10,
+			WP_ImageCount:     rand.Intn(50) + 1,
+			WP_MaxAdCount:     rand.Intn(10) + 1,
 		}
 	}
 	return pages
@@ -160,35 +201,35 @@ func GenerateCustomers(count int, cdemoSKs, hdemoSKs, addrSKs []int64) []interfa
 	customers := make([]interface{}, count)
 	firstNames := []string{"John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Jennifer"}
 	lastNames := []string{"Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson"}
-	
+
 	for i := 0; i < count; i++ {
 		if len(cdemoSKs) == 0 || len(hdemoSKs) == 0 || len(addrSKs) == 0 {
 			continue // Skip if required dependencies are not available
 		}
-		
+
 		firstName := firstNames[rand.Intn(len(firstNames))]
 		lastName := lastNames[rand.Intn(len(lastNames))]
 		birthDate := time.Date(1950+rand.Intn(50), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, 0, 0, 0, 0, time.UTC)
-		
+
 		customers[i] = ecommerceds.Customer{
-			C_CustomerSK:          int64(i + 1),
-			C_CustomerID:          fmt.Sprintf("cust_%d", i+1),
-			C_CurrentCDemoSK:      cdemoSKs[rand.Intn(len(cdemoSKs))],
-			C_CurrentHDemoSK:      hdemoSKs[rand.Intn(len(hdemoSKs))],
-			C_CurrentAddrSK:       addrSKs[rand.Intn(len(addrSKs))],
-			C_FirstShiptoDateSK:   int64(2451545 + i), // Placeholder date
-			C_FirstSalesDateSK:    int64(2451545 + i + 1), // Placeholder date
-			C_Salutation:          []string{"Mr", "Ms", "Mrs", "Dr"}[rand.Intn(4)],
-			C_FirstName:           firstName,
-			C_LastName:            lastName,
-			C_PreferredCustFlag:   []string{"Y", "N"}[rand.Intn(2)],
-			C_BirthDay:            birthDate.Day(),
-			C_BirthMonth:          int(birthDate.Month()),
-			C_BirthYear:           birthDate.Year(),
-			C_BirthCountry:        "USA",
-			C_Login:               fmt.Sprintf("%s%s%d", strings.ToLower(firstName)[:3], strings.ToLower(lastName)[:3], i+1),
-			C_EmailAddress:        fmt.Sprintf("%s.%s%d@example.com", strings.ToLower(firstName), strings.ToLower(lastName), i+1),
-			C_LastReviewDateSK:    int64(2451545 + i + 2), // Placeholder date
+			C_CustomerSK:        int64(i + 1),
+			C_CustomerID:        fmt.Sprintf("cust_%d", i+1),
+			C_CurrentCDemoSK:    cdemoSKs[rand.Intn(len(cdemoSKs))],
+			C_CurrentHDemoSK:    hdemoSKs[rand.Intn(len(hdemoSKs))],
+			C_CurrentAddrSK:     addrSKs[rand.Intn(len(addrSKs))],
+			C_FirstShiptoDateSK: int64(2451545 + i),     // Placeholder date
+			C_FirstSalesDateSK:  int64(2451545 + i + 1), // Placeholder date
+			C_Salutation:        []string{"Mr", "Ms", "Mrs", "Dr"}[rand.Intn(4)],
+			C_FirstName:         firstName,
+			C_LastName:          lastName,
+			C_PreferredCustFlag: []string{"Y", "N"}[rand.Intn(2)],
+			C_BirthDay:          birthDate.Day(),
+			C_BirthMonth:        int(birthDate.Month()),
+			C_BirthYear:         birthDate.Year(),
+			C_BirthCountry:      "USA",
+			C_Login:             fmt.Sprintf("%s%s%d", strings.ToLower(firstName)[:3], strings.ToLower(lastName)[:3], i+1),
+			C_EmailAddress:      fmt.Sprintf("%s.%s%d@example.com", strings.ToLower(firstName), strings.ToLower(lastName), i+1),
+			C_LastReviewDateSK:  int64(2451545 + i + 2), // Placeholder date
 		}
 	}
 	return customers
@@ -200,11 +241,11 @@ func GenerateCustomerAddresses(count int) []interface{} {
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
 	states := []string{"NY", "CA", "IL", "TX", "AZ", "PA", "TX", "CA", "TX", "CA"}
 	streets := []string{"Main St", "Oak Ave", "Pine Rd", "Elm Blvd", "Maple Dr", "Cedar Ln", "Birch Way", "Walnut St", "Ash Ave", "Cherry Rd"}
-	
+
 	for i := 0; i < count; i++ {
 		cityIdx := i % len(cities)
 		fromDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-		
+
 		addresses[i] = ecommerceds.CustomerAddress{
 			CA_AddressSK:     int64(i + 1),
 			CA_AddressID:     fmt.Sprintf("addr_%d", i+1),
@@ -232,13 +273,13 @@ func GenerateCustomerDemographics(count int) []interface{} {
 	maritalStatuses := []string{"Single", "Married", "Divorced", "Widowed"}
 	educationLevels := []string{"High School", "College", "Graduate", "Post-Graduate"}
 	creditRatings := []string{"Poor", "Fair", "Good", "Excellent"}
-	
+
 	for i := 0; i < count; i++ {
 		gender := genders[rand.Intn(len(genders))]
 		maritalStatus := maritalStatuses[rand.Intn(len(maritalStatuses))]
 		education := educationLevels[rand.Intn(len(educationLevels))]
 		creditRating := creditRatings[rand.Intn(len(creditRatings))]
-		
+
 		demos[i] = ecommerceds.CustomerDemographics{
 			CD_DemoSK:              int64(i + 1),
 			CD_Gender:              gender,
@@ -261,12 +302,12 @@ func GenerateCustomerDemographics(count int) []interface{} {
 func GenerateHouseholdDemographics(count int, incomeBandSKs []int64) []interface{} {
 	demos := make([]interface{}, count)
 	buyPotentials := []string{"<1000", "1000-5000", "5000-10000", "10000-20000", ">20000"}
-	
+
 	for i := 0; i < count; i++ {
 		if len(incomeBandSKs) == 0 {
 			continue // Skip if no income bands available
 		}
-		
+
 		demos[i] = ecommerceds.HouseholdDemographics{
 			HD_DemoSK:       int64(i + 1),
 			HD_IncomeBandSK: incomeBandSKs[rand.Intn(len(incomeBandSKs))],
@@ -287,16 +328,18 @@ func GenerateItems(count int) []interface{} {
 	colors := []string{"Red", "Blue", "Green", "Black", "White", "Yellow", "Purple", "Orange", "Pink", "Gray"}
 	units := []string{"Each", "Dozen", "Case", "Pack", "Set", "Box", "Bag", "Can", "Bottle", "Tube"}
 	containers := []string{"Box", "Bag", "Can", "Bottle", "Tube", "Jar", "Pouch", "Case", "Pack", "Set"}
-	
+
 	for i := 0; i < count; i++ {
 		category := categories[rand.Intn(len(categories))]
 		brand := brands[rand.Intn(len(brands))]
 		wholesaleCost := 5.0 + rand.Float64()*500
 		retailPrice := wholesaleCost * (1.2 + rand.Float64()*0.8)
-		
+
 		items[i] = ecommerceds.Item{
 			I_ItemSK:        int64(i + 1),
 			I_ItemID:        fmt.Sprintf("item_%d", i+1),
+			I_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
+			I_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
 			I_ItemDesc:      fmt.Sprintf("%s %s %d", brand, category, i+1),
 			I_CurrentPrice:  retailPrice,
 			I_WholesaleCost: wholesaleCost,
@@ -345,7 +388,7 @@ func GenerateReasons(count int) []interface{} {
 		"Customer Dissatisfaction",
 		"Other",
 	}
-	
+
 	for i := 0; i < count; i++ {
 		if i < len(reasonDescs) {
 			reasons[i] = ecommerceds.Reason{
@@ -370,18 +413,18 @@ func GenerateShipModes(count int) []interface{} {
 	shipModes := make([]interface{}, count)
 	shipTypes := []string{"Ground", "Air", "Sea", "Rail", "Express", "Overnight", "Standard", "Economy"}
 	carriers := []string{"UPS", "FedEx", "USPS", "DHL", "Amazon Logistics", "OnTrac", "LaserShip", "Regional Carrier"}
-	
+
 	for i := 0; i < count; i++ {
 		shipType := shipTypes[i%len(shipTypes)]
 		carrier := carriers[rand.Intn(len(carriers))]
-		
+
 		shipModes[i] = ecommerceds.ShipMode{
-			SM_ShipModeSK:  int64(i + 1),
-			SM_ShipModeID:  fmt.Sprintf("sm_%d", i+1),
-			SM_Type:        shipType,
-			SM_Code:        fmt.Sprintf("CODE%d", i+1),
-			SM_Carrier:     carrier,
-			SM_Contract:    fmt.Sprintf("CONTRACT%d", i+1),
+			SM_ShipModeSK: int64(i + 1),
+			SM_ShipModeID: fmt.Sprintf("sm_%d", i+1),
+			SM_Type:       shipType,
+			SM_Code:       fmt.Sprintf("CODE%d", i+1),
+			SM_Carrier:    carrier,
+			SM_Contract:   fmt.Sprintf("CONTRACT%d", i+1),
 		}
 	}
 	return shipModes
@@ -390,15 +433,15 @@ func GenerateShipModes(count int) []interface{} {
 // GenerateIncomeBands generates a fixed set of income bands.
 func GenerateIncomeBands(count int) []interface{} {
 	incomeBands := make([]interface{}, count)
-	
+
 	for i := 0; i < count; i++ {
 		lowerBound := 20000 + i*25000
 		upperBound := lowerBound + 24999
-		
+
 		incomeBands[i] = ecommerceds.IncomeBand{
-			IB_IncomeBandSK:   int64(i + 1),
-			IB_LowerBound:     lowerBound,
-			IB_UpperBound:     upperBound,
+			IB_IncomeBandSK: int64(i + 1),
+			IB_LowerBound:   lowerBound,
+			IB_UpperBound:   upperBound,
 		}
 	}
 	return incomeBands
@@ -408,15 +451,15 @@ func GenerateIncomeBands(count int) []interface{} {
 func GeneratePromotions(count int, itemSKs []int64) []interface{} {
 	promotions := make([]interface{}, count)
 	promoTypes := []string{"Discount", "Coupon", "Bundle", "BOGO", "Clearance", "Seasonal", "New Customer", "Loyalty", "Referral", "Flash Sale"}
-	
+
 	for i := 0; i < count; i++ {
 		if len(itemSKs) == 0 {
 			continue // Skip if no items available
 		}
-		
+
 		startDate := time.Date(2020+rand.Intn(5), time.Month(rand.Intn(12)+1), 1, 0, 0, 0, 0, time.UTC)
 		endDate := startDate.AddDate(0, 0, rand.Intn(90)+30)
-		
+
 		promotions[i] = ecommerceds.Promotion{
 			P_PromoSK:           int64(i + 1),
 			P_PromoID:           fmt.Sprintf("promo_%d", i+1),
@@ -446,27 +489,27 @@ func GenerateWarehouses(count int) []interface{} {
 	warehouses := make([]interface{}, count)
 	states := []string{"CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"}
 	warehouseTypes := []string{"Distribution Center", "Fulfillment Center", "Cross-Dock", "Cold Storage", "Bulk Storage", "Retail Warehouse"}
-	
+
 	for i := 0; i < count; i++ {
 		state := states[rand.Intn(len(states))]
 		warehouseType := warehouseTypes[rand.Intn(len(warehouseTypes))]
-		
+
 		warehouses[i] = ecommerceds.Warehouse{
-			W_WarehouseSK:      int64(i + 1),
-			W_WarehouseID:      fmt.Sprintf("wh_%d", i+1),
-			W_WarehouseName:    fmt.Sprintf("%s %d", warehouseType, i+1),
-			W_WarehouseSqFt:    50000 + rand.Intn(500000),
-			W_StreetNumber:     fmt.Sprintf("%d", rand.Intn(9999)+1),
-			W_StreetName:       "Industrial Blvd",
-			W_StreetType:       "Street",
-			W_SuiteNumber:      fmt.Sprintf("Suite %d", rand.Intn(100)+1),
-			W_City:             fmt.Sprintf("Industrial City %d", i+1),
-			W_County:           fmt.Sprintf("Manufacturing County %d", i+1),
-			W_State:            state,
-			W_Zip:              fmt.Sprintf("%05d", rand.Intn(99999)+1),
-			W_Country:          "USA",
-			W_GmtOffset:        -5.0,
-			W_TaxPercentage:    0.08 + rand.Float64()*0.05,
+			W_WarehouseSK:   int64(i + 1),
+			W_WarehouseID:   fmt.Sprintf("wh_%d", i+1),
+			W_WarehouseName: fmt.Sprintf("%s %d", warehouseType, i+1),
+			W_WarehouseSqFt: 50000 + rand.Intn(500000),
+			W_StreetNumber:  fmt.Sprintf("%d", rand.Intn(9999)+1),
+			W_StreetName:    "Industrial Blvd",
+			W_StreetType:    "Street",
+			W_SuiteNumber:   fmt.Sprintf("Suite %d", rand.Intn(100)+1),
+			W_City:          fmt.Sprintf("Industrial City %d", i+1),
+			W_County:        fmt.Sprintf("Manufacturing County %d", i+1),
+			W_State:         state,
+			W_Zip:           fmt.Sprintf("%05d", rand.Intn(99999)+1),
+			W_Country:       "USA",
+			W_GmtOffset:     -5.0,
+			W_TaxPercentage: 0.08 + rand.Float64()*0.05,
 		}
 	}
 	return warehouses
@@ -475,7 +518,7 @@ func GenerateWarehouses(count int) []interface{} {
 // GenerateTimeDim generates time dimension data for a 24-hour period.
 func GenerateTimeDim() []interface{} {
 	timeDims := make([]interface{}, 24*60*60)
-	
+
 	for h := 0; h < 24; h++ {
 		var amPm string
 		if h < 12 {
@@ -483,7 +526,7 @@ func GenerateTimeDim() []interface{} {
 		} else {
 			amPm = "PM"
 		}
-		
+
 		var shift string
 		switch {
 		case h >= 6 && h < 14:
@@ -493,7 +536,7 @@ func GenerateTimeDim() []interface{} {
 		default:
 			shift = "Night"
 		}
-		
+
 		var subShift string
 		switch {
 		case h >= 6 && h < 10:
@@ -507,7 +550,7 @@ func GenerateTimeDim() []interface{} {
 		default:
 			subShift = "Night"
 		}
-		
+
 		var mealTime string
 		switch h {
 		case 7, 8:
@@ -519,23 +562,23 @@ func GenerateTimeDim() []interface{} {
 		default:
 			mealTime = "Regular"
 		}
-		
+
 		for m := 0; m < 60; m++ {
 			for s := 0; s < 60; s++ {
 				index := h*3600 + m*60 + s
-				
+
 				timeDims[index] = ecommerceds.TimeDim{
-					T_TimeSK:        int64(index),
-					T_TimeID:        fmt.Sprintf("%02d:%02d:%02d", h, m, s),
-					T_Time:          index,
-					T_Hour:          h,
-					T_Minute:        m,
-					T_Second:        s,
-					T_TimezoneID:    1, // Default timezone
-					T_AmPm:          amPm,
-					T_Shift:         shift,
-					T_SubShift:      subShift,
-					T_MealTime:      mealTime,
+					T_TimeSK:     int64(index),
+					T_TimeID:     fmt.Sprintf("%02d:%02d:%02d", h, m, s),
+					T_Time:       index,
+					T_Hour:       h,
+					T_Minute:     m,
+					T_Second:     s,
+					T_TimezoneID: 1, // Default timezone
+					T_AmPm:       amPm,
+					T_Shift:      shift,
+					T_SubShift:   subShift,
+					T_MealTime:   mealTime,
 				}
 			}
 		}
@@ -555,7 +598,7 @@ func GenerateDateDim(startYear, endYear int) []interface{} {
 		day := d.Day()
 		dow := int(d.Weekday())
 		isWeekend := dow == 0 || dow == 6
-		
+
 		var quarter int
 		switch {
 		case month <= 3:
@@ -567,7 +610,7 @@ func GenerateDateDim(startYear, endYear int) []interface{} {
 		default:
 			quarter = 4
 		}
-		
+
 		dateDims = append(dateDims, ecommerceds.DateDim{
 			D_DateSK:           int64(d.Unix() / (24 * 60 * 60)), // Julian date
 			D_DateID:           d.Format("2006-01-02"),
@@ -632,13 +675,13 @@ func daysInMonth(month, year int) int {
 func dayInQuarter(month, day, year int) int {
 	quarterStartMonth := ((month-1)/3)*3 + 1
 	quarterStartDay := 1
-	
+
 	totalDays := 0
 	for m := quarterStartMonth; m < month; m++ {
 		totalDays += daysInMonth(m, year)
 	}
 	totalDays += day - quarterStartDay
-	
+
 	return totalDays
 }
 

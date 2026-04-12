@@ -9,8 +9,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 )
 
-
-
 // AppendValueToBuilder appends a Go value to the correct Arrow builder.
 // This is kept for the Parquet writer.
 func AppendValueToBuilder(bldr array.Builder, val reflect.Value) error {

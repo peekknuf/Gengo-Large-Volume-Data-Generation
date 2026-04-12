@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	sectors = []string{"Technology", "Healthcare", "Financials", "Consumer Discretionary", "Communication Services", "Industrials", "Consumer Staples", "Energy", "Utilities", "Real Estate", "Materials"}
+	sectors       = []string{"Technology", "Healthcare", "Financials", "Consumer Discretionary", "Communication Services", "Industrials", "Consumer Staples", "Energy", "Utilities", "Real Estate", "Materials"}
 	exchangeNames = []string{"NASDAQ", "New York Stock Exchange", "London Stock Exchange", "Tokyo Stock Exchange", "Hong Kong Stock Exchange"}
 )
 

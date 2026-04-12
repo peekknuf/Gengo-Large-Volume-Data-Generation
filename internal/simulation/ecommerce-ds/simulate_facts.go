@@ -12,13 +12,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/peekknuf/Gengo/internal/formats"
 	ecommerceds "github.com/peekknuf/Gengo/internal/models/ecommerce-ds"
 )
 
 // Performance optimization constants
 const (
-	bufferSize = 64 << 20 // 64MB buffer for NVMe optimization (increased from 32MB)
-	flushBatchSize = 50000 // Batch size for periodic flushes (increased from 10K)
+	bufferSize     = 64 << 20 // 64MB buffer for NVMe optimization (increased from 32MB)
+	flushBatchSize = 50000    // Batch size for periodic flushes (increased from 10K)
 )
 
 // AliasSampler implements O(1) weighted sampling using Vose's alias method
@@ -174,9 +177,13 @@ func appendPrice(buf []byte, cents int64) []byte {
 }
 
 // High-performance worker function for generating store sales with direct file writing
-func generateStoreSalesWorker(count int, startTicket int64, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand) error {
+func generateStoreSalesWorker(count int, startTicket int64, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand, format string) error {
 	if count <= 0 {
 		return nil
+	}
+
+	if format == "parquet" {
+		return generateStoreSalesWorkerParquet(count, startTicket, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng)
 	}
 
 	startTime := time.Now()
@@ -194,11 +201,11 @@ func generateStoreSalesWorker(count int, startTicket int64, itemSampler, custome
 	writer.WriteString(header)
 
 	// Pre-calculate common ranges for better performance
-	dateSKRange := 2000 // Date SK range (1-2000)
+	dateSKRange := 2000  // Date SK range (1-2000)
 	timeSKRange := 86400 // Time SK range (0-86399)
 	cdemoSKRange := 1000 // Customer demo SK range (1-1000)
 	hdemoSKRange := 1000 // Household demo SK range (1-1000)
-	addrSKRange := 1500 // Address SK range (1-1500)
+	addrSKRange := 1500  // Address SK range (1-1500)
 
 	// Pre-allocate buffer for row construction (increased to 4KB to reduce allocations)
 	rowBuf := make([]byte, 0, 4096)
@@ -207,7 +214,7 @@ func generateStoreSalesWorker(count int, startTicket int64, itemSampler, custome
 		rowBuf = rowBuf[:0] // Reset buffer
 
 		quantity := rng.Intn(10) + 1
-		listPriceCents := int64(1000 + rng.Intn(100000)) // 10.00 to 1010.00
+		listPriceCents := int64(1000 + rng.Intn(100000))                 // 10.00 to 1010.00
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100 // 80-100% of list price
 		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100 // 60-80% of sales price
 
@@ -283,8 +290,140 @@ func generateStoreSalesWorker(count int, startTicket int64, itemSampler, custome
 	return nil
 }
 
+func generateStoreSalesWorkerParquet(count int, startTicket int64, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand) (err error) {
+	startTime := time.Now()
+
+	dateSKRange := 2000
+	timeSKRange := 86400
+	cdemoSKRange := 1000
+	hdemoSKRange := 1000
+	addrSKRange := 1500
+
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ss_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_sold_time_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_item_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_customer_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_cdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_hdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_addr_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_store_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_promo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_ticket_number", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ss_quantity", Type: arrow.PrimitiveTypes.Int32},
+		{Name: "ss_wholesale_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_list_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_sales_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_ext_discount_amt", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_ext_sales_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_ext_wholesale_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_ext_list_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_ext_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_coupon_amt", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_net_paid", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_net_paid_inc_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ss_net_profit", Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+
+	file, writer, builder, err := formats.CreateTypedParquetWriter(schema, filename)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil && file != nil {
+			_ = file.Close()
+		}
+	}()
+	defer func() {
+		if closeErr := writer.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("error closing parquet writer for %s: %w", filename, closeErr)
+		}
+	}()
+	defer builder.Release()
+
+	b0 := builder.Field(0).(*array.Int64Builder)
+	b1 := builder.Field(1).(*array.Int64Builder)
+	b2 := builder.Field(2).(*array.Int64Builder)
+	b3 := builder.Field(3).(*array.Int64Builder)
+	b4 := builder.Field(4).(*array.Int64Builder)
+	b5 := builder.Field(5).(*array.Int64Builder)
+	b6 := builder.Field(6).(*array.Int64Builder)
+	b7 := builder.Field(7).(*array.Int64Builder)
+	b8 := builder.Field(8).(*array.Int64Builder)
+	b9 := builder.Field(9).(*array.Int64Builder)
+	b10 := builder.Field(10).(*array.Int32Builder)
+	b11 := builder.Field(11).(*array.Float64Builder)
+	b12 := builder.Field(12).(*array.Float64Builder)
+	b13 := builder.Field(13).(*array.Float64Builder)
+	b14 := builder.Field(14).(*array.Float64Builder)
+	b15 := builder.Field(15).(*array.Float64Builder)
+	b16 := builder.Field(16).(*array.Float64Builder)
+	b17 := builder.Field(17).(*array.Float64Builder)
+	b18 := builder.Field(18).(*array.Float64Builder)
+	b19 := builder.Field(19).(*array.Float64Builder)
+	b20 := builder.Field(20).(*array.Float64Builder)
+	b21 := builder.Field(21).(*array.Float64Builder)
+	b22 := builder.Field(22).(*array.Float64Builder)
+
+	for i := 0; i < count; i++ {
+		quantity := rng.Intn(10) + 1
+		listPriceCents := int64(1000 + rng.Intn(100000))
+		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
+		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
+
+		extDiscountAmt := (listPriceCents - salesPriceCents) * int64(quantity)
+		extSalesPrice := salesPriceCents * int64(quantity)
+		extWholesaleCost := wholesaleCents * int64(quantity)
+		extListPrice := listPriceCents * int64(quantity)
+		extTax := extSalesPrice * 8 / 100
+		netPaid := extSalesPrice - extDiscountAmt
+		netPaidIncTax := netPaid + extTax
+		netProfit := netPaid - extWholesaleCost
+
+		b0.Append(int64(rng.Intn(dateSKRange) + 1))
+		b1.Append(int64(rng.Intn(timeSKRange)))
+		b2.Append(itemSampler.Sample(rng))
+		b3.Append(customerSampler.Sample(rng))
+		b4.Append(int64(rng.Intn(cdemoSKRange) + 1))
+		b5.Append(int64(rng.Intn(hdemoSKRange) + 1))
+		b6.Append(int64(rng.Intn(addrSKRange) + 1))
+		b7.Append(storeSampler.Sample(rng))
+		b8.Append(promoSampler.Sample(rng))
+		b9.Append(startTicket + int64(i))
+		b10.Append(int32(quantity))
+		b11.Append(float64(wholesaleCents) / 100.0)
+		b12.Append(float64(listPriceCents) / 100.0)
+		b13.Append(float64(salesPriceCents) / 100.0)
+		b14.Append(float64(extDiscountAmt) / 100.0)
+		b15.Append(float64(extSalesPrice) / 100.0)
+		b16.Append(float64(extWholesaleCost) / 100.0)
+		b17.Append(float64(extListPrice) / 100.0)
+		b18.Append(float64(extTax) / 100.0)
+		b19.Append(0.0)
+		b20.Append(float64(netPaid) / 100.0)
+		b21.Append(float64(netPaidIncTax) / 100.0)
+		b22.Append(float64(netProfit) / 100.0)
+
+		if (i+1)%65536 == 0 {
+			if err = formats.WriteTypedBatch(writer, builder, filename); err != nil {
+				return err
+			}
+		}
+	}
+
+	if count%65536 != 0 {
+		if err = formats.WriteTypedBatch(writer, builder, filename); err != nil {
+			return err
+		}
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Worker completed: %d store sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
+	return nil
+}
+
 // GenerateStoreSalesOptimized generates store sales using worker-based file sharding
-func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, promoSKs []int64, outputDir string) error {
+func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -315,6 +454,11 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 	baseSeed := time.Now().UnixNano()
 	startTicket := int64(1)
 
+	ext := ".csv"
+	if format == "parquet" {
+		ext = ".parquet"
+	}
+
 	for i := 0; i < numWorkers; i++ {
 		workerRecords := recordsPerWorker
 		if i < extraRecords {
@@ -325,12 +469,12 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 			wg.Add(1)
 			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
 			rng := rand.New(rand.NewSource(workerSeed))
-			filename := fmt.Sprintf("%s/fact_store_sales_%d.csv", outputDir, i)
+			filename := fmt.Sprintf("%s/fact_store_sales_%d%s", outputDir, i, ext)
 			workerStartTicket := startTicket + int64(i*recordsPerWorker)
 
 			go func(records int, ticket int64, fname string, workerRNG *rand.Rand) {
 				defer wg.Done()
-				if err := generateStoreSalesWorker(records, ticket, itemSampler, customerSampler, storeSampler, promoSampler, fname, workerRNG); err != nil {
+				if err := generateStoreSalesWorker(records, ticket, itemSampler, customerSampler, storeSampler, promoSampler, fname, workerRNG, format); err != nil {
 					fmt.Printf("Error in store sales worker: %v\n", err)
 				}
 			}(workerRecords, workerStartTicket, filename, rng)
@@ -342,9 +486,13 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 }
 
 // High-performance worker function for generating catalog sales with direct file writing
-func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) error {
+func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
 	if count <= 0 {
 		return nil
+	}
+
+	if format == "parquet" {
+		return generateCatalogSalesWorkerParquet(count, startOrder, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
 	}
 
 	startTime := time.Now()
@@ -466,8 +614,170 @@ func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSK
 	return nil
 }
 
+func generateCatalogSalesWorkerParquet(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
+	startTime := time.Now()
+
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "cs_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_sold_time_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_ship_date_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_bill_customer_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_bill_cdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_bill_hdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_bill_addr_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_ship_customer_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_ship_cdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_ship_hdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_ship_addr_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_call_center_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_catalog_page_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_ship_mode_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_warehouse_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_item_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_promo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_order_number", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "cs_quantity", Type: arrow.PrimitiveTypes.Int32},
+		{Name: "cs_wholesale_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_list_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_sales_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_ext_discount_amt", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_ext_sales_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_ext_wholesale_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_ext_list_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_ext_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_coupon_amt", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_ext_ship_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_net_paid", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_net_paid_inc_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_net_paid_inc_ship", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_net_paid_inc_ship_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "cs_net_profit", Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+
+	file, writer, builder, err := formats.CreateTypedParquetWriter(schema, filename)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil && file != nil {
+			_ = file.Close()
+		}
+	}()
+	defer func() {
+		if closeErr := writer.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("error closing parquet writer for %s: %w", filename, closeErr)
+		}
+	}()
+	defer builder.Release()
+
+	b0 := builder.Field(0).(*array.Int64Builder)
+	b1 := builder.Field(1).(*array.Int64Builder)
+	b2 := builder.Field(2).(*array.Int64Builder)
+	b3 := builder.Field(3).(*array.Int64Builder)
+	b4 := builder.Field(4).(*array.Int64Builder)
+	b5 := builder.Field(5).(*array.Int64Builder)
+	b6 := builder.Field(6).(*array.Int64Builder)
+	b7 := builder.Field(7).(*array.Int64Builder)
+	b8 := builder.Field(8).(*array.Int64Builder)
+	b9 := builder.Field(9).(*array.Int64Builder)
+	b10 := builder.Field(10).(*array.Int64Builder)
+	b11 := builder.Field(11).(*array.Int64Builder)
+	b12 := builder.Field(12).(*array.Int64Builder)
+	b13 := builder.Field(13).(*array.Int64Builder)
+	b14 := builder.Field(14).(*array.Int64Builder)
+	b15 := builder.Field(15).(*array.Int64Builder)
+	b16 := builder.Field(16).(*array.Int64Builder)
+	b17 := builder.Field(17).(*array.Int64Builder)
+	b18 := builder.Field(18).(*array.Int32Builder)
+	b19 := builder.Field(19).(*array.Float64Builder)
+	b20 := builder.Field(20).(*array.Float64Builder)
+	b21 := builder.Field(21).(*array.Float64Builder)
+	b22 := builder.Field(22).(*array.Float64Builder)
+	b23 := builder.Field(23).(*array.Float64Builder)
+	b24 := builder.Field(24).(*array.Float64Builder)
+	b25 := builder.Field(25).(*array.Float64Builder)
+	b26 := builder.Field(26).(*array.Float64Builder)
+	b27 := builder.Field(27).(*array.Float64Builder)
+	b28 := builder.Field(28).(*array.Float64Builder)
+	b29 := builder.Field(29).(*array.Float64Builder)
+	b30 := builder.Field(30).(*array.Float64Builder)
+	b31 := builder.Field(31).(*array.Float64Builder)
+	b32 := builder.Field(32).(*array.Float64Builder)
+	b33 := builder.Field(33).(*array.Float64Builder)
+
+	for i := 0; i < count; i++ {
+		quantity := rng.Intn(10) + 1
+		listPriceCents := int64(1000 + rng.Intn(100000))
+		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
+		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
+
+		extDiscountAmt := (listPriceCents - salesPriceCents) * int64(quantity)
+		extSalesPrice := salesPriceCents * int64(quantity)
+		extWholesaleCost := wholesaleCents * int64(quantity)
+		extListPrice := listPriceCents * int64(quantity)
+		extTax := extSalesPrice * 8 / 100
+		extShipCost := int64(500 + rng.Intn(2000))
+		netPaid := extSalesPrice - extDiscountAmt
+		netPaidIncTax := netPaid + extTax
+		netPaidIncShip := netPaid + extShipCost
+		netPaidIncShipTax := netPaidIncShip + extTax
+		netProfit := netPaid - extWholesaleCost
+
+		b0.Append(int64(rng.Intn(2000) + 1))
+		b1.Append(int64(rng.Intn(86400)))
+		b2.Append(int64(rng.Intn(2000) + 1))
+		b3.Append(customerSKs[rng.Intn(len(customerSKs))])
+		b4.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
+		b5.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
+		b6.Append(addrSKs[rng.Intn(len(addrSKs))])
+		b7.Append(customerSKs[rng.Intn(len(customerSKs))])
+		b8.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
+		b9.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
+		b10.Append(addrSKs[rng.Intn(len(addrSKs))])
+		b11.Append(callCenterSKs[rng.Intn(len(callCenterSKs))])
+		b12.Append(catalogPageSKs[rng.Intn(len(catalogPageSKs))])
+		b13.Append(shipModeSKs[rng.Intn(len(shipModeSKs))])
+		b14.Append(warehouseSKs[rng.Intn(len(warehouseSKs))])
+		b15.Append(itemSKs[rng.Intn(len(itemSKs))])
+		b16.Append(promoSKs[rng.Intn(len(promoSKs))])
+		b17.Append(startOrder + int64(i))
+		b18.Append(int32(quantity))
+		b19.Append(float64(wholesaleCents) / 100.0)
+		b20.Append(float64(listPriceCents) / 100.0)
+		b21.Append(float64(salesPriceCents) / 100.0)
+		b22.Append(float64(extDiscountAmt) / 100.0)
+		b23.Append(float64(extSalesPrice) / 100.0)
+		b24.Append(float64(extWholesaleCost) / 100.0)
+		b25.Append(float64(extListPrice) / 100.0)
+		b26.Append(float64(extTax) / 100.0)
+		b27.Append(0.0)
+		b28.Append(float64(extShipCost) / 100.0)
+		b29.Append(float64(netPaid) / 100.0)
+		b30.Append(float64(netPaidIncTax) / 100.0)
+		b31.Append(float64(netPaidIncShip) / 100.0)
+		b32.Append(float64(netPaidIncShipTax) / 100.0)
+		b33.Append(float64(netProfit) / 100.0)
+
+		if (i+1)%65536 == 0 {
+			if err = formats.WriteTypedBatch(writer, builder, filename); err != nil {
+				return err
+			}
+		}
+	}
+
+	if count%65536 != 0 {
+		if err = formats.WriteTypedBatch(writer, builder, filename); err != nil {
+			return err
+		}
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Worker completed: %d catalog sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
+	return nil
+}
+
 // GenerateCatalogSalesOptimized generates catalog sales using worker-based file sharding
-func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string) error {
+func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -475,6 +785,11 @@ func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hd
 	numWorkers := runtime.NumCPU()
 	recordsPerWorker := count / numWorkers
 	extraRecords := count % numWorkers
+
+	ext := ".csv"
+	if format == "parquet" {
+		ext = ".parquet"
+	}
 
 	var wg sync.WaitGroup
 	baseSeed := time.Now().UnixNano()
@@ -490,12 +805,12 @@ func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hd
 			wg.Add(1)
 			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
 			rng := rand.New(rand.NewSource(workerSeed))
-			filename := fmt.Sprintf("%s/fact_catalog_sales_%d.csv", outputDir, i)
+			filename := fmt.Sprintf("%s/fact_catalog_sales_%d%s", outputDir, i, ext)
 			workerStartOrder := startOrder + int64(i*recordsPerWorker)
 
 			go func(records int, order int64, fname string, workerRNG *rand.Rand) {
 				defer wg.Done()
-				if err := generateCatalogSalesWorker(records, order, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG); err != nil {
+				if err := generateCatalogSalesWorker(records, order, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
 					fmt.Printf("Error in catalog sales worker: %v\n", err)
 				}
 			}(workerRecords, workerStartOrder, filename, rng)
@@ -507,9 +822,13 @@ func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hd
 }
 
 // High-performance worker function for generating web sales with direct file writing
-func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) error {
+func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
 	if count <= 0 {
 		return nil
+	}
+
+	if format == "parquet" {
+		return generateWebSalesWorkerParquet(count, startOrder, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
 	}
 
 	startTime := time.Now()
@@ -631,8 +950,170 @@ func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, c
 	return nil
 }
 
+func generateWebSalesWorkerParquet(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
+	startTime := time.Now()
+
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "ws_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_sold_time_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_ship_date_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_item_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_bill_customer_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_bill_cdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_bill_hdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_bill_addr_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_ship_customer_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_ship_cdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_ship_hdemo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_ship_addr_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_web_page_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_web_site_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_ship_mode_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_warehouse_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_promo_sk", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_order_number", Type: arrow.PrimitiveTypes.Int64},
+		{Name: "ws_quantity", Type: arrow.PrimitiveTypes.Int32},
+		{Name: "ws_wholesale_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_list_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_sales_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_ext_discount_amt", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_ext_sales_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_ext_wholesale_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_ext_list_price", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_ext_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_coupon_amt", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_ext_ship_cost", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_net_paid", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_net_paid_inc_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_net_paid_inc_ship", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_net_paid_inc_ship_tax", Type: arrow.PrimitiveTypes.Float64},
+		{Name: "ws_net_profit", Type: arrow.PrimitiveTypes.Float64},
+	}, nil)
+
+	file, writer, builder, err := formats.CreateTypedParquetWriter(schema, filename)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil && file != nil {
+			_ = file.Close()
+		}
+	}()
+	defer func() {
+		if closeErr := writer.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("error closing parquet writer for %s: %w", filename, closeErr)
+		}
+	}()
+	defer builder.Release()
+
+	b0 := builder.Field(0).(*array.Int64Builder)
+	b1 := builder.Field(1).(*array.Int64Builder)
+	b2 := builder.Field(2).(*array.Int64Builder)
+	b3 := builder.Field(3).(*array.Int64Builder)
+	b4 := builder.Field(4).(*array.Int64Builder)
+	b5 := builder.Field(5).(*array.Int64Builder)
+	b6 := builder.Field(6).(*array.Int64Builder)
+	b7 := builder.Field(7).(*array.Int64Builder)
+	b8 := builder.Field(8).(*array.Int64Builder)
+	b9 := builder.Field(9).(*array.Int64Builder)
+	b10 := builder.Field(10).(*array.Int64Builder)
+	b11 := builder.Field(11).(*array.Int64Builder)
+	b12 := builder.Field(12).(*array.Int64Builder)
+	b13 := builder.Field(13).(*array.Int64Builder)
+	b14 := builder.Field(14).(*array.Int64Builder)
+	b15 := builder.Field(15).(*array.Int64Builder)
+	b16 := builder.Field(16).(*array.Int64Builder)
+	b17 := builder.Field(17).(*array.Int64Builder)
+	b18 := builder.Field(18).(*array.Int32Builder)
+	b19 := builder.Field(19).(*array.Float64Builder)
+	b20 := builder.Field(20).(*array.Float64Builder)
+	b21 := builder.Field(21).(*array.Float64Builder)
+	b22 := builder.Field(22).(*array.Float64Builder)
+	b23 := builder.Field(23).(*array.Float64Builder)
+	b24 := builder.Field(24).(*array.Float64Builder)
+	b25 := builder.Field(25).(*array.Float64Builder)
+	b26 := builder.Field(26).(*array.Float64Builder)
+	b27 := builder.Field(27).(*array.Float64Builder)
+	b28 := builder.Field(28).(*array.Float64Builder)
+	b29 := builder.Field(29).(*array.Float64Builder)
+	b30 := builder.Field(30).(*array.Float64Builder)
+	b31 := builder.Field(31).(*array.Float64Builder)
+	b32 := builder.Field(32).(*array.Float64Builder)
+	b33 := builder.Field(33).(*array.Float64Builder)
+
+	for i := 0; i < count; i++ {
+		quantity := rng.Intn(10) + 1
+		listPriceCents := int64(1000 + rng.Intn(100000))
+		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
+		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
+
+		extDiscountAmt := (listPriceCents - salesPriceCents) * int64(quantity)
+		extSalesPrice := salesPriceCents * int64(quantity)
+		extWholesaleCost := wholesaleCents * int64(quantity)
+		extListPrice := listPriceCents * int64(quantity)
+		extTax := extSalesPrice * 8 / 100
+		extShipCost := int64(500 + rng.Intn(2000))
+		netPaid := extSalesPrice - extDiscountAmt
+		netPaidIncTax := netPaid + extTax
+		netPaidIncShip := netPaid + extShipCost
+		netPaidIncShipTax := netPaidIncShip + extTax
+		netProfit := netPaid - extWholesaleCost
+
+		b0.Append(int64(rng.Intn(2000) + 1))
+		b1.Append(int64(rng.Intn(86400)))
+		b2.Append(int64(rng.Intn(2000) + 1))
+		b3.Append(itemSKs[rng.Intn(len(itemSKs))])
+		b4.Append(customerSKs[rng.Intn(len(customerSKs))])
+		b5.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
+		b6.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
+		b7.Append(addrSKs[rng.Intn(len(addrSKs))])
+		b8.Append(customerSKs[rng.Intn(len(customerSKs))])
+		b9.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
+		b10.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
+		b11.Append(addrSKs[rng.Intn(len(addrSKs))])
+		b12.Append(webPageSKs[rng.Intn(len(webPageSKs))])
+		b13.Append(webSiteSKs[rng.Intn(len(webSiteSKs))])
+		b14.Append(shipModeSKs[rng.Intn(len(shipModeSKs))])
+		b15.Append(warehouseSKs[rng.Intn(len(warehouseSKs))])
+		b16.Append(promoSKs[rng.Intn(len(promoSKs))])
+		b17.Append(startOrder + int64(i))
+		b18.Append(int32(quantity))
+		b19.Append(float64(wholesaleCents) / 100.0)
+		b20.Append(float64(listPriceCents) / 100.0)
+		b21.Append(float64(salesPriceCents) / 100.0)
+		b22.Append(float64(extDiscountAmt) / 100.0)
+		b23.Append(float64(extSalesPrice) / 100.0)
+		b24.Append(float64(extWholesaleCost) / 100.0)
+		b25.Append(float64(extListPrice) / 100.0)
+		b26.Append(float64(extTax) / 100.0)
+		b27.Append(0.0)
+		b28.Append(float64(extShipCost) / 100.0)
+		b29.Append(float64(netPaid) / 100.0)
+		b30.Append(float64(netPaidIncTax) / 100.0)
+		b31.Append(float64(netPaidIncShip) / 100.0)
+		b32.Append(float64(netPaidIncShipTax) / 100.0)
+		b33.Append(float64(netProfit) / 100.0)
+
+		if (i+1)%65536 == 0 {
+			if err = formats.WriteTypedBatch(writer, builder, filename); err != nil {
+				return err
+			}
+		}
+	}
+
+	if count%65536 != 0 {
+		if err = formats.WriteTypedBatch(writer, builder, filename); err != nil {
+			return err
+		}
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Worker completed: %d web sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
+	return nil
+}
+
 // GenerateWebSalesOptimized generates web sales using worker-based file sharding
-func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string) error {
+func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -640,6 +1121,11 @@ func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoS
 	numWorkers := runtime.NumCPU()
 	recordsPerWorker := count / numWorkers
 	extraRecords := count % numWorkers
+
+	ext := ".csv"
+	if format == "parquet" {
+		ext = ".parquet"
+	}
 
 	var wg sync.WaitGroup
 	baseSeed := time.Now().UnixNano()
@@ -655,12 +1141,12 @@ func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoS
 			wg.Add(1)
 			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
 			rng := rand.New(rand.NewSource(workerSeed))
-			filename := fmt.Sprintf("%s/fact_web_sales_%d.csv", outputDir, i)
+			filename := fmt.Sprintf("%s/fact_web_sales_%d%s", outputDir, i, ext)
 			workerStartOrder := startOrder + int64(i*recordsPerWorker)
 
 			go func(records int, order int64, fname string, workerRNG *rand.Rand) {
 				defer wg.Done()
-				if err := generateWebSalesWorker(records, order, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG); err != nil {
+				if err := generateWebSalesWorker(records, order, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
 					fmt.Printf("Error in web sales worker: %v\n", err)
 				}
 			}(workerRecords, workerStartOrder, filename, rng)
@@ -670,7 +1156,6 @@ func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoS
 	wg.Wait()
 	return nil
 }
-
 
 // Legacy channel-based functions - kept for backward compatibility but not used in optimized flow
 
@@ -683,14 +1168,14 @@ func GenerateStoreSales(count int, itemSKs, customerSKs, storeSKs, promoSKs []in
 		salesPrice := listPrice * (1 - rand.Float64()*0.2)
 
 		ch <- ecommerceds.StoreSales{
-			SS_ItemSK:         itemSKs[rand.Intn(len(itemSKs))],
-			SS_CustomerSK:     customerSKs[rand.Intn(len(customerSKs))],
-			SS_StoreSK:        storeSKs[rand.Intn(len(storeSKs))],
-			SS_PromoSK:        promoSKs[rand.Intn(len(promoSKs))],
-			SS_TicketNumber:   int64(i + 1),
-			SS_Quantity:       quantity,
-			SS_ListPrice:      listPrice,
-			SS_SalesPrice:     salesPrice,
+			SS_ItemSK:       itemSKs[rand.Intn(len(itemSKs))],
+			SS_CustomerSK:   customerSKs[rand.Intn(len(customerSKs))],
+			SS_StoreSK:      storeSKs[rand.Intn(len(storeSKs))],
+			SS_PromoSK:      promoSKs[rand.Intn(len(promoSKs))],
+			SS_TicketNumber: int64(i + 1),
+			SS_Quantity:     quantity,
+			SS_ListPrice:    listPrice,
+			SS_SalesPrice:   salesPrice,
 		}
 	}
 }

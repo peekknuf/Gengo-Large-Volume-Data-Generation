@@ -103,9 +103,9 @@ func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []fin
 }
 
 type FinancialRowCounts struct {
-	Companies          int
-	Exchanges          int
-	DailyStockPrices   int
+	Companies        int
+	Exchanges        int
+	DailyStockPrices int
 }
 
 func GenerateFinancialModelData(counts FinancialRowCounts, companies []financial.Company, exchanges []financial.Exchange, format string, outputDir string) error {

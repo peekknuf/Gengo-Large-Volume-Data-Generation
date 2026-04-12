@@ -47,7 +47,7 @@ func GenerateCustomerAddresses(customers []ecommerce.Customer) []ecommerce.Custo
 	if len(customers) == 0 {
 		return []ecommerce.CustomerAddress{}
 	}
-	addresses := make([]ecommerce.CustomerAddress, 0)
+	addresses := make([]ecommerce.CustomerAddress, 0, len(customers)*2)
 	addressIDCounter := 1
 
 	for _, customer := range customers {

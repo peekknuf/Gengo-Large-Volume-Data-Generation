@@ -53,7 +53,7 @@ func GenerateClinics(count int) []medical.Clinic {
 		clinics[i] = medical.Clinic{
 			ClinicID:   i + 1,
 			ClinicName: fmt.Sprintf("%s Clinic", gf.LastName()),
-			Address:    fmt.Sprintf("%s, %s, %s %s", addr.Address, addr.City, addr.State, addr.Zip),
+			Address:    addr.Address,
 		}
 	}
 	return clinics

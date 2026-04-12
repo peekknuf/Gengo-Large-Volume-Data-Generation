@@ -7,12 +7,47 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
 	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 )
+
+var digitsLUT = [100]string{
+	"00", "01", "02", "03", "04", "05", "06", "07", "08", "09",
+	"10", "11", "12", "13", "14", "15", "16", "17", "18", "19",
+	"20", "21", "22", "23", "24", "25", "26", "27", "28", "29",
+	"30", "31", "32", "33", "34", "35", "36", "37", "38", "39",
+	"40", "41", "42", "43", "44", "45", "46", "47", "48", "49",
+	"50", "51", "52", "53", "54", "55", "56", "57", "58", "59",
+	"60", "61", "62", "63", "64", "65", "66", "67", "68", "69",
+	"70", "71", "72", "73", "74", "75", "76", "77", "78", "79",
+	"80", "81", "82", "83", "84", "85", "86", "87", "88", "89",
+	"90", "91", "92", "93", "94", "95", "96", "97", "98", "99",
+}
+
+func fastItoa(buf []byte, v int64) []byte {
+	if v < 10 {
+		return append(buf, byte('0'+v))
+	}
+	var tmp [20]byte
+	pos := len(tmp)
+	for v >= 100 {
+		pos -= 2
+		copy(tmp[pos:], digitsLUT[v%100])
+		v /= 100
+	}
+	if v < 10 {
+		pos--
+		tmp[pos] = byte('0' + v)
+	} else {
+		pos -= 2
+		copy(tmp[pos:], digitsLUT[v])
+	}
+	return append(buf, tmp[pos:]...)
+}
 
 // WriteStream writes data from a channel to a CSV file.
 func WriteStream(data <-chan interface{}, filename, format, outputDir string) error {
@@ -80,7 +115,7 @@ func WriteSliceData(data interface{}, filename, format, outputDir string) error 
 	case "csv":
 		return writeSliceToCSV(data, filepath.Join(outputDir, filename+".csv"))
 	case "parquet":
-		return writeSliceToParquet(data, filepath.Join(outputDir, filename+".parquet"))
+		return WriteSliceToParquet(data, filepath.Join(outputDir, filename+".parquet"))
 	default:
 		return fmt.Errorf("unsupported format: %s", format)
 	}
@@ -110,7 +145,17 @@ func getCSVHeaders(v interface{}) []string {
 	t := reflect.TypeOf(v)
 	headers := make([]string, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
-		headers[i] = t.Field(i).Tag.Get("csv")
+		tag := t.Field(i).Tag.Get("csv")
+		if tag == "" {
+			tag = t.Field(i).Tag.Get("json")
+		}
+		if tag == "" {
+			tag = t.Field(i).Tag.Get("parquet")
+		}
+		if tag != "" {
+			tag = strings.SplitN(tag, ",", 2)[0]
+		}
+		headers[i] = tag
 	}
 	return headers
 }
@@ -147,7 +192,7 @@ func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [
 	defer file.Close()
 
 	// Use large buffer for better I/O performance
-	bufferedWriter := bufio.NewWriterSize(file, 1024*1024) // 1MB buffer
+	bufferedWriter := bufio.NewWriterSize(file, 16*1024*1024) // 16MB buffer
 	defer bufferedWriter.Flush()
 
 	// Write header directly with byte operations
@@ -190,59 +235,196 @@ func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [
 
 // needsQuoting checks if a field needs CSV quoting
 func needsQuoting(field string) bool {
-	for _, r := range field {
-		if r == ',' || r == '"' || r == '\n' || r == '\r' {
+	for i := 0; i < len(field); i++ {
+		c := field[i]
+		if c == ',' || c == '"' || c == '\n' || c == '\r' {
 			return true
 		}
 	}
 	return false
 }
 
+func appendCSVField(buf []byte, field string) []byte {
+	if needsQuoting(field) {
+		buf = append(buf, '"')
+		for i := 0; i < len(field); i++ {
+			if field[i] == '"' {
+				buf = append(buf, '"', '"')
+			} else {
+				buf = append(buf, field[i])
+			}
+		}
+		buf = append(buf, '"')
+	} else {
+		buf = append(buf, field...)
+	}
+	return buf
+}
+
 // --- Dimension Writers (kept as original for focus) ---
 
 func WriteCustomersToCSV(customers []ecommercemodels.Customer, targetFilename string) error {
-	headers := []string{"customer_id", "first_name", "last_name", "email"}
-	records := make([][]string, len(customers))
-	for i, c := range customers {
-		records[i] = []string{strconv.Itoa(c.CustomerID), c.FirstName, c.LastName, c.Email}
+	startTime := time.Now()
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+	defer file.Close()
+
+	bw := bufio.NewWriterSize(file, 16*1024*1024)
+	defer bw.Flush()
+
+	bw.WriteString("customer_id,first_name,last_name,email\n")
+
+	rowBuf := make([]byte, 0, 256)
+	for _, c := range customers {
+		rowBuf = rowBuf[:0]
+		rowBuf = fastItoa(rowBuf, int64(c.CustomerID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = appendCSVField(rowBuf, c.FirstName)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = appendCSVField(rowBuf, c.LastName)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = appendCSVField(rowBuf, c.Email)
+		rowBuf = append(rowBuf, '\n')
+		bw.Write(rowBuf)
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(customers), targetFilename, duration.Round(time.Millisecond))
+	return nil
 }
 
 func WriteCustomerAddressesToCSV(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
-	headers := []string{"address_id", "customer_id", "address_type", "address", "city", "state", "zip", "country"}
-	records := make([][]string, len(addresses))
-	for i, a := range addresses {
-		records[i] = []string{strconv.Itoa(a.AddressID), strconv.Itoa(a.CustomerID), a.AddressType, a.Address, a.City, a.State, a.Zip, a.Country}
+	startTime := time.Now()
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+	defer file.Close()
+
+	bw := bufio.NewWriterSize(file, 16*1024*1024)
+	defer bw.Flush()
+
+	bw.WriteString("address_id,customer_id,address_type,address,city,state,zip,country\n")
+
+	rowBuf := make([]byte, 0, 512)
+	for _, a := range addresses {
+		rowBuf = rowBuf[:0]
+		rowBuf = fastItoa(rowBuf, int64(a.AddressID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = fastItoa(rowBuf, int64(a.CustomerID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, a.AddressType...)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = appendCSVField(rowBuf, a.Address)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, a.City...)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, a.State...)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, a.Zip...)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, a.Country...)
+		rowBuf = append(rowBuf, '\n')
+		bw.Write(rowBuf)
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(addresses), targetFilename, duration.Round(time.Millisecond))
+	return nil
 }
 
 func WriteSuppliersToCSV(suppliers []ecommercemodels.Supplier, targetFilename string) error {
-	headers := []string{"supplier_id", "supplier_name", "country"}
-	records := make([][]string, len(suppliers))
-	for i, s := range suppliers {
-		records[i] = []string{strconv.Itoa(s.SupplierID), s.SupplierName, s.Country}
+	startTime := time.Now()
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+	defer file.Close()
+
+	bw := bufio.NewWriterSize(file, 16*1024*1024)
+	defer bw.Flush()
+
+	bw.WriteString("supplier_id,supplier_name,country\n")
+
+	rowBuf := make([]byte, 0, 256)
+	for _, s := range suppliers {
+		rowBuf = rowBuf[:0]
+		rowBuf = fastItoa(rowBuf, int64(s.SupplierID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = appendCSVField(rowBuf, s.SupplierName)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, s.Country...)
+		rowBuf = append(rowBuf, '\n')
+		bw.Write(rowBuf)
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(suppliers), targetFilename, duration.Round(time.Millisecond))
+	return nil
 }
 
 func WriteProductCategoriesToCSV(categories []ecommercemodels.ProductCategory, targetFilename string) error {
-	headers := []string{"category_id", "category_name"}
-	records := make([][]string, len(categories))
-	for i, c := range categories {
-		records[i] = []string{strconv.Itoa(c.CategoryID), c.CategoryName}
+	startTime := time.Now()
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+	defer file.Close()
+
+	bw := bufio.NewWriterSize(file, 16*1024*1024)
+	defer bw.Flush()
+
+	bw.WriteString("category_id,category_name\n")
+
+	rowBuf := make([]byte, 0, 128)
+	for _, c := range categories {
+		rowBuf = rowBuf[:0]
+		rowBuf = fastItoa(rowBuf, int64(c.CategoryID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = append(rowBuf, c.CategoryName...)
+		rowBuf = append(rowBuf, '\n')
+		bw.Write(rowBuf)
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(categories), targetFilename, duration.Round(time.Millisecond))
+	return nil
 }
 
 func WriteProductsToCSV(products []ecommercemodels.Product, targetFilename string) error {
-	headers := []string{"product_id", "supplier_id", "product_name", "category_id", "base_price"}
-	records := make([][]string, len(products))
-	for i, p := range products {
-		records[i] = []string{strconv.Itoa(p.ProductID), strconv.Itoa(p.SupplierID), p.ProductName, strconv.Itoa(p.CategoryID), strconv.FormatFloat(p.BasePrice, 'f', 2, 64)}
+	startTime := time.Now()
+	file, err := os.Create(targetFilename)
+	if err != nil {
+		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
 	}
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+	defer file.Close()
+
+	bw := bufio.NewWriterSize(file, 16*1024*1024)
+	defer bw.Flush()
+
+	bw.WriteString("product_id,supplier_id,product_name,category_id,base_price\n")
+
+	rowBuf := make([]byte, 0, 256)
+	for _, p := range products {
+		rowBuf = rowBuf[:0]
+		rowBuf = fastItoa(rowBuf, int64(p.ProductID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = fastItoa(rowBuf, int64(p.SupplierID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = appendCSVField(rowBuf, p.ProductName)
+		rowBuf = append(rowBuf, ',')
+		rowBuf = fastItoa(rowBuf, int64(p.CategoryID))
+		rowBuf = append(rowBuf, ',')
+		rowBuf = strconv.AppendFloat(rowBuf, p.BasePrice, 'f', 2, 64)
+		rowBuf = append(rowBuf, '\n')
+		bw.Write(rowBuf)
+	}
+
+	duration := time.Since(startTime)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(products), targetFilename, duration.Round(time.Millisecond))
+	return nil
 }
 
 // --- Fact Table Streaming Writers ---
@@ -272,13 +454,13 @@ func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader,
 		rowBuf = rowBuf[:0]
 
 		// Build row with direct byte operations
-		rowBuf = strconv.AppendInt(rowBuf, int64(h.OrderID), 10)
+		rowBuf = fastItoa(rowBuf, int64(h.OrderID))
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(h.CustomerID), 10)
+		rowBuf = fastItoa(rowBuf, int64(h.CustomerID))
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(h.ShippingAddressID), 10)
+		rowBuf = fastItoa(rowBuf, int64(h.ShippingAddressID))
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(h.BillingAddressID), 10)
+		rowBuf = fastItoa(rowBuf, int64(h.BillingAddressID))
 		rowBuf = append(rowBuf, ',')
 
 		// Format timestamp
@@ -343,13 +525,13 @@ func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targe
 		rowBuf = rowBuf[:0]
 
 		// Build row with direct byte operations
-		rowBuf = strconv.AppendInt(rowBuf, int64(item.OrderItemID), 10)
+		rowBuf = fastItoa(rowBuf, int64(item.OrderItemID))
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(item.OrderID), 10)
+		rowBuf = fastItoa(rowBuf, int64(item.OrderID))
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(item.ProductID), 10)
+		rowBuf = fastItoa(rowBuf, int64(item.ProductID))
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(item.Quantity), 10)
+		rowBuf = fastItoa(rowBuf, int64(item.Quantity))
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendFloat(rowBuf, item.UnitPrice, 'f', 2, 64)
 		rowBuf = append(rowBuf, ',')

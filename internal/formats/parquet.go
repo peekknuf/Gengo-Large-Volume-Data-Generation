@@ -20,13 +20,13 @@ import (
 )
 
 const (
-	parquetWriteBatchSize = 1024 * 16
+	parquetWriteBatchSize = 1024 * 64
 )
 
-func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
+func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 	sliceVal := reflect.ValueOf(data)
 	if sliceVal.Kind() != reflect.Slice {
-		return fmt.Errorf("writeSliceToParquet expected a slice, got %T", data)
+		return fmt.Errorf("WriteSliceToParquet expected a slice, got %T", data)
 	}
 	sliceLen := sliceVal.Len()
 	if sliceLen == 0 {
@@ -47,7 +47,7 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 				elemType = elemType.Elem()
 			}
 		} else {
-			return fmt.Errorf("writeSliceToParquet cannot determine type from empty []interface{}")
+			return fmt.Errorf("WriteSliceToParquet cannot determine type from empty []interface{}")
 		}
 	} else {
 		elemType = sliceVal.Type().Elem()
@@ -58,7 +58,7 @@ func writeSliceToParquet(data interface{}, targetFilename string) (err error) {
 	}
 
 	if elemType.Kind() != reflect.Struct {
-		return fmt.Errorf("writeSliceToParquet expected slice of structs/pointers, got %s", elemType.Kind())
+		return fmt.Errorf("WriteSliceToParquet expected slice of structs/pointers, got %s", elemType.Kind())
 	}
 	schema, err := buildArrowSchema(elemType)
 	if err != nil {
@@ -185,31 +185,21 @@ func writeParquetBatchCorrected(writer *pqarrow.FileWriter, builder *array.Recor
 	if err := writer.Write(record); err != nil {
 		return builder, fmt.Errorf("error writing batch to parquet file %s: %w", errorContextFilename, err)
 	}
-	builder.Release()
-	newBuilder := array.NewRecordBuilder(pool, schema)
-	return newBuilder, nil
+	return builder, nil
 }
 
 // getParquetFieldName determines the field name from tags or struct field name.
 func getParquetFieldName(field reflect.StructField) string {
-	tag := field.Tag.Get("parquet")
-	if tag != "" {
-		parts := strings.Split(tag, ",")
-		if parts[0] == "-" {
-			return "-"
-		}
-		if parts[0] != "" {
-			return parts[0]
-		}
-	}
-	tag = field.Tag.Get("json")
-	if tag != "" {
-		parts := strings.Split(tag, ",")
-		if parts[0] == "-" {
-			return "-"
-		}
-		if parts[0] != "" {
-			return parts[0]
+	for _, tagName := range []string{"parquet", "json", "csv"} {
+		tag := field.Tag.Get(tagName)
+		if tag != "" {
+			parts := strings.Split(tag, ",")
+			if parts[0] == "-" {
+				return "-"
+			}
+			if parts[0] != "" {
+				return parts[0]
+			}
 		}
 	}
 	return field.Name
@@ -263,61 +253,61 @@ func buildArrowSchema(structType reflect.Type) (*arrow.Schema, error) {
 // Parquet writer functions for e-commerce models
 
 func WriteCustomersToParquet(customers []ecommercemodels.Customer, targetFilename string) error {
-	return writeSliceToParquet(customers, targetFilename)
+	return WriteSliceToParquet(customers, targetFilename)
 }
 
 func WriteCustomerAddressesToParquet(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
-	return writeSliceToParquet(addresses, targetFilename)
+	return WriteSliceToParquet(addresses, targetFilename)
 }
 
 func WriteSuppliersToParquet(suppliers []ecommercemodels.Supplier, targetFilename string) error {
-	return writeSliceToParquet(suppliers, targetFilename)
+	return WriteSliceToParquet(suppliers, targetFilename)
 }
 
 func WriteProductCategoriesToParquet(categories []ecommercemodels.ProductCategory, targetFilename string) error {
-	return writeSliceToParquet(categories, targetFilename)
+	return WriteSliceToParquet(categories, targetFilename)
 }
 
 func WriteProductsToParquet(products []ecommercemodels.Product, targetFilename string) error {
-	return writeSliceToParquet(products, targetFilename)
+	return WriteSliceToParquet(products, targetFilename)
 }
 
 func WriteOrderHeadersToParquet(headers []ecommercemodels.OrderHeader, targetFilename string) error {
-	return writeSliceToParquet(headers, targetFilename)
+	return WriteOrderHeadersToParquetTyped(headers, targetFilename)
 }
 
 func WriteOrderItemsToParquet(items []ecommercemodels.OrderItem, targetFilename string) error {
-	return writeSliceToParquet(items, targetFilename)
+	return WriteOrderItemsToParquetTyped(items, targetFilename)
 }
 
 // Parquet writer functions for financial models
 
 func WriteCompaniesToParquet(companies []financialmodels.Company, targetFilename string) error {
-	return writeSliceToParquet(companies, targetFilename)
+	return WriteSliceToParquet(companies, targetFilename)
 }
 
 func WriteExchangesToParquet(exchanges []financialmodels.Exchange, targetFilename string) error {
-	return writeSliceToParquet(exchanges, targetFilename)
+	return WriteSliceToParquet(exchanges, targetFilename)
 }
 
 func WriteDailyStockPricesToParquet(prices []financialmodels.DailyStockPrice, targetFilename string) error {
-	return writeSliceToParquet(prices, targetFilename)
+	return WriteDailyStockPricesToParquetTyped(prices, targetFilename)
 }
 
 // Parquet writer functions for medical models
 
 func WritePatientsToParquet(patients []medicalmodels.Patient, targetFilename string) error {
-	return writeSliceToParquet(patients, targetFilename)
+	return WriteSliceToParquet(patients, targetFilename)
 }
 
 func WriteDoctorsToParquet(doctors []medicalmodels.Doctor, targetFilename string) error {
-	return writeSliceToParquet(doctors, targetFilename)
+	return WriteSliceToParquet(doctors, targetFilename)
 }
 
 func WriteClinicsToParquet(clinics []medicalmodels.Clinic, targetFilename string) error {
-	return writeSliceToParquet(clinics, targetFilename)
+	return WriteSliceToParquet(clinics, targetFilename)
 }
 
 func WriteAppointmentsToParquet(appointments []medicalmodels.Appointment, targetFilename string) error {
-	return writeSliceToParquet(appointments, targetFilename)
+	return WriteAppointmentsToParquetTyped(appointments, targetFilename)
 }

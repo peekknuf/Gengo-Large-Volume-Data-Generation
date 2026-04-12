@@ -5,26 +5,20 @@ import (
 	"os"
 
 	"github.com/peekknuf/Gengo/internal/core"
+	"github.com/peekknuf/Gengo/internal/utils"
 	"github.com/spf13/cobra"
 )
 
 var (
-	modelType  string
-	targetGB   float64
-	format     string
-	outputDir  string
+	modelType string
+	targetGB  float64
+	format    string
+	outputDir string
 )
 
 var RootCmd = &cobra.Command{
-	Use:   "Gengo",
-	Short: "A brief description of your application",
-	Long: `Welcome to Gengo.
-Create fake datasets quickly.
-
-Just type in:
-go build
-./Gengo gen
-and follow through`,
+	Use:   "gengo",
+	Short: "Large-scale synthetic relational data generator",
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
@@ -32,13 +26,14 @@ and follow through`,
 
 var generateCmd = &cobra.Command{
 	Use:   "gen",
-	Short: "Generate synthetic e-commerce data model",
-	Long: `Generates a synthetic e-commerce data model (dimensions and facts)
-based on an estimated target size and saves it to the specified format
-(CSV, JSON Lines, Parquet) within a directory.
+	Short: "Generate a synthetic relational dataset",
+	Long: `Generates normalized (3NF) synthetic datasets across four domains:
+  ecommerce, ecommerce-ds (TPC-DS), financial, and medical.
+
+Supports CSV and Apache Parquet output formats.
 
 Example:
-  ./Gengo gen --model ecommerce-ds --size 0.5 --format parquet --output my-data`,
+  gengo gen --model ecommerce-ds --size 10 --format parquet --output my-data`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Starting data model generation process...")
 
@@ -74,6 +69,7 @@ func init() {
 }
 
 func main() {
+	fmt.Println(utils.Logo())
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

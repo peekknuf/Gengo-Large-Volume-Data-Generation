@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/peekknuf/Gengo/internal/utils"
 	financialsimulation "github.com/peekknuf/Gengo/internal/simulation/financial"
 	medicalsimulation "github.com/peekknuf/Gengo/internal/simulation/medical"
+	"github.com/peekknuf/Gengo/internal/utils"
 )
 
 func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, outputDirFlag string) (modelType string, counts interface{}, format string, outputDir string, err error) {
@@ -46,6 +46,21 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		return
 	}
 
+	// --- Output Format (determined before row counts for format-aware sizing) ---
+	format = formatFlag
+	if format == "" {
+		fmt.Print("Enter the desired output format (csv/json/parquet): ")
+		if _, scanErr := fmt.Scanln(&format); scanErr != nil {
+			err = fmt.Errorf("error reading output format: %w", scanErr)
+			return
+		}
+	}
+	format = strings.ToLower(strings.TrimSpace(format))
+	if format != "csv" && format != "json" && format != "parquet" {
+		err = fmt.Errorf("unsupported output format: %s", format)
+		return
+	}
+
 	// --- Calculate Row Counts ---
 	switch modelType {
 	case "ecommerce":
@@ -66,7 +81,7 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		fmt.Printf("Order Items:       %s\n", utils.AddUnderscores(ecommerceCounts.OrderItems))
 	case "ecommerce-ds":
 		var ecommerceDSCounts ECommerceDSRowCounts
-		ecommerceDSCounts, err = CalculateECommerceDSRowCounts(targetGB)
+		ecommerceDSCounts, err = CalculateECommerceDSRowCounts(targetGB, format)
 		if err != nil {
 			err = fmt.Errorf("error calculating e-commerce-ds row counts: %w", err)
 			return
@@ -81,42 +96,42 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		fmt.Printf("Web Returns:       %s\n", utils.AddUnderscores(ecommerceDSCounts.WebReturns))
 		fmt.Printf("Catalog Returns:   %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogReturns))
 		fmt.Printf("Inventory:         %s\n", utils.AddUnderscores(ecommerceDSCounts.Inventory))
-		
+
 		fmt.Println("\n🏢 CORE DIMENSIONS:")
 		fmt.Printf("Customers:         %s\n", utils.AddUnderscores(ecommerceDSCounts.Customers))
 		fmt.Printf("Items:             %s\n", utils.AddUnderscores(ecommerceDSCounts.Items))
 		fmt.Printf("Customer Addresses: %s\n", utils.AddUnderscores(ecommerceDSCounts.CustomerAddresses))
 		fmt.Printf("Promotions:        %s\n", utils.AddUnderscores(ecommerceDSCounts.Promotions))
 		fmt.Printf("Web Pages:         %s\n", utils.AddUnderscores(ecommerceDSCounts.WebPages))
-		
+
 		fmt.Println("\n🏪 BUSINESS DIMENSIONS:")
 		fmt.Printf("Stores:            %s\n", utils.AddUnderscores(ecommerceDSCounts.Stores))
 		fmt.Printf("Warehouses:        %s\n", utils.AddUnderscores(ecommerceDSCounts.Warehouses))
 		fmt.Printf("Call Centers:      %s\n", utils.AddUnderscores(ecommerceDSCounts.CallCenters))
 		fmt.Printf("Web Sites:         %s\n", utils.AddUnderscores(ecommerceDSCounts.WebSites))
 		fmt.Printf("Catalog Pages:     %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogPages))
-		
+
 		fmt.Println("\n👥 DEMOGRAPHIC DIMENSIONS:")
 		fmt.Printf("Customer Demographics: %s\n", utils.AddUnderscores(ecommerceDSCounts.CustomerDemographics))
 		fmt.Printf("Household Demographics: %s\n", utils.AddUnderscores(ecommerceDSCounts.HouseholdDemographics))
 		fmt.Printf("Income Bands:      %s\n", utils.AddUnderscores(ecommerceDSCounts.IncomeBands))
-		
+
 		fmt.Println("\n🚚 OPERATIONAL DIMENSIONS:")
 		fmt.Printf("Reasons:           %s\n", utils.AddUnderscores(ecommerceDSCounts.Reasons))
 		fmt.Printf("Ship Modes:        %s\n", utils.AddUnderscores(ecommerceDSCounts.ShipModes))
-		
+
 		// Calculate business metrics
 		totalSales := ecommerceDSCounts.StoreSales + ecommerceDSCounts.WebSales + ecommerceDSCounts.CatalogSales
 		totalReturns := ecommerceDSCounts.StoreReturns + ecommerceDSCounts.WebReturns + ecommerceDSCounts.CatalogReturns
 		avgOrdersPerCustomer := float64(totalSales) / float64(ecommerceDSCounts.Customers)
 		overallReturnRate := float64(totalReturns) / float64(totalSales) * 100
-		
+
 		fmt.Println("\n📈 BUSINESS METRICS:")
 		fmt.Printf("Total Sales:       %s\n", utils.AddUnderscores(totalSales))
 		fmt.Printf("Total Returns:      %s\n", utils.AddUnderscores(totalReturns))
 		fmt.Printf("Orders/Customer:   %.1f\n", avgOrdersPerCustomer)
 		fmt.Printf("Return Rate:       %.1f%%\n", overallReturnRate)
-		fmt.Printf("Sales Distribution: Store %.0f%%, Web %.0f%%, Catalog %.0f%%\n", 
+		fmt.Printf("Sales Distribution: Store %.0f%%, Web %.0f%%, Catalog %.0f%%\n",
 			float64(ecommerceDSCounts.StoreSales)/float64(totalSales)*100,
 			float64(ecommerceDSCounts.WebSales)/float64(totalSales)*100,
 			float64(ecommerceDSCounts.CatalogSales)/float64(totalSales)*100)
@@ -150,21 +165,6 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 	fmt.Println("----------------------------------------")
 	fmt.Printf("Note: Final output size may vary due to data generation specifics and compression.\n\n")
 
-	// --- Output Format ---
-	format = formatFlag
-	if format == "" {
-		fmt.Print("Enter the desired output format (csv/json/parquet): ")
-		if _, scanErr := fmt.Scanln(&format); scanErr != nil {
-			err = fmt.Errorf("error reading output format: %w", scanErr)
-			return
-		}
-	}
-	format = strings.ToLower(strings.TrimSpace(format))
-	if format != "csv" && format != "json" && format != "parquet" {
-		err = fmt.Errorf("unsupported output format: %s", format)
-		return
-	}
-
 	// --- Output Directory ---
 	outputDir = outputDirFlag
 	if outputDir == "" {
@@ -197,4 +197,3 @@ func matchModelType(input string) (string, error) {
 		return "", fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", input)
 	}
 }
-
