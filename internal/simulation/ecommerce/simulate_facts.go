@@ -191,7 +191,7 @@ func (s *AliasSampler) Sample(rng *rand.Rand) int {
 	}
 	raw := rng.Uint64()
 	i := int(raw % uint64(s.n))
-	if rng.Uint64() < s.probUint64[i] {
+	if rng.Uint64()>>11 < s.probUint64[i] {
 		return s.ids[i]
 	}
 	return s.ids[s.alias[i]]
