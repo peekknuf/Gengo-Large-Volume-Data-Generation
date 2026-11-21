@@ -113,4 +113,3 @@ Concrete abstractions are introduced alongside working implementations.
 
 Checklist items are completed when the corresponding implementation and checks
 are present. Planning a component leaves its implementation item open.
-

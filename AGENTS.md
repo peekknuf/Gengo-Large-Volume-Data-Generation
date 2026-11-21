@@ -1,143 +1,102 @@
-# CLAUDE.md
+# Gengo agent guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Start here
 
-## Project Overview
+Gengo generates reproducible relational datasets and is growing into a PostgreSQL
+performance-testing tool, with broader Supabase coverage planned. Read
+[product direction](docs/product-direction.md) for agreed scope and delivery status,
+then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
-Gengo is a high-performance Go CLI tool for generating large-scale synthetic relational datasets. It specializes in creating normalized data models (3NF) for e-commerce, financial, and medical domains with optimized performance for multi-gigabyte datasets.
+Go 1.25 or later is required. The module is github.com/peekknuf/Gengo.
+Generation supports ecommerce, ecommerce-ds, financial, and medical in CSV and
+Parquet. Import planning currently supports ecommerce CSV.
 
-## Common Commands
+## Active entry points
 
-### Building and Running
-```bash
-# Build the binary
-go build
+| Task | Start with |
+| --- | --- |
+| Generation flags and command | main.go |
+| Input, size planning, row overrides, prerequisites | internal/core/input.go, sizing.go, validation.go |
+| Model dependencies, staging, publication | internal/core/orchestrator.go |
+| Seeded streams, logical partitions, completed-writer counts | internal/generation |
+| Manifest and dataset identity | internal/core/run.go |
+| Domain row generation | internal/simulation/<model> |
+| Model fields and serialization tags | internal/models/<model> |
+| Generic and typed serialization | internal/formats and direct fact encoders in simulation |
+| PostgreSQL import command | load_command.go |
+| Manifest checks and psql script planning | internal/core/load_plan.go |
+| E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
-# Run the interactive data generator
-./Gengo gen
+The CLI calls internal/simulation. The alternate internal/generators package
+contains BaseGenerator and MedicalGenerator with a separate common.GenerationConfig.
+Trace callers before extending that older implementation. The active reproducibility
+contract uses generation.Config.
 
-# Install dependencies
-go mod tidy
+## Commands
 
-# Run tests
+~~~sh
+go build -o bin/gengo .
 go test ./...
-
-# Run benchmarks
-go test -bench=. ./tests/
-```
-
-### Development Commands
-```bash
-# Build the binary (run after making changes)
-go build
-
-# Format code
-go fmt ./...
-
-# Run vet
 go vet ./...
+go test ./internal/core -run 'TestSmallDatasetContracts|TestReproducibleRuns'
+go test ./internal/core -run TestCSVLoadPlan
+go test ./tests -run TestGenerationControls
+go test ./internal/formats -run '^$' -bench BenchmarkWriteSliceCSV -benchmem
+~~~
 
-# Test specific package
-go test ./internal/core/
-```
+On Windows, build bin/gengo.exe. A local dev.ps1 helper may provide build, test,
+vet, bench, and run commands with the portable Go setup.
 
-## Architecture Overview
+TestE2E builds its own binary and exercises all eight model/format combinations.
+Its default target is 0.1 GiB per case. GENGO_TEST_SIZE_GB and GENGO_TEST_TIMEOUT
+adjust fixtures. GENGO_KEEP_OUTPUT=1 retains output, so repeated runs need fresh
+destinations. CI defines Linux and Windows checks, with race checks on Linux.
 
-### Core Components
+## Contracts to preserve
 
-**Main Entry Point**: `main.go:76`
-- Uses Cobra CLI framework
-- Single `gen` command that orchestrates the entire generation process
-- No random seeding - uses system randomness for synthetic data generation
+- Resolve defaults once per run. Explicit seed zero is valid.
+- Use generation.Config streams and table-owned faker instances in active paths.
+  Stream labels and derivation are part of generation.AlgorithmVersion.
+- Workers execute stable logical partitions. A fixed resolved plan produces
+  identical CSV data files and equivalent Parquet schemas and values across
+  worker counts. Partition size can affect dataset identity and generated values.
+- Compare formats with the same explicit row plan. Compression-aware size planning
+  can otherwise resolve different counts.
+- Preserve complete primary-key, foreign-key, customer-correlation, and count
+  checks. Keep financial price state across file boundaries.
+- Retail date keys are Unix days. Zero closing-date keys denote open locations.
+  E-commerce CSV order timestamps use Unix seconds. Parquet timestamps use
+  microseconds. See docs/reproducibility.md for the full contract.
+- Register counts after writers close successfully. Manifest identity excludes
+  workers and timings. Preserve staging and empty-destination publication.
+- Reuse current model structs and metadata when extending imports. The e-commerce
+  CSV timestamp override is explicit in internal/schema/ecommerce.go.
 
-**Core Orchestrator**: `internal/core/orchestrator.go:48`
-- Central coordinator for all data generation
-- Handles four model types: `ecommerce`, `ecommerce-ds`, `financial`, `medical`
-- Implements concurrent generation with goroutines and channels
-- Manages dimension → fact dependencies
+## Working approach
 
-**Sizing Engine**: `internal/core/sizing.go:143`
-- Calculates row counts based on target GB size
-- Uses empirical effective size per row estimates
-- Maintains realistic ratios between dimensions and facts
+1. Inspect git status and the relevant normal entry point.
+2. Read the implementations and tests involved in the change.
+3. Trace the serialization and generation paths callers actually use.
+4. Implement a bounded increment and check its normal CLI path where relevant.
+5. Update feature documentation and the product checklist with verified status.
+6. Review the diff, run appropriate checks, and commit focused changes.
 
-### Domain-Specific Architecture
+Keep generated datasets, binaries, profiles, local setup helpers, and
+machine-specific benchmark logs outside commits. Format changed Go files.
+Algorithm or schema changes need corresponding version and documentation updates.
+Current repeat-run tests compare the same implementation with itself, so review
+compatibility with earlier versions separately.
 
-**Models** (`internal/models/`):
-- Struct definitions for each domain (ecommerce, financial, medical)
-- Include proper JSON/Parquet struct tags
-- Follow 3NF normalization principles
+Introduce runner contracts alongside working execution paths. The agreed first
+benchmark engine is pgbench, with a native Go runner as a later direction.
+Credentials belong in supported environment or credential sources.
 
-**Simulation** (`internal/simulation/`):
-- Data generation logic using `brianvoe/gofakeit`
-- Implements weighted sampling for realistic distributions
-- Optimized for high-performance concurrent generation
+## Current verification gaps
 
-**Formats** (`internal/formats/`):
-- Multi-format output: CSV, JSON Lines, Apache Parquet
-- Uses Apache Arrow/Parquet for efficient columnar storage
+Live PostgreSQL import and workload execution are pending. Import-planner tests
+cover script preparation, source metadata and headers, and CLI integration.
 
-### Performance Optimizations
-
-The codebase implements several sophisticated optimizations:
-
-1. **Per-worker RNG**: Eliminates global lock contention in random number generation
-2. **Parallel byte chunk formatting**: Workers format data directly into byte slices
-3. **Epoch timestamps**: Uses raw Unix timestamps instead of formatted strings
-4. **Block allocation**: Reduces atomic operations for ID generation (100k ID blocks)
-5. **Slice-based lookups**: Replaces maps with slices for O(1) access in hot paths
-6. **Optimized buffers**: 16MB buffers for better throughput
-
-### Concurrent Generation Pattern
-
-The architecture follows a consistent pattern:
-1. Generate dimensions concurrently with proper dependency management
-2. Extract surrogate keys for foreign key relationships
-3. Generate fact tables using optimized concurrent algorithms
-4. Write data concurrently with error handling via channels
-
-## Key Files and Structure
-
-### Configuration and Input
-- `internal/core/input.go`: Handles interactive user input and model selection
-- `internal/core/sizing.go`: Calculates row counts from target size
-
-### Data Models
-- `internal/models/ecommerce/ecommerce.go`: E-commerce schema (customers, products, orders)
-- `internal/models/financial/financial.go`: Financial schema (companies, exchanges, stock prices)
-- `internal/models/medical/medical.go`: Medical schema (patients, doctors, appointments)
-- `internal/models/ecommerce-ds/ecommerce-ds.go`: TPC-DS based e-commerce schema
-
-### Generation Logic
-- `internal/simulation/*/simulate_dims.go`: Dimension table generation
-- `internal/simulation/*/simulate_facts.go`: Fact table generation with optimizations
-- `internal/core/orchestrator.go`: Main generation coordinator
-
-### Output Formats
-- `internal/formats/`: Multi-format writers (CSV, JSON, Parquet)
-- Uses Apache Arrow for Parquet generation with Snappy compression
-
-### Testing
-- `tests/benchmark_test.go`: Performance benchmarks
-- `tests/e2e_test.go`: End-to-end integration tests
-
-## Development Guidelines
-
-### Adding New Data Models
-1. Create model structs in `internal/models/[domain]/`
-2. Implement dimension generation in `internal/simulation/[domain]/simulate_dims.go`
-3. Implement fact generation in `internal/simulation/[domain]/simulate_facts.go`
-4. Add sizing logic in `internal/core/sizing.go`
-5. Update orchestrator to handle new model type
-
-### Performance Considerations
-- Always use per-worker RNG instances in concurrent code
-- Prefer byte slices and `strconv.Append*` for formatting
-- Use block allocation for ID generation to reduce atomic contention
-- Implement proper dependency management between dimensions and facts
-- Profile with `go test -bench=. -cpuprofile=cpu.out` for optimization
-
-### Testing Strategy
-- Benchmarks focus on generation speed for large datasets
-- End-to-end tests verify complete workflow and output correctness
-- Test multiple output formats and data models
+Dimensions remain resident. Worker limits are per fact table, and retail CSV
+writers allocate 64 MiB buffers. Process-wide budgets and command-level cancellation
+are further work. cmd/profile launches a fixed 10 GiB generation run, so choose
+profiling inputs deliberately.

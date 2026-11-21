@@ -70,4 +70,3 @@ SQL file.
 
 Live PostgreSQL validation and integrated benchmark execution are tracked in
 [the product direction](product-direction.md).
-
