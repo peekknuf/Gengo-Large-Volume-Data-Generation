@@ -2,6 +2,8 @@ package formats
 
 import (
 	"bufio"
+	"encoding/csv"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,53 +62,72 @@ func WriteStream(data <-chan interface{}, filename, format, outputDir string) er
 	}
 }
 
-func writeStreamToCSV(data <-chan interface{}, targetFilename string) error {
-	file, err := os.Create(targetFilename)
+// writeCSVFile reports buffered write and close failures before returning success.
+func writeCSVFile(filename string, write func(*bufio.Writer) error) (err error) {
+	file, err := os.Create(filename)
 	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
+		return fmt.Errorf("create %s: %w", filename, err)
 	}
-	defer file.Close()
+	bw := bufio.NewWriterSize(file, 1024*1024)
+	defer func() { err = errors.Join(err, bw.Flush(), file.Close()) }()
+	return write(bw)
+}
 
-	bufferedWriter := bufio.NewWriterSize(file, 1024*1024) // 1MB buffer
-	defer bufferedWriter.Flush()
-
-	first := true
-	for v := range data {
-		if first {
-			headers := getCSVHeaders(v)
-			for i, header := range headers {
-				if i > 0 {
-					bufferedWriter.WriteByte(',')
-				}
-				bufferedWriter.WriteString(header)
-			}
-			bufferedWriter.WriteByte('\n')
-			first = false
+func appendCSVRecord(buf []byte, fields []string) []byte {
+	for i, field := range fields {
+		if i > 0 {
+			buf = append(buf, ',')
 		}
-
-		record := toCSVRecord(v)
-		for i, field := range record {
-			if i > 0 {
-				bufferedWriter.WriteByte(',')
-			}
-			if needsQuoting(field) {
-				bufferedWriter.WriteByte('"')
-				for _, r := range field {
-					if r == '"' {
-						bufferedWriter.WriteString("\"")
-					} else {
-						bufferedWriter.WriteRune(r)
-					}
-				}
-				bufferedWriter.WriteByte('"')
-			} else {
-				bufferedWriter.WriteString(field)
-			}
-		}
-		bufferedWriter.WriteByte('\n')
+		buf = appendCSVField(buf, field)
 	}
+	return append(buf, '\n')
+}
 
-	return nil
+// appendCSVRow formats into reusable storage without per-field strings.
+func appendCSVRow(buf []byte, row reflect.Value) []byte {
+	for row.Kind() == reflect.Interface || row.Kind() == reflect.Ptr {
+		row = row.Elem()
+	}
+	for i := 0; i < row.NumField(); i++ {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+		field := row.Field(i)
+		switch field.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			buf = strconv.AppendInt(buf, field.Int(), 10)
+		case reflect.Float32, reflect.Float64:
+			buf = strconv.AppendFloat(buf, field.Float(), 'f', -1, field.Type().Bits())
+		case reflect.String:
+			buf = appendCSVField(buf, field.String())
+		case reflect.Struct:
+			if t, ok := field.Interface().(time.Time); ok {
+				buf = t.AppendFormat(buf, time.RFC3339)
+			}
+		}
+	}
+	return append(buf, '\n')
+}
+
+func writeStreamToCSV(data <-chan interface{}, targetFilename string) error {
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
+		first := true
+		rowBuf := make([]byte, 0, 1024)
+		for v := range data {
+			if first {
+				rowBuf = appendCSVRecord(rowBuf[:0], getCSVHeaders(v))
+				if _, err := bw.Write(rowBuf); err != nil {
+					return err
+				}
+				first = false
+			}
+			rowBuf = appendCSVRow(rowBuf[:0], reflect.ValueOf(v))
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // WriteSliceData writes any slice of structs to a CSV file.
@@ -126,19 +147,28 @@ func writeSliceToCSV(data interface{}, targetFilename string) error {
 	if slice.Kind() != reflect.Slice {
 		return fmt.Errorf("data is not a slice")
 	}
-
 	if slice.Len() == 0 {
-		return nil // Nothing to write
+		return nil
 	}
-
-	headers := getCSVHeaders(slice.Index(0).Interface())
-	records := make([][]string, slice.Len())
-
-	for i := 0; i < slice.Len(); i++ {
-		records[i] = toCSVRecord(slice.Index(i).Interface())
+	start := time.Now()
+	err := writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
+		rowBuf := appendCSVRecord(make([]byte, 0, 1024), getCSVHeaders(slice.Index(0).Interface()))
+		if _, err := bw.Write(rowBuf); err != nil {
+			return err
+		}
+		for i := 0; i < slice.Len(); i++ {
+			rowBuf = appendCSVRow(rowBuf[:0], slice.Index(i))
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-
-	return writeCSVHeaderAndRecords(targetFilename, headers, records)
+	fmt.Printf("Successfully wrote %d records to %s in %s\n", slice.Len(), targetFilename, time.Since(start).Round(time.Millisecond))
+	return nil
 }
 
 func getCSVHeaders(v interface{}) []string {
@@ -181,56 +211,18 @@ func toCSVRecord(v interface{}) []string {
 	return record
 }
 
-// writeCSVHeaderAndRecords writes CSV data using direct byte formatting instead of encoding/csv
-// for better performance with large datasets
+// writeCSVHeaderAndRecords uses the standard CSV encoder for preformatted rows.
 func writeCSVHeaderAndRecords(targetFilename string, headers []string, records [][]string) error {
-	startTime := time.Now()
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
-
-	// Use large buffer for better I/O performance
-	bufferedWriter := bufio.NewWriterSize(file, 16*1024*1024) // 16MB buffer
-	defer bufferedWriter.Flush()
-
-	// Write header directly with byte operations
-	for i, header := range headers {
-		if i > 0 {
-			bufferedWriter.WriteByte(',')
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
+		writer := csv.NewWriter(bw)
+		if err := writer.Write(headers); err != nil {
+			return err
 		}
-		bufferedWriter.WriteString(header)
-	}
-	bufferedWriter.WriteByte('\n')
-
-	// Write records directly with byte operations
-	for _, record := range records {
-		for i, field := range record {
-			if i > 0 {
-				bufferedWriter.WriteByte(',')
-			}
-			// Simple field writing - escape if contains comma or quote
-			if needsQuoting(field) {
-				bufferedWriter.WriteByte('"')
-				for _, r := range field {
-					if r == '"' {
-						bufferedWriter.WriteString("\"")
-					} else {
-						bufferedWriter.WriteRune(r)
-					}
-				}
-				bufferedWriter.WriteByte('"')
-			} else {
-				bufferedWriter.WriteString(field)
-			}
+		if err := writer.WriteAll(records); err != nil {
+			return err
 		}
-		bufferedWriter.WriteByte('\n')
-	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(records), targetFilename, duration.Round(time.Millisecond))
-	return nil
+		return writer.Error()
+	})
 }
 
 // needsQuoting checks if a field needs CSV quoting
