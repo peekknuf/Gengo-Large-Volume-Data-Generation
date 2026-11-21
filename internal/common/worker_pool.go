@@ -8,7 +8,9 @@ import (
 // GenericWorkerPool implements WorkerPool interface with configurable workers
 type GenericWorkerPool struct {
 	workers   int
-	taskQueue chan Task
+	taskQueue chan *future
+ submitMu sync.RWMutex
+ closeOnce sync.Once
 	workerWg  sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -16,11 +18,12 @@ type GenericWorkerPool struct {
 
 // NewGenericWorkerPool creates a new worker pool with specified number of workers
 func NewGenericWorkerPool(workers int) *GenericWorkerPool {
-	ctx, cancel := context.WithCancel(context.Background())
+	workers=max(1,workers)
+ ctx, cancel := context.WithCancel(context.Background())
 
 	pool := &GenericWorkerPool{
 		workers:   workers,
-		taskQueue: make(chan Task, workers*2), // Buffered queue
+		taskQueue: make(chan *future, workers*2), // Buffered queue
 		ctx:       ctx,
 		cancel:    cancel,
 	}
@@ -33,71 +36,43 @@ func NewGenericWorkerPool(workers int) *GenericWorkerPool {
 func (p *GenericWorkerPool) startWorkers() {
 	for i := 0; i < p.workers; i++ {
 		p.workerWg.Add(1)
-		go p.worker(i)
+		go p.worker()
 	}
 }
 
 // worker processes tasks from the queue
-func (p *GenericWorkerPool) worker(workerID int) {
-	defer p.workerWg.Done()
-
-	for {
-		select {
-		case task, ok := <-p.taskQueue:
-			if !ok {
-				// Queue closed, exit worker
-				return
-			}
-			// Execute task (in a real implementation, we might want to capture results)
-			task.Execute(p.ctx)
-
-		case <-p.ctx.Done():
-			// Context cancelled, exit worker
-			return
-		}
-	}
+func (p *GenericWorkerPool) worker() {
+ defer p.workerWg.Done()
+ for f:=range p.taskQueue {
+ if err:=p.ctx.Err();err!=nil { f.err=err;close(f.done);continue }
+ f.Execute(p.ctx)
+ }
 }
 
-// Submit submits a task to the worker pool and returns a Future
 func (p *GenericWorkerPool) Submit(task Task) Future {
-	future := &future{
-		task: task,
-		done: make(chan struct{}),
-	}
-
-	select {
-	case p.taskQueue <- task:
-		// Task submitted successfully
-		// In a real implementation, we'd need a way to get the result back
-		// For now, execute immediately and return result
-		go func() {
-			result, err := task.Execute(p.ctx)
-			future.result = result
-			future.err = err
-			close(future.done)
-		}()
-		return future
-
-	case <-p.ctx.Done():
-		// Pool is shutting down
-		future.err = p.ctx.Err()
-		close(future.done)
-		return future
-	}
+ f:=&future{task:task,done:make(chan struct{})}
+ p.submitMu.RLock()
+ defer p.submitMu.RUnlock()
+ if p.ctx.Err()==nil {
+ select {
+ case p.taskQueue<-f:return f
+ case <-p.ctx.Done():
+ }
+ }
+ f.err=p.ctx.Err()
+ close(f.done)
+ return f
 }
 
-// Close gracefully shuts down the worker pool
 func (p *GenericWorkerPool) Close() error {
-	// Cancel context to signal workers to stop
-	p.cancel()
-
-	// Close task queue to prevent new tasks
-	close(p.taskQueue)
-
-	// Wait for all workers to finish
-	p.workerWg.Wait()
-
-	return nil
+ p.closeOnce.Do(func(){
+ p.cancel()
+ p.submitMu.Lock()
+ close(p.taskQueue)
+ p.submitMu.Unlock()
+ p.workerWg.Wait()
+ })
+ return nil
 }
 
 // WorkerCount returns the number of workers in the pool
