@@ -95,7 +95,7 @@ func (m *MedicalGenerator) generatePatients(ctx context.Context, count int) ([]m
 		return medical.Patient{
 			PatientID:   int(m.GetIDGenerator().NextID()),
 			PatientName: gf.FirstName() + " " + gf.LastName(),
-			DateOfBirth: gf.DateRange(time.Date(1950, time.January, 1, 0, 0, 0, time.UTC), time.Date(2005, time.January, 1, 0, 0, 0, time.UTC)),
+			DateOfBirth: gf.DateRange(time.Date(1950, time.January, 1, 0, 0, 0, 0, time.UTC), time.Date(2005, time.January, 1, 0, 0, 0, 0, time.UTC)),
 			Gender:      gf.Gender(),
 		}
 	}
@@ -134,7 +134,7 @@ func (m *MedicalGenerator) generateClinics(ctx context.Context, count int) ([]me
 		return medical.Clinic{
 			ClinicID:   int(m.GetIDGenerator().NextID()),
 			ClinicName: fmt.Sprintf("%s Medical Center", gf.Company()),
-			Address:    fmt.Sprintf("%s, %s, %s %s", gf.Address(), gf.City(), gf.State(), gf.Zip()),
+			Address:    fmt.Sprintf("%s, %s, %s %s", gf.Street(), gf.City(), gf.State(), gf.Zip()),
 		}
 	}
 
@@ -165,7 +165,7 @@ func (m *MedicalGenerator) generateAppointments(ctx context.Context, count int, 
 			PatientID:       patientSampler.Sample(m.GetRNG()),
 			DoctorID:        doctorSampler.Sample(m.GetRNG()),
 			ClinicID:        clinicSampler.Sample(m.GetRNG()),
-			AppointmentDate: gf.DateRange(time.Date(2020, 1, 1, 0, 0, 0, time.UTC), time.Now()),
+			AppointmentDate: gf.DateRange(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), time.Now()),
 			Diagnosis:       diagnoses[m.GetRNG().Intn(len(diagnoses))],
 		}
 	}
