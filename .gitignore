@@ -14,3 +14,8 @@ data/
 Gengo.txt
 rec.mp4
 .kilo
+
+# Local credentials
+.env
+.env.*
+!.env.example
