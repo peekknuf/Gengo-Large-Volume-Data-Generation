@@ -2,13 +2,15 @@ package ecommerceds
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"math"
 	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -192,28 +194,28 @@ func appendPrice(buf []byte, cents int64) []byte {
 }
 
 // High-performance worker function for generating store sales with direct file writing
-func generateStoreSalesWorker(count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand, format string) error {
+func generateStoreSalesWorker(ctx context.Context, count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand, format string) (err error) {
 	if count <= 0 {
 		return nil
 	}
 
 	if format == "parquet" {
-		return generateStoreSalesWorkerParquet(count, startTicket, dims, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng)
+		return generateStoreSalesWorkerParquet(ctx, count, startTicket, dims, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng)
 	}
-
-	startTime := time.Now()
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filename, err)
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 
 	writer := bufio.NewWriterSize(file, bufferSize)
-	defer writer.Flush()
+	defer func() { err = errors.Join(err, writer.Flush()) }()
 
 	// Write header
 	header := "ss_sold_date_sk,ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_quantity,ss_wholesale_cost,ss_list_price,ss_sales_price,ss_ext_discount_amt,ss_ext_sales_price,ss_ext_wholesale_cost,ss_ext_list_price,ss_ext_tax,ss_coupon_amt,ss_net_paid,ss_net_paid_inc_tax,ss_net_profit\n"
-	writer.WriteString(header)
+	if _, err := writer.WriteString(header); err != nil {
+		return err
+	}
 
 	// Pre-calculate common ranges for better performance
 
@@ -221,6 +223,9 @@ func generateStoreSalesWorker(count int, startTicket int64, dims SaleDimensions,
 	rowBuf := make([]byte, 0, 4096)
 
 	for i := 0; i < count; i++ {
+		if i%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		buyer := dims.Customers[customerSampler.Sample(rng)]
 		rowBuf = rowBuf[:0] // Reset buffer
 
@@ -288,21 +293,21 @@ func generateStoreSalesWorker(count int, startTicket int64, dims SaleDimensions,
 		rowBuf = appendPrice(rowBuf, netProfit)
 		rowBuf = append(rowBuf, '\n')
 
-		writer.Write(rowBuf)
+		if _, err := writer.Write(rowBuf); err != nil {
+			return err
+		}
 
 		// Periodic flush for better performance
 		if (i+1)%flushBatchSize == 0 {
-			writer.Flush()
+			if err := writer.Flush(); err != nil {
+				return err
+			}
 		}
 	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Worker completed: %d store sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
 	return nil
 }
 
-func generateStoreSalesWorkerParquet(count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand) (err error) {
-	startTime := time.Now()
+func generateStoreSalesWorkerParquet(ctx context.Context, count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand) (err error) {
 
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "ss_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
@@ -371,6 +376,9 @@ func generateStoreSalesWorkerParquet(count int, startTicket int64, dims SaleDime
 	b22 := builder.Field(22).(*array.Float64Builder)
 
 	for i := 0; i < count; i++ {
+		if i%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		buyer := dims.Customers[customerSampler.Sample(rng)]
 		quantity := rng.Intn(10) + 1
 		listPriceCents := int64(1000 + rng.Intn(100000))
@@ -422,10 +430,27 @@ func generateStoreSalesWorkerParquet(count int, startTicket int64, dims SaleDime
 			return err
 		}
 	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Worker completed: %d store sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
 	return nil
+}
+
+func writeSaleShards(count int, dir, channel, format string, write func(context.Context, int, int64, string, *rand.Rand) error) error {
+	workers := min(runtime.GOMAXPROCS(0), count)
+	perWorker, extra := count/workers, count%workers
+	group, ctx := errgroup.WithContext(context.Background())
+	seed := time.Now().UnixNano()
+	for i := 0; i < workers; i++ {
+		rows := perWorker
+		if i < extra {
+			rows++
+		}
+		first := int64(i*perWorker+min(i, extra)) + 1
+		group.Go(func() error {
+			rng := rand.New(rand.NewSource(seed + int64(i)*0x9e3779b9))
+			filename := fmt.Sprintf("%s/fact_%s_sales_%d.%s", dir, channel, i, format)
+			return write(ctx, rows, first, filename, rng)
+		})
+	}
+	return group.Wait()
 }
 
 // GenerateStoreSalesOptimized generates store sales using worker-based file sharding
@@ -456,72 +481,41 @@ func GenerateStoreSalesOptimized(count int, dims SaleDimensions, itemSKs, storeS
 		return fmt.Errorf("failed to create promo sampler: %w", err)
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
-	recordsPerWorker := count / numWorkers
-	extraRecords := count % numWorkers
-
-	var wg sync.WaitGroup
-	baseSeed := time.Now().UnixNano()
-	startTicket := int64(1)
-
-	ext := ".csv"
-	if format == "parquet" {
-		ext = ".parquet"
-	}
-
-	for i := 0; i < numWorkers; i++ {
-		workerRecords := recordsPerWorker
-		if i < extraRecords {
-			workerRecords++
-		}
-
-		if workerRecords > 0 {
-			wg.Add(1)
-			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
-			rng := rand.New(rand.NewSource(workerSeed))
-			filename := fmt.Sprintf("%s/fact_store_sales_%d%s", outputDir, i, ext)
-			workerStartTicket := startTicket + int64(i*recordsPerWorker)
-
-			go func(records int, ticket int64, fname string, workerRNG *rand.Rand) {
-				defer wg.Done()
-				if err := generateStoreSalesWorker(records, ticket, dims, itemSampler, customerSampler, storeSampler, promoSampler, fname, workerRNG, format); err != nil {
-					fmt.Printf("Error in store sales worker: %v\n", err)
-				}
-			}(workerRecords, workerStartTicket, filename, rng)
-		}
-	}
-
-	wg.Wait()
-	return nil
+	return writeSaleShards(count, outputDir, "store", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
+		return generateStoreSalesWorker(ctx, records, first, dims, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng, format)
+	})
 }
 
 // High-performance worker function for generating catalog sales with direct file writing
-func generateCatalogSalesWorker(count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
+func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) (err error) {
 	if count <= 0 {
 		return nil
 	}
 
 	if format == "parquet" {
-		return generateCatalogSalesWorkerParquet(count, startOrder, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
+		return generateCatalogSalesWorkerParquet(ctx, count, startOrder, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
 	}
-
-	startTime := time.Now()
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filename, err)
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 
 	writer := bufio.NewWriterSize(file, bufferSize)
-	defer writer.Flush()
+	defer func() { err = errors.Join(err, writer.Flush()) }()
 
 	// Write header
 	header := "cs_sold_date_sk,cs_sold_time_sk,cs_ship_date_sk,cs_bill_customer_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_bill_addr_sk,cs_ship_customer_sk,cs_ship_cdemo_sk,cs_ship_hdemo_sk,cs_ship_addr_sk,cs_call_center_sk,cs_catalog_page_sk,cs_ship_mode_sk,cs_warehouse_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,cs_wholesale_cost,cs_list_price,cs_sales_price,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,cs_ext_tax,cs_coupon_amt,cs_ext_ship_cost,cs_net_paid,cs_net_paid_inc_tax,cs_net_paid_inc_ship,cs_net_paid_inc_ship_tax,cs_net_profit\n"
-	writer.WriteString(header)
+	if _, err := writer.WriteString(header); err != nil {
+		return err
+	}
 
 	rowBuf := make([]byte, 0, 4096) // Increased to 4KB to reduce allocations
 
 	for i := 0; i < count; i++ {
+		if i%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		sold, shipped := dims.datesForShipment(rng)
 		bill := dims.Customers[rng.Intn(len(dims.Customers))]
 		ship := dims.Customers[rng.Intn(len(dims.Customers))]
@@ -615,20 +609,20 @@ func generateCatalogSalesWorker(count int, startOrder int64, dims SaleDimensions
 		rowBuf = appendPrice(rowBuf, netProfit)
 		rowBuf = append(rowBuf, '\n')
 
-		writer.Write(rowBuf)
+		if _, err := writer.Write(rowBuf); err != nil {
+			return err
+		}
 
 		if (i+1)%flushBatchSize == 0 {
-			writer.Flush()
+			if err := writer.Flush(); err != nil {
+				return err
+			}
 		}
 	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Worker completed: %d catalog sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
 	return nil
 }
 
-func generateCatalogSalesWorkerParquet(count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
-	startTime := time.Now()
+func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
 
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "cs_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
@@ -719,6 +713,9 @@ func generateCatalogSalesWorkerParquet(count int, startOrder int64, dims SaleDim
 	b33 := builder.Field(33).(*array.Float64Builder)
 
 	for i := 0; i < count; i++ {
+		if i%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		sold, shipped := dims.datesForShipment(rng)
 		bill := dims.Customers[rng.Intn(len(dims.Customers))]
 		ship := dims.Customers[rng.Intn(len(dims.Customers))]
@@ -786,9 +783,6 @@ func generateCatalogSalesWorkerParquet(count int, startOrder int64, dims SaleDim
 			return err
 		}
 	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Worker completed: %d catalog sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
 	return nil
 }
 
@@ -798,72 +792,41 @@ func GenerateCatalogSalesOptimized(count int, dims SaleDimensions, itemSKs, call
 		return nil
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
-	recordsPerWorker := count / numWorkers
-	extraRecords := count % numWorkers
-
-	ext := ".csv"
-	if format == "parquet" {
-		ext = ".parquet"
-	}
-
-	var wg sync.WaitGroup
-	baseSeed := time.Now().UnixNano()
-	startOrder := int64(1)
-
-	for i := 0; i < numWorkers; i++ {
-		workerRecords := recordsPerWorker
-		if i < extraRecords {
-			workerRecords++
-		}
-
-		if workerRecords > 0 {
-			wg.Add(1)
-			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
-			rng := rand.New(rand.NewSource(workerSeed))
-			filename := fmt.Sprintf("%s/fact_catalog_sales_%d%s", outputDir, i, ext)
-			workerStartOrder := startOrder + int64(i*recordsPerWorker)
-
-			go func(records int, order int64, fname string, workerRNG *rand.Rand) {
-				defer wg.Done()
-				if err := generateCatalogSalesWorker(records, order, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
-					fmt.Printf("Error in catalog sales worker: %v\n", err)
-				}
-			}(workerRecords, workerStartOrder, filename, rng)
-		}
-	}
-
-	wg.Wait()
-	return nil
+	return writeSaleShards(count, outputDir, "catalog", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
+		return generateCatalogSalesWorker(ctx, records, first, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
+	})
 }
 
 // High-performance worker function for generating web sales with direct file writing
-func generateWebSalesWorker(count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
+func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) (err error) {
 	if count <= 0 {
 		return nil
 	}
 
 	if format == "parquet" {
-		return generateWebSalesWorkerParquet(count, startOrder, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
+		return generateWebSalesWorkerParquet(ctx, count, startOrder, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
 	}
-
-	startTime := time.Now()
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", filename, err)
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 
 	writer := bufio.NewWriterSize(file, bufferSize)
-	defer writer.Flush()
+	defer func() { err = errors.Join(err, writer.Flush()) }()
 
 	// Write header
 	header := "ws_sold_date_sk,ws_sold_time_sk,ws_ship_date_sk,ws_item_sk,ws_bill_customer_sk,ws_bill_cdemo_sk,ws_bill_hdemo_sk,ws_bill_addr_sk,ws_ship_customer_sk,ws_ship_cdemo_sk,ws_ship_hdemo_sk,ws_ship_addr_sk,ws_web_page_sk,ws_web_site_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_promo_sk,ws_order_number,ws_quantity,ws_wholesale_cost,ws_list_price,ws_sales_price,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,ws_ext_tax,ws_coupon_amt,ws_ext_ship_cost,ws_net_paid,ws_net_paid_inc_tax,ws_net_paid_inc_ship,ws_net_paid_inc_ship_tax,ws_net_profit\n"
-	writer.WriteString(header)
+	if _, err := writer.WriteString(header); err != nil {
+		return err
+	}
 
 	rowBuf := make([]byte, 0, 4096) // Increased to 4KB to reduce allocations
 
 	for i := 0; i < count; i++ {
+		if i%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		sold, shipped := dims.datesForShipment(rng)
 		bill := dims.Customers[rng.Intn(len(dims.Customers))]
 		ship := dims.Customers[rng.Intn(len(dims.Customers))]
@@ -957,20 +920,20 @@ func generateWebSalesWorker(count int, startOrder int64, dims SaleDimensions, it
 		rowBuf = appendPrice(rowBuf, netProfit)
 		rowBuf = append(rowBuf, '\n')
 
-		writer.Write(rowBuf)
+		if _, err := writer.Write(rowBuf); err != nil {
+			return err
+		}
 
 		if (i+1)%flushBatchSize == 0 {
-			writer.Flush()
+			if err := writer.Flush(); err != nil {
+				return err
+			}
 		}
 	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Worker completed: %d web sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
 	return nil
 }
 
-func generateWebSalesWorkerParquet(count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
-	startTime := time.Now()
+func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
 
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "ws_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
@@ -1061,6 +1024,9 @@ func generateWebSalesWorkerParquet(count int, startOrder int64, dims SaleDimensi
 	b33 := builder.Field(33).(*array.Float64Builder)
 
 	for i := 0; i < count; i++ {
+		if i%1024 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		sold, shipped := dims.datesForShipment(rng)
 		bill := dims.Customers[rng.Intn(len(dims.Customers))]
 		ship := dims.Customers[rng.Intn(len(dims.Customers))]
@@ -1128,9 +1094,6 @@ func generateWebSalesWorkerParquet(count int, startOrder int64, dims SaleDimensi
 			return err
 		}
 	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Worker completed: %d web sales records to %s in %s\n", count, filename, duration.Round(time.Millisecond))
 	return nil
 }
 
@@ -1140,43 +1103,9 @@ func GenerateWebSalesOptimized(count int, dims SaleDimensions, itemSKs, webPageS
 		return nil
 	}
 
-	numWorkers := runtime.GOMAXPROCS(0)
-	recordsPerWorker := count / numWorkers
-	extraRecords := count % numWorkers
-
-	ext := ".csv"
-	if format == "parquet" {
-		ext = ".parquet"
-	}
-
-	var wg sync.WaitGroup
-	baseSeed := time.Now().UnixNano()
-	startOrder := int64(1)
-
-	for i := 0; i < numWorkers; i++ {
-		workerRecords := recordsPerWorker
-		if i < extraRecords {
-			workerRecords++
-		}
-
-		if workerRecords > 0 {
-			wg.Add(1)
-			workerSeed := baseSeed + int64(i)*int64(0x9e3779b9)
-			rng := rand.New(rand.NewSource(workerSeed))
-			filename := fmt.Sprintf("%s/fact_web_sales_%d%s", outputDir, i, ext)
-			workerStartOrder := startOrder + int64(i*recordsPerWorker)
-
-			go func(records int, order int64, fname string, workerRNG *rand.Rand) {
-				defer wg.Done()
-				if err := generateWebSalesWorker(records, order, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
-					fmt.Printf("Error in web sales worker: %v\n", err)
-				}
-			}(workerRecords, workerStartOrder, filename, rng)
-		}
-	}
-
-	wg.Wait()
-	return nil
+	return writeSaleShards(count, outputDir, "web", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
+		return generateWebSalesWorker(ctx, records, first, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
+	})
 }
 
 // Legacy channel-based functions - kept for backward compatibility but not used in optimized flow

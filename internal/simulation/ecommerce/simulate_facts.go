@@ -2,7 +2,10 @@ package ecommerce
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -216,7 +219,7 @@ func GenerateECommerceModelData(numOrders, numItemsTotal int, customerIDs []int,
 	return generateECommerceModelDataParquet(numOrders, numItemsTotal, customerIDs, customerAddressSlice, productDetails, productIDsForSampling, outputDir)
 }
 
-func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
+func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) (err error) {
 	productSampler, err := NewAliasSampler(productIDsForSampling)
 	if err != nil {
 		return fmt.Errorf("failed to set up product sampler: %w", err)
@@ -234,12 +237,14 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 	if err != nil {
 		return fmt.Errorf("failed to create header file: %w", err)
 	}
-	defer headerFile.Close()
+	defer func() { err = errors.Join(err, headerFile.Close()) }()
 
 	sharedHeaderWriter := bufio.NewWriterSize(headerFile, 64<<20)
-	defer sharedHeaderWriter.Flush()
+	defer func() { err = errors.Join(err, sharedHeaderWriter.Flush()) }()
 
-	sharedHeaderWriter.WriteString("order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp_unix,order_status\n")
+	if _, err := sharedHeaderWriter.WriteString("order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp_unix,order_status\n"); err != nil {
+		return err
+	}
 
 	var headerMutex sync.Mutex
 
@@ -248,7 +253,7 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 		itemShardFilenames[i] = fmt.Sprintf("%s/fact_order_items_%d.csv", outputDir, i)
 	}
 
-	var wg sync.WaitGroup
+	group, ctx := errgroup.WithContext(context.Background())
 	baseSeed := time.Now().UnixNano()
 
 	for i := 0; i < numWorkers; i++ {
@@ -262,23 +267,24 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 			startItemID := childPrefix(numOrders, numItemsTotal, startOrderID-1) + 1
 			endItemID := childPrefix(numOrders, numItemsTotal, startOrderID-1+numToGen) + 1
 
-			wg.Add(1)
-			go func(workerID, startOrderID, numToGen int, startItemID, endItemID int) {
-				defer wg.Done()
+			workerID := i
+			group.Go(func() (err error) {
 
 				rng := rand.New(rand.NewPCG(uint64(baseSeed), uint64(workerID)))
 				nextItemID := startItemID
 
 				itemFile, err := os.Create(itemShardFilenames[workerID])
 				if err != nil {
-					return
+					return err
 				}
-				defer itemFile.Close()
+				defer func() { err = errors.Join(err, itemFile.Close()) }()
 
 				itemWriter := bufio.NewWriterSize(itemFile, 64<<20)
-				defer itemWriter.Flush()
+				defer func() { err = errors.Join(err, itemWriter.Flush()) }()
 
-				itemWriter.WriteString("order_item_id,order_id,product_id,quantity,unit_price,discount\n")
+				if _, err := itemWriter.WriteString("order_item_id,order_id,product_id,quantity,unit_price,discount\n"); err != nil {
+					return err
+				}
 
 				headerBatchSize := 1000
 				headerBatch := make([]byte, 0, 256*1024)
@@ -287,6 +293,9 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 				orderIDBuf := make([]byte, 0, 20)
 
 				for orderID := startOrderID; orderID < startOrderID+numToGen; orderID++ {
+					if err := ctx.Err(); err != nil {
+						return err
+					}
 					customerID := customerSampler.Sample(rng)
 					addresses := customerAddressSlice[customerID]
 					shippingAddressID := addresses[int(rng.Uint64()%uint64(len(addresses)))]
@@ -314,8 +323,11 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 
 					if headerBatchCount >= headerBatchSize {
 						headerMutex.Lock()
-						sharedHeaderWriter.Write(headerBatch)
+						_, err = sharedHeaderWriter.Write(headerBatch)
 						headerMutex.Unlock()
+						if err != nil {
+							return err
+						}
 						headerBatch = headerBatch[:0]
 						headerBatchCount = 0
 					}
@@ -350,21 +362,26 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 						itemBuf = appendDiscount(itemBuf, discountBP)
 						itemBuf = append(itemBuf, '\n')
 
-						itemWriter.Write(itemBuf)
+						if _, err := itemWriter.Write(itemBuf); err != nil {
+							return err
+						}
 					}
 				}
 
 				if headerBatchCount > 0 {
 					headerMutex.Lock()
-					sharedHeaderWriter.Write(headerBatch)
+					_, err = sharedHeaderWriter.Write(headerBatch)
 					headerMutex.Unlock()
+					if err != nil {
+						return err
+					}
 				}
-			}(i, startOrderID, numToGen, startItemID, endItemID)
+				return nil
+			})
 		}
 	}
 
-	wg.Wait()
-	return nil
+	return group.Wait()
 }
 
 func generateECommerceModelDataParquet(numOrders, numItemsTotal int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
