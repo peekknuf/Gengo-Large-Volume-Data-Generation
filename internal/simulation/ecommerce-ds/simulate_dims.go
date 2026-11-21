@@ -619,7 +619,7 @@ func GenerateDateDim(startYear, endYear int) []interface{} {
 			D_Dow:              dow,
 			D_Moy:              month,
 			D_Dom:              day,
-			D_Qoy:              (month-1)%3 + 1,
+			D_Qoy:              quarter,
 			D_FyYear:           year,
 			D_FyQuarterSeq:     year*4 + quarter - 1,
 			D_FyWeekSeq:        year*52 + d.YearDay()/7,

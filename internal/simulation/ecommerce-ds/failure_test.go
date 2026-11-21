@@ -14,7 +14,7 @@ func TestShardCreationFailure(t *testing.T) {
 		if err := os.Mkdir(filepath.Join(dir, "fact_store_sales_0."+format), 0755); err != nil {
 			t.Fatal(err)
 		}
-		if err := GenerateStoreSalesOptimized(3, dims, ids, ids, ids, dir, format); err == nil {
+		if err := GenerateStoreSalesOptimized(t.Context(), 3, dims, ids, ids, ids, dir, format); err == nil {
 			t.Fatalf("%s swallowed shard error", format)
 		}
 	}

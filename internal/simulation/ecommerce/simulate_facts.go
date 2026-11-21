@@ -33,6 +33,12 @@ var (
 	}
 )
 
+func orderUnixTime(rng *rand.Rand) int64 {
+	const start = 1577836800 // 2020-01-01 UTC
+	const end = 1735689600   // 2025-01-01 UTC, exclusive
+	return start + rng.Int64N(end-start)
+}
+
 func fastItoa(buf []byte, v int64) []byte {
 	if v < 10 {
 		return append(buf, byte('0'+v))
@@ -301,7 +307,7 @@ func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []i
 					shippingAddressID := addresses[int(rng.Uint64()%uint64(len(addresses)))]
 					billingAddressID := addresses[int(rng.Uint64()%uint64(len(addresses)))]
 
-					orderTimestamp := int64(rng.Uint64()%(5*31536000)) + 1577836800
+					orderTimestamp := orderUnixTime(rng)
 					orderStatus := orderStatuses[int(rng.Uint64()%uint64(len(orderStatuses)))]
 
 					orderIDBuf = orderIDBuf[:0]
@@ -431,7 +437,7 @@ func generateECommerceModelDataParquet(numOrders, numItemsTotal int, customerIDs
 				shippingAddressID := addresses[rng.IntN(len(addresses))]
 				billingAddressID := addresses[rng.IntN(len(addresses))]
 
-				orderTimestamp := time.Unix(rng.Int64N(31536000)+31536000, 0)
+				orderTimestamp := time.Unix(orderUnixTime(rng), 0).UTC()
 				orderStatus := orderStatuses[rng.IntN(len(orderStatuses))]
 
 				headers = append(headers, ecommercemodels.OrderHeader{

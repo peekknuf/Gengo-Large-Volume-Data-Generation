@@ -34,7 +34,10 @@ Row overrides use lowercase plan names with underscores. Add `--dry-run` to insp
 - Formats: CSV and Parquet. JSON is not supported by the complete pipeline.
 - Size is approximate, in GiB. Compression and minimum table sizes affect output.
 - The retail model is TPC-DS-inspired. Returns and inventory are not generated;
-  foreign-key consistency is incomplete. Do not use it for audited TPC-DS results.
+  zero in a site or call-center closing date denotes an open location.
+- Retail date keys are Unix days. E-commerce order timestamps use Unix seconds
+  in CSV and microsecond timestamps in Parquet.
+- Financial prices reference an exchange per price row.
 - Some generators keep all rows in memory. Large runs can require substantial RAM.
 - Use an empty or new output directory. Gengo publishes it after generation succeeds.
 

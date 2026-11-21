@@ -3,9 +3,11 @@ package core
 import (
 	"encoding/csv"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"testing"
 
@@ -128,6 +130,34 @@ func readKeyColumns(t *testing.T, path, format string, spec tableContract, visit
 	}
 }
 
+func checkRetailAmounts(t *testing.T, dir, format string) {
+	t.Helper()
+	for _, channel := range []struct{ name, prefix string }{{"store", "ss_"}, {"catalog", "cs_"}, {"web", "ws_"}} {
+		fields := map[string]string{}
+		for _, suffix := range []string{"ext_sales_price", "coupon_amt", "net_paid", "ext_list_price", "ext_discount_amt"} {
+			fields[channel.prefix+suffix] = ""
+		}
+		spec := tableContract{name: "fact_" + channel.name + "_sales", primary: channel.prefix + "item_sk", foreign: fields}
+		files, err := filepath.Glob(filepath.Join(dir, spec.name+"_*."+format))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range files {
+			readKeyColumns(t, path, format, spec, func(_ string, refs map[string]string) {
+				cents := func(suffix string) int64 {
+					v, err := strconv.ParseFloat(refs[channel.prefix+suffix], 64)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return int64(math.Round(100 * v))
+				}
+				if cents("net_paid") != cents("ext_sales_price")-cents("coupon_amt") || cents("ext_sales_price") != cents("ext_list_price")-cents("ext_discount_amt") {
+					t.Fatalf("%s inconsistent sale amounts %v", path, refs)
+				}
+			})
+		}
+	}
+}
 func TestSmallDatasetContracts(t *testing.T) {
 	old := runtime.GOMAXPROCS(3)
 	defer runtime.GOMAXPROCS(old)
@@ -175,6 +205,9 @@ func TestSmallDatasetContracts(t *testing.T) {
 				dir := t.TempDir()
 				if err := GenerateModelData(tc.model, tc.plan, format, dir); err != nil {
 					t.Fatal(err)
+				}
+				if tc.model == "ecommerce-ds" {
+					checkRetailAmounts(t, dir, format)
 				}
 				keys := map[string]map[string]bool{}
 				for _, table := range tc.tables {

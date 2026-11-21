@@ -270,7 +270,7 @@ func generateStoreSalesWorker(ctx context.Context, count int, startTicket int64,
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100 // 8% tax
 		couponAmt := int64(0)
-		netPaid := extSalesPrice - extDiscountAmt
+		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
 		netProfit := netPaid - extWholesaleCost
 
@@ -390,7 +390,7 @@ func generateStoreSalesWorkerParquet(ctx context.Context, count int, startTicket
 		extWholesaleCost := wholesaleCents * int64(quantity)
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
-		netPaid := extSalesPrice - extDiscountAmt
+		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
 		netProfit := netPaid - extWholesaleCost
 
@@ -433,10 +433,10 @@ func generateStoreSalesWorkerParquet(ctx context.Context, count int, startTicket
 	return nil
 }
 
-func writeSaleShards(count int, dir, channel, format string, write func(context.Context, int, int64, string, *rand.Rand) error) error {
+func writeSaleShards(parent context.Context, count int, dir, channel, format string, write func(context.Context, int, int64, string, *rand.Rand) error) error {
 	workers := min(runtime.GOMAXPROCS(0), count)
 	perWorker, extra := count/workers, count%workers
-	group, ctx := errgroup.WithContext(context.Background())
+	group, ctx := errgroup.WithContext(parent)
 	seed := time.Now().UnixNano()
 	for i := 0; i < workers; i++ {
 		rows := perWorker
@@ -454,7 +454,7 @@ func writeSaleShards(count int, dir, channel, format string, write func(context.
 }
 
 // GenerateStoreSalesOptimized generates store sales using worker-based file sharding
-func GenerateStoreSalesOptimized(count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -481,7 +481,7 @@ func GenerateStoreSalesOptimized(count int, dims SaleDimensions, itemSKs, storeS
 		return fmt.Errorf("failed to create promo sampler: %w", err)
 	}
 
-	return writeSaleShards(count, outputDir, "store", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
+	return writeSaleShards(ctx, count, outputDir, "store", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateStoreSalesWorker(ctx, records, first, dims, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng, format)
 	})
 }
@@ -578,7 +578,7 @@ func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64
 		extTax := extSalesPrice * 8 / 100
 		couponAmt := int64(0)
 		extShipCost := int64(500 + rng.Intn(2000)) // 5.00 to 25.00
-		netPaid := extSalesPrice - extDiscountAmt
+		netPaid := extSalesPrice                   // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
@@ -730,7 +730,7 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
 		extShipCost := int64(500 + rng.Intn(2000))
-		netPaid := extSalesPrice - extDiscountAmt
+		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
@@ -787,12 +787,12 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 }
 
 // GenerateCatalogSalesOptimized generates catalog sales using worker-based file sharding
-func GenerateCatalogSalesOptimized(count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateCatalogSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
 
-	return writeSaleShards(count, outputDir, "catalog", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
+	return writeSaleShards(ctx, count, outputDir, "catalog", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateCatalogSalesWorker(ctx, records, first, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
 	})
 }
@@ -889,7 +889,7 @@ func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, di
 		extTax := extSalesPrice * 8 / 100
 		couponAmt := int64(0)
 		extShipCost := int64(500 + rng.Intn(2000))
-		netPaid := extSalesPrice - extDiscountAmt
+		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
@@ -1041,7 +1041,7 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
 		extShipCost := int64(500 + rng.Intn(2000))
-		netPaid := extSalesPrice - extDiscountAmt
+		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
@@ -1098,12 +1098,12 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 }
 
 // GenerateWebSalesOptimized generates web sales using worker-based file sharding
-func GenerateWebSalesOptimized(count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateWebSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
 
-	return writeSaleShards(count, outputDir, "web", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
+	return writeSaleShards(ctx, count, outputDir, "web", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateWebSalesWorker(ctx, records, first, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
 	})
 }
