@@ -1,6 +1,12 @@
 # Binaries
 Gengo
 Gengo_test
+*.exe
+tests/gengo-test
+tests/output_*/
+bin/
+data/
+*.prof
 
 
 

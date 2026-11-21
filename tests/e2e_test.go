@@ -2,7 +2,6 @@ package tests
 
 import (
 	"encoding/csv"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -58,7 +57,11 @@ func moduleRoot(t *testing.T) string {
 
 func binaryPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join(moduleRoot(t), "tests", "gengo-test")
+	name := "gengo-test"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(t.TempDir(), name)
 }
 
 func TestBuild(t *testing.T) {
@@ -88,6 +91,12 @@ func (tc testCase) outputDir(root string) string {
 }
 
 func TestE2E(t *testing.T) {
+	bin := binaryPath(t)
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = moduleRoot(t)
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build failed: %v\n%s", err, out)
+	}
 	cases := []testCase{
 		{"ecommerce", "csv"},
 		{"ecommerce", "parquet"},
@@ -102,28 +111,31 @@ func TestE2E(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name(), func(t *testing.T) {
-			runE2ETest(t, tc)
+			runE2ETest(t, tc, bin)
 		})
 	}
 }
 
-func runE2ETest(t *testing.T, tc testCase) {
+func runE2ETest(t *testing.T, tc testCase, bin string) {
 	t.Helper()
 	root := moduleRoot(t)
-	bin := binaryPath(t)
 	size := getTestSizeGB()
 	timeout := getTestTimeout()
-	outputDir := tc.outputDir(root)
+	outputDir := t.TempDir()
+	if keepOutput() {
+		outputDir = tc.outputDir(root)
+	}
 
 	if !keepOutput() {
 		defer os.RemoveAll(outputDir)
 	}
 
 	start := time.Now()
-	ctx := t.Context()
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "gen",
 		"--model", tc.model,
-		"--size", fmt.Sprintf("%.2f", size),
+		"--size", strconv.FormatFloat(size, 'g', -1, 64),
 		"--format", tc.format,
 		"--output", outputDir,
 	)
@@ -131,15 +143,8 @@ func runE2ETest(t *testing.T, tc testCase) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Run()
-	}()
-
-	var err error
-	select {
-	case err = <-done:
-	case <-time.After(timeout):
+	err := cmd.Run()
+	if ctx.Err() != nil {
 		t.Fatalf("test timed out after %v", timeout)
 	}
 	if err != nil {
@@ -329,7 +334,6 @@ func validateCSVContent(t *testing.T, path, model, tableName string) {
 	defer f.Close()
 
 	reader := csv.NewReader(f)
-	reader.FieldsPerRecord = -1
 
 	header, err := reader.Read()
 	if err != nil {
@@ -377,7 +381,7 @@ func validateCSVContent(t *testing.T, path, model, tableName string) {
 			return
 		}
 		if len(record) != len(header) {
-			t.Logf("table %s row %d: header has %d fields, got %d (possible unquoted commas in data)", tableName, i+1, len(header), len(record))
+			t.Errorf("table %s row %d: header has %d fields, got %d", tableName, i+1, len(header), len(record))
 			continue
 		}
 
