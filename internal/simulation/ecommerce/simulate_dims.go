@@ -43,15 +43,15 @@ func GenerateCustomers(count int) []ecommerce.Customer {
 	return customers
 }
 
-func GenerateCustomerAddresses(customers []ecommerce.Customer) []ecommerce.CustomerAddress {
+func GenerateCustomerAddresses(customers []ecommerce.Customer, count int) []ecommerce.CustomerAddress {
 	if len(customers) == 0 {
 		return []ecommerce.CustomerAddress{}
 	}
-	addresses := make([]ecommerce.CustomerAddress, 0, len(customers)*2)
+	addresses := make([]ecommerce.CustomerAddress, 0, count)
 	addressIDCounter := 1
 
-	for _, customer := range customers {
-		numAddresses := rand.Intn(3) + 1 // 1 to 3 addresses per customer
+	for i, customer := range customers {
+		numAddresses := childCount(count-len(addresses), len(customers)-i-1, 3, rand.Intn)
 		for j := 0; j < numAddresses; j++ {
 			addrInfo := gf.Address()
 			addressType := addressTypes[rand.Intn(len(addressTypes))]

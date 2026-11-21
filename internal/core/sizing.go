@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	AvgItemsPerOrder                = 5.0
+	AvgItemsPerOrder                = 5.5
 	DefaultOrdersPerCustomerRatio   = 10.0
 	DefaultProductsPerSupplierRatio = 25.0
 	AvgAddressesPerCustomer         = 1.5
@@ -88,7 +88,11 @@ func CalculateECommerceDSRowCounts(targetGB float64, format string) (ECommerceDS
 	}
 
 	// Adjust divisor for complete TPC-DS schema (17 dimensions + 7 fact tables)
-	totalSalesRows := int(math.Max(1.0, math.Round(targetBytes/avgFactRowSize/0.7*formatMultiplier)))
+	rows := math.Max(1, math.Round(targetBytes/avgFactRowSize/0.7*formatMultiplier))
+	if math.IsNaN(rows) || rows >= float64(math.MaxInt) {
+		return ECommerceDSRowCounts{}, fmt.Errorf("target size exceeds supported row count")
+	}
+	totalSalesRows := int(rows)
 
 	numStoreSales := int(float64(totalSalesRows) * storeSalesRatio)
 	numWebSales := int(float64(totalSalesRows) * webSalesRatio)
@@ -200,13 +204,17 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 
 	const effectiveSizePerOrderItem = 65.0 // Bytes/item, includes proportional share of all dimensions and header
 
-	numOrderItems := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerOrderItem)))
+	rows := math.Max(1, math.Round(targetBytes/effectiveSizePerOrderItem))
+	if math.IsNaN(rows) || rows >= float64(math.MaxInt32) {
+		return ECommerceRowCounts{}, fmt.Errorf("target size exceeds supported row count")
+	}
+	numOrderItems := int(rows)
 
 	numOrderHeaders := int(math.Max(1.0, math.Round(float64(numOrderItems)/AvgItemsPerOrder)))
 	numCustomers := int(math.Max(1.0, math.Round(float64(numOrderHeaders)/DefaultOrdersPerCustomerRatio)))
 	numCustomerAddresses := int(math.Max(1.0, math.Round(float64(numCustomers)*AvgAddressesPerCustomer)))
 
-	// Create realistic business hierarchy: suppliers → products → customers
+	// Create realistic business hierarchy: suppliers  products  customers
 	numSuppliers := int(math.Max(1.0, math.Round(float64(numCustomers)/100.0))) // 100 customers per supplier
 	numProducts := int(math.Max(1.0, math.Round(float64(numSuppliers)*DefaultProductsPerSupplierRatio)))
 
@@ -249,7 +257,11 @@ func CalculateFinancialRowCounts(targetGB float64) (financialsimulation.Financia
 
 	const effectiveSizePerDailyStockPrice = 139.0 // Bytes/price, includes proportional share of all dimensions
 
-	numPrices := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerDailyStockPrice)))
+	rows := math.Max(1, math.Round(targetBytes/effectiveSizePerDailyStockPrice))
+	if math.IsNaN(rows) || rows >= float64(math.MaxInt32) {
+		return financialsimulation.FinancialRowCounts{}, fmt.Errorf("target size exceeds supported row count")
+	}
+	numPrices := int(rows)
 
 	numCompanies := int(math.Max(1.0, math.Round(float64(numPrices)/(AvgTradingDaysPerYear*NumYearsOfData))))
 	numExchanges := 5 // Fixed number of exchanges
@@ -281,7 +293,11 @@ func CalculateMedicalRowCounts(targetGB float64) (medicalsimulation.MedicalRowCo
 
 	const effectiveSizePerAppointment = 200.0 // Bytes/appointment, estimate for medical data
 
-	numAppointments := int(math.Max(1.0, math.Round(targetBytes/effectiveSizePerAppointment)))
+	rows := math.Max(1, math.Round(targetBytes/effectiveSizePerAppointment))
+	if math.IsNaN(rows) || rows >= float64(math.MaxInt32) {
+		return medicalsimulation.MedicalRowCounts{}, fmt.Errorf("target size exceeds supported row count")
+	}
+	numAppointments := int(rows)
 	numPatients := int(math.Max(1.0, math.Round(float64(numAppointments)/5.0))) // 5 appointments per patient
 	numDoctors := int(math.Max(1.0, math.Round(float64(numPatients)/100.0)))    // 100 patients per doctor
 	numClinics := int(math.Max(1.0, math.Round(float64(numDoctors)/20.0)))      // 20 doctors per clinic

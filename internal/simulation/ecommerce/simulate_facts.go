@@ -87,15 +87,16 @@ func appendDiscount(buf []byte, basisPoints int64) []byte {
 	return buf
 }
 
-type idBlock struct{ next, end int64 }
+// childPrefix gives the exact number of child rows assigned to a prefix of parents.
+func childPrefix(parents, children, prefix int) int {
+	return prefix*(children/parents) + min(prefix, children%parents)
+}
 
-func (b *idBlock) nextID() int64 {
-	if b.next == b.end {
-		return -1
-	}
-	v := b.next
-	b.next++
-	return v
+// childCount preserves enough rows for every remaining parent.
+func childCount(remaining, parentsAfter, maxPerParent int, draw func(int) int) int {
+	low := max(1, remaining-parentsAfter*maxPerParent)
+	high := min(maxPerParent, remaining-parentsAfter)
+	return low + draw(high-low+1)
 }
 
 type AliasSampler struct {
@@ -187,8 +188,11 @@ func (s *AliasSampler) Sample(rng *rand.Rand) int {
 	return s.ids[s.alias[i]]
 }
 
-func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string, format string) error {
-	if numOrders <= 0 {
+func GenerateECommerceModelData(numOrders, numItemsTotal int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string, format string) error {
+	if numOrders < 0 || numItemsTotal < numOrders || int64(numItemsTotal) > 10*int64(numOrders) || numItemsTotal > math.MaxInt32 {
+		return fmt.Errorf("order items require 1 to 10 rows per order and IDs within int32")
+	}
+	if numOrders == 0 {
 		return nil
 	}
 	if len(customerIDs) == 0 || len(productIDsForSampling) == 0 || len(customerAddresses) == 0 {
@@ -207,12 +211,12 @@ func GenerateECommerceModelData(numOrders int, customerIDs []int, customerAddres
 	}
 
 	if format == "csv" {
-		return generateECommerceModelDataCSV(numOrders, customerIDs, customerAddressSlice, productDetails, productIDsForSampling, outputDir)
+		return generateECommerceModelDataCSV(numOrders, numItemsTotal, customerIDs, customerAddressSlice, productDetails, productIDsForSampling, outputDir)
 	}
-	return generateECommerceModelDataParquet(numOrders, customerIDs, customerAddressSlice, productDetails, productIDsForSampling, outputDir)
+	return generateECommerceModelDataParquet(numOrders, numItemsTotal, customerIDs, customerAddressSlice, productDetails, productIDsForSampling, outputDir)
 }
 
-func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
+func generateECommerceModelDataCSV(numOrders, numItemsTotal int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
 	productSampler, err := NewAliasSampler(productIDsForSampling)
 	if err != nil {
 		return fmt.Errorf("failed to set up product sampler: %w", err)
@@ -244,14 +248,8 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 		itemShardFilenames[i] = fmt.Sprintf("%s/fact_order_items_%d.csv", outputDir, i)
 	}
 
-	const avgItemsPerOrder = 11.0
-	totalItems := int64(float64(numOrders) * avgItemsPerOrder)
-	itemsPerWorker := totalItems / int64(numWorkers)
-	extraItems := totalItems % int64(numWorkers)
-
 	var wg sync.WaitGroup
 	baseSeed := time.Now().UnixNano()
-	startItemID := int64(1)
 
 	for i := 0; i < numWorkers; i++ {
 		startOrderID := (i * ordersPerWorker) + 1
@@ -261,17 +259,15 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 		}
 
 		if numToGen > 0 {
-			endItemID := startItemID + itemsPerWorker
-			if i < int(extraItems) {
-				endItemID++
-			}
+			startItemID := childPrefix(numOrders, numItemsTotal, startOrderID-1) + 1
+			endItemID := childPrefix(numOrders, numItemsTotal, startOrderID-1+numToGen) + 1
 
 			wg.Add(1)
-			go func(workerID, startOrderID, numToGen int, startItemID, endItemID int64) {
+			go func(workerID, startOrderID, numToGen int, startItemID, endItemID int) {
 				defer wg.Done()
 
 				rng := rand.New(rand.NewPCG(uint64(baseSeed), uint64(workerID)))
-				idGen := &idBlock{next: startItemID, end: endItemID}
+				nextItemID := startItemID
 
 				itemFile, err := os.Create(itemShardFilenames[workerID])
 				if err != nil {
@@ -324,7 +320,7 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 						headerBatchCount = 0
 					}
 
-					numItems := int(rng.Uint64()%10) + 1
+					numItems := childCount(endItemID-nextItemID, startOrderID+numToGen-orderID-1, 10, rng.IntN)
 					for j := 0; j < numItems; j++ {
 						productID := productSampler.Sample(rng)
 						details := productDetails[productID]
@@ -337,7 +333,8 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 							discountBP = int64(rng.Uint64()%2001) + 500
 						}
 
-						id := idGen.nextID()
+						id := int64(nextItemID)
+						nextItemID++
 
 						itemBuf = itemBuf[:0]
 						itemBuf = fastItoa(itemBuf, id)
@@ -363,8 +360,6 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 					headerMutex.Unlock()
 				}
 			}(i, startOrderID, numToGen, startItemID, endItemID)
-
-			startItemID = endItemID
 		}
 	}
 
@@ -372,7 +367,7 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 	return nil
 }
 
-func generateECommerceModelDataParquet(numOrders int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
+func generateECommerceModelDataParquet(numOrders, numItemsTotal int, customerIDs []int, customerAddressSlice [][]int, productDetails []ecommercemodels.ProductDetails, productIDsForSampling []int, outputDir string) error {
 	productSampler, err := NewAliasSampler(productIDsForSampling)
 	if err != nil {
 		return fmt.Errorf("failed to set up product sampler: %w", err)
@@ -386,15 +381,8 @@ func generateECommerceModelDataParquet(numOrders int, customerIDs []int, custome
 	numWorkers := runtime.GOMAXPROCS(0)
 	ordersPerWorker := (numOrders + numWorkers - 1) / numWorkers
 
-	const avgItemsPerOrder = 11.0
-	totalItems := int64(float64(numOrders) * avgItemsPerOrder)
-	itemsPerWorker := totalItems / int64(numWorkers)
-	extraItems := totalItems % int64(numWorkers)
-
 	var wg sync.WaitGroup
 	errChan := make(chan error, numWorkers*2)
-
-	startItemID := int64(1)
 
 	for i := 0; i < numWorkers; i++ {
 		startOrderID := (i * ordersPerWorker) + 1
@@ -407,20 +395,18 @@ func generateECommerceModelDataParquet(numOrders int, customerIDs []int, custome
 			continue
 		}
 
-		endItemID := startItemID + itemsPerWorker
-		if i < int(extraItems) {
-			endItemID++
-		}
+		startItemID := childPrefix(numOrders, numItemsTotal, startOrderID-1) + 1
+		endItemID := childPrefix(numOrders, numItemsTotal, startOrderID-1+numToGen) + 1
 
 		wg.Add(1)
-		go func(workerID, startOrderID, numToGen int, startItemID, endItemID int64) {
+		go func(workerID, startOrderID, numToGen int, startItemID, endItemID int) {
 			defer wg.Done()
 
 			rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(workerID)))
-			idGen := &idBlock{next: startItemID, end: endItemID}
+			nextItemID := startItemID
 
 			headers := make([]ecommercemodels.OrderHeader, 0, numToGen)
-			items := make([]ecommercemodels.OrderItem, 0, int(float64(numToGen)*avgItemsPerOrder))
+			items := make([]ecommercemodels.OrderItem, 0, endItemID-startItemID)
 
 			for orderID := startOrderID; orderID < startOrderID+numToGen; orderID++ {
 				customerID := customerSampler.Sample(rng)
@@ -440,7 +426,7 @@ func generateECommerceModelDataParquet(numOrders int, customerIDs []int, custome
 					OrderStatus:       orderStatus,
 				})
 
-				numItems := rng.IntN(10) + 1
+				numItems := childCount(endItemID-nextItemID, startOrderID+numToGen-orderID-1, 10, rng.IntN)
 				for j := 0; j < numItems; j++ {
 					productID := productSampler.Sample(rng)
 					details := productDetails[productID]
@@ -453,10 +439,8 @@ func generateECommerceModelDataParquet(numOrders int, customerIDs []int, custome
 						discount = float64(rng.IntN(2001)+500) / 10000.0
 					}
 
-					itemID := idGen.nextID()
-					if itemID < 0 {
-						itemID = startItemID + int64(cap(items))
-					}
+					itemID := nextItemID
+					nextItemID++
 
 					items = append(items, ecommercemodels.OrderItem{
 						OrderItemID: int(itemID),
@@ -481,8 +465,6 @@ func generateECommerceModelDataParquet(numOrders int, customerIDs []int, custome
 				return
 			}
 		}(i, startOrderID, numToGen, startItemID, endItemID)
-
-		startItemID = endItemID
 	}
 
 	wg.Wait()

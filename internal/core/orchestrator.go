@@ -279,6 +279,9 @@ func getSKs(slice interface{}) []int64 {
 }
 
 func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string) error {
+	if counts.CustomerAddresses < counts.Customers || int64(counts.CustomerAddresses) > 3*int64(counts.Customers) {
+		return fmt.Errorf("customer addresses require 1 to 3 rows per customer")
+	}
 	var writersWg sync.WaitGroup
 	errChan := make(chan error, 10)
 
@@ -298,7 +301,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	go func() {
 		defer customersWg.Done()
 		customers = ecommerce.GenerateCustomers(counts.Customers)
-		customerAddresses = ecommerce.GenerateCustomerAddresses(customers)
+		customerAddresses = ecommerce.GenerateCustomerAddresses(customers, counts.CustomerAddresses)
 	}()
 	go func() {
 		defer suppliersWg.Done()
@@ -386,7 +389,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 			productIDsForSampling[i] = p.ProductID
 		}
 
-		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir, format); err != nil {
+		if err := ecommerce.GenerateECommerceModelData(counts.OrderHeaders, counts.OrderItems, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir, format); err != nil {
 			errChan <- err
 		}
 	}()
