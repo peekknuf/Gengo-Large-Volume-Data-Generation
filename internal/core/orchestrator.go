@@ -115,25 +115,26 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 	var timeDim []interface{}
 	var dateDim []interface{}
 
-	// --- Dimension Generation (Serial) ---
+	// Date keys are chronological Unix days shared by dimensions and facts.
+	dateDim = ecommercedssimulation.GenerateDateDim(2020, 2025)
+	dateKeys := getSKsFromSlice(dateDim)
 	items = ecommercedssimulation.GenerateItems(counts.Items)
-	customerAddresses = ecommercedssimulation.GenerateCustomerAddresses(counts.CustomerAddresses)
+	customerAddresses = ecommercedssimulation.GenerateCustomerAddresses(counts.CustomerAddresses, dateKeys)
 	customerDemographics = ecommercedssimulation.GenerateCustomerDemographics(counts.CustomerDemographics)
 	incomeBands = ecommercedssimulation.GenerateIncomeBands(counts.IncomeBands)
 	stores = ecommercedssimulation.GenerateStores(counts.Stores)
-	callCenters = ecommercedssimulation.GenerateCallCenters(counts.CallCenters)
-	catalogPages = ecommercedssimulation.GenerateCatalogPages(counts.CatalogPages)
-	webSites = ecommercedssimulation.GenerateWebSites(counts.WebSites)
-	webPages = ecommercedssimulation.GenerateWebPages(counts.WebPages)
+	callCenters = ecommercedssimulation.GenerateCallCenters(counts.CallCenters, dateKeys)
+	catalogPages = ecommercedssimulation.GenerateCatalogPages(counts.CatalogPages, dateKeys)
+	webSites = ecommercedssimulation.GenerateWebSites(counts.WebSites, dateKeys)
 	warehouses = ecommercedssimulation.GenerateWarehouses(counts.Warehouses)
 	reasons = ecommercedssimulation.GenerateReasons(counts.Reasons)
 	shipModes = ecommercedssimulation.GenerateShipModes(counts.ShipModes)
 	timeDim = ecommercedssimulation.GenerateTimeDim()
-	dateDim = ecommercedssimulation.GenerateDateDim(2020, 2025)
 
 	householdDemographics = ecommercedssimulation.GenerateHouseholdDemographics(counts.HouseholdDemographics, getSKsFromSlice(incomeBands))
-	promotions = ecommercedssimulation.GeneratePromotions(counts.Promotions, getSKsFromSlice(items))
-	customers = ecommercedssimulation.GenerateCustomers(counts.Customers, getSKsFromSlice(customerDemographics), getSKsFromSlice(householdDemographics), getSKsFromSlice(customerAddresses))
+	promotions = ecommercedssimulation.GeneratePromotions(counts.Promotions, dateKeys, getSKsFromSlice(items))
+	customers = ecommercedssimulation.GenerateCustomers(counts.Customers, dateKeys, getSKsFromSlice(customerDemographics), getSKsFromSlice(householdDemographics), getSKsFromSlice(customerAddresses))
+	webPages = ecommercedssimulation.GenerateWebPages(counts.WebPages, dateKeys, getSKsFromSlice(customers))
 
 	var writersWg sync.WaitGroup
 	writersWg.Add(17) // All dimension writers
@@ -207,7 +208,7 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 		errChan <- formats.WriteSliceData(dateDim, "dim_date", format, outputDir)
 	}()
 
-	saleDims := ecommercedssimulation.SaleDimensions{Dates: getSKsFromSlice(dateDim), Times: getSKsFromSlice(timeDim), Customers: make([]ecommercedssimulation.CustomerKeys, len(customers))}
+	saleDims := ecommercedssimulation.SaleDimensions{Dates: dateKeys, Times: getSKsFromSlice(timeDim), Customers: make([]ecommercedssimulation.CustomerKeys, len(customers))}
 	for i, row := range customers {
 		c := row.(dsmodels.Customer)
 		saleDims.Customers[i] = ecommercedssimulation.CustomerKeys{ID: c.C_CustomerSK, Demographics: c.C_CurrentCDemoSK, Household: c.C_CurrentHDemoSK, Address: c.C_CurrentAddrSK}

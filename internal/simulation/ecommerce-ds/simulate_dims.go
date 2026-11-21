@@ -52,7 +52,7 @@ func GenerateStores(count int) []interface{} {
 }
 
 // GenerateCallCenters generates a number of call centers.
-func GenerateCallCenters(count int) []interface{} {
+func GenerateCallCenters(count int, dates []int64) []interface{} {
 	centers := make([]interface{}, count)
 
 	for i := 0; i < count; i++ {
@@ -65,8 +65,8 @@ func GenerateCallCenters(count int) []interface{} {
 			CC_CallCenterID:  fmt.Sprintf("cc_%d", i+1),
 			CC_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
 			CC_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
-			CC_ClosedDateSK:  int64(0),
-			CC_OpenDateSK:    int64(2451545 + rand.Intn(1825)),
+			CC_ClosedDateSK:  0, // Zero denotes an open location with no closing date.
+			CC_OpenDateSK:    dates[rand.Intn(len(dates))],
 			CC_Name:          fmt.Sprintf("Call Center %d", i+1),
 			CC_Class:         fmt.Sprintf("Class %d", rand.Intn(5)+1),
 			CC_Employees:     employees,
@@ -98,11 +98,9 @@ func GenerateCallCenters(count int) []interface{} {
 }
 
 // GenerateCatalogPages generates a number of catalog pages.
-func GenerateCatalogPages(count int) []interface{} {
+func GenerateCatalogPages(count int, dates []int64) []interface{} {
 	pages := make([]interface{}, count)
 	departments := []string{"Electronics", "Clothing", "Home", "Sports", "Books", "Toys", "Beauty", "Automotive", "Garden", "Health"}
-	startYear := 2020
-	endYear := 2025
 
 	for i := 0; i < count; i++ {
 		deptIdx := i % len(departments)
@@ -111,14 +109,14 @@ func GenerateCatalogPages(count int) []interface{} {
 		pageType := []string{"Regular", "Sale", "Clearance", "Featured", "New"}
 		typeIdx := rand.Intn(len(pageType))
 
-		startDate := time.Date(startYear+rand.Intn(endYear-startYear), time.Month(rand.Intn(12)+1), 1, 0, 0, 0, 0, time.UTC)
-		endDate := startDate.AddDate(0, 3, 0)
+		start := rand.Intn(len(dates))
+		end := min(start+90, len(dates)-1)
 
 		pages[i] = ecommerceds.CatalogPage{
 			CP_CatalogPageSK:     int64(i + 1),
 			CP_CatalogPageID:     fmt.Sprintf("cp_%d_%d_%d", catalogNum, pageNum, i+1),
-			CP_StartDateSK:       startDate.Unix() / (24 * 60 * 60),
-			CP_EndDateSK:         endDate.Unix() / (24 * 60 * 60),
+			CP_StartDateSK:       dates[start],
+			CP_EndDateSK:         dates[end],
 			CP_Department:        fmt.Sprintf("%s", departments[deptIdx]),
 			CP_CatalogNumber:     catalogNum,
 			CP_CatalogPageNumber: pageNum,
@@ -130,7 +128,7 @@ func GenerateCatalogPages(count int) []interface{} {
 }
 
 // GenerateWebSites generates a number of web sites.
-func GenerateWebSites(count int) []interface{} {
+func GenerateWebSites(count int, dates []int64) []interface{} {
 	sites := make([]interface{}, count)
 
 	for i := 0; i < count; i++ {
@@ -142,8 +140,8 @@ func GenerateWebSites(count int) []interface{} {
 			Web_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
 			Web_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
 			Web_Name:          fmt.Sprintf("Web Site %d", i+1),
-			Web_OpenDateSK:    int64(2451545 + rand.Intn(1825)),
-			Web_CloseDateSK:   int64(0),
+			Web_OpenDateSK:    dates[rand.Intn(len(dates))],
+			Web_CloseDateSK:   0, // Zero denotes an open location with no closing date.
 			Web_Class:         fmt.Sprintf("Class %d", rand.Intn(5)+1),
 			Web_Manager:       fmt.Sprintf("Web Manager %d", managerID),
 			Web_MktID:         rand.Intn(10) + 1,
@@ -169,7 +167,7 @@ func GenerateWebSites(count int) []interface{} {
 }
 
 // GenerateWebPages generates a number of web pages.
-func GenerateWebPages(count int) []interface{} {
+func GenerateWebPages(count int, dates, customerKeys []int64) []interface{} {
 	pages := make([]interface{}, count)
 	pageTypes := []string{"Product", "Category", "Search", "Checkout", "Account", "Home", "About", "Contact"}
 
@@ -181,10 +179,10 @@ func GenerateWebPages(count int) []interface{} {
 			WP_WebPageID:      fmt.Sprintf("wp_%d", i+1),
 			WP_RecStartDate:   fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
 			WP_RecEndDate:     fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
-			WP_CreationDateSK: int64(2451545 + i),
-			WP_AccessDateSK:   int64(2451545 + i + 1),
+			WP_CreationDateSK: dates[i%len(dates)],
+			WP_AccessDateSK:   dates[min(i%len(dates)+1, len(dates)-1)],
 			WP_AutogenFlag:    "N",
-			WP_CustomerSK:     int64(rand.Intn(1000) + 1),
+			WP_CustomerSK:     customerKeys[rand.Intn(len(customerKeys))],
 			WP_URL:            fmt.Sprintf("http://example.com/page%d", i+1),
 			WP_Type:           pageTypes[typeIdx],
 			WP_CharCount:      rand.Intn(50000) + 1000,
@@ -197,7 +195,7 @@ func GenerateWebPages(count int) []interface{} {
 }
 
 // GenerateCustomers generates a number of customers.
-func GenerateCustomers(count int, cdemoSKs, hdemoSKs, addrSKs []int64) []interface{} {
+func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []int64) []interface{} {
 	customers := make([]interface{}, count)
 	firstNames := []string{"John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Jennifer"}
 	lastNames := []string{"Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson"}
@@ -217,8 +215,8 @@ func GenerateCustomers(count int, cdemoSKs, hdemoSKs, addrSKs []int64) []interfa
 			C_CurrentCDemoSK:    cdemoSKs[rand.Intn(len(cdemoSKs))],
 			C_CurrentHDemoSK:    hdemoSKs[rand.Intn(len(hdemoSKs))],
 			C_CurrentAddrSK:     addrSKs[rand.Intn(len(addrSKs))],
-			C_FirstShiptoDateSK: int64(2451545 + i),     // Placeholder date
-			C_FirstSalesDateSK:  int64(2451545 + i + 1), // Placeholder date
+			C_FirstShiptoDateSK: dates[min(i%len(dates)+1, len(dates)-1)],
+			C_FirstSalesDateSK:  dates[i%len(dates)],
 			C_Salutation:        []string{"Mr", "Ms", "Mrs", "Dr"}[rand.Intn(4)],
 			C_FirstName:         firstName,
 			C_LastName:          lastName,
@@ -229,14 +227,14 @@ func GenerateCustomers(count int, cdemoSKs, hdemoSKs, addrSKs []int64) []interfa
 			C_BirthCountry:      "USA",
 			C_Login:             fmt.Sprintf("%s%s%d", strings.ToLower(firstName)[:3], strings.ToLower(lastName)[:3], i+1),
 			C_EmailAddress:      fmt.Sprintf("%s.%s%d@example.com", strings.ToLower(firstName), strings.ToLower(lastName), i+1),
-			C_LastReviewDateSK:  int64(2451545 + i + 2), // Placeholder date
+			C_LastReviewDateSK:  dates[min(i%len(dates)+2, len(dates)-1)],
 		}
 	}
 	return customers
 }
 
 // GenerateCustomerAddresses generates a number of customer addresses.
-func GenerateCustomerAddresses(count int) []interface{} {
+func GenerateCustomerAddresses(count int, dates []int64) []interface{} {
 	addresses := make([]interface{}, count)
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
 	states := []string{"NY", "CA", "IL", "TX", "AZ", "PA", "TX", "CA", "TX", "CA"}
@@ -244,12 +242,11 @@ func GenerateCustomerAddresses(count int) []interface{} {
 
 	for i := 0; i < count; i++ {
 		cityIdx := i % len(cities)
-		fromDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 		addresses[i] = ecommerceds.CustomerAddress{
 			CA_AddressSK:     int64(i + 1),
 			CA_AddressID:     fmt.Sprintf("addr_%d", i+1),
-			CA_AddressDateSK: fromDate.Unix() / (24 * 60 * 60),
+			CA_AddressDateSK: dates[0],
 			CA_StreetNumber:  fmt.Sprintf("%d", rand.Intn(9999)+1),
 			CA_StreetName:    streets[rand.Intn(len(streets))],
 			CA_StreetType:    "St",
@@ -448,7 +445,7 @@ func GenerateIncomeBands(count int) []interface{} {
 }
 
 // GeneratePromotions generates a number of promotions.
-func GeneratePromotions(count int, itemSKs []int64) []interface{} {
+func GeneratePromotions(count int, dates []int64, itemSKs []int64) []interface{} {
 	promotions := make([]interface{}, count)
 	promoTypes := []string{"Discount", "Coupon", "Bundle", "BOGO", "Clearance", "Seasonal", "New Customer", "Loyalty", "Referral", "Flash Sale"}
 
@@ -457,14 +454,14 @@ func GeneratePromotions(count int, itemSKs []int64) []interface{} {
 			continue // Skip if no items available
 		}
 
-		startDate := time.Date(2020+rand.Intn(5), time.Month(rand.Intn(12)+1), 1, 0, 0, 0, 0, time.UTC)
-		endDate := startDate.AddDate(0, 0, rand.Intn(90)+30)
+		start := rand.Intn(len(dates))
+		end := min(start+30+rand.Intn(90), len(dates)-1)
 
 		promotions[i] = ecommerceds.Promotion{
 			P_PromoSK:           int64(i + 1),
 			P_PromoID:           fmt.Sprintf("promo_%d", i+1),
-			P_StartDateSK:       startDate.Unix() / (24 * 60 * 60),
-			P_EndDateSK:         endDate.Unix() / (24 * 60 * 60),
+			P_StartDateSK:       dates[start],
+			P_EndDateSK:         dates[end],
 			P_ItemSK:            itemSKs[rand.Intn(len(itemSKs))],
 			P_Cost:              rand.Float64() * 10000,
 			P_TargetMarketClass: []string{"Mass", "Upscale", "Luxury", "Budget"}[rand.Intn(4)],
@@ -612,7 +609,7 @@ func GenerateDateDim(startYear, endYear int) []interface{} {
 		}
 
 		dateDims = append(dateDims, ecommerceds.DateDim{
-			D_DateSK:           int64(d.Unix() / (24 * 60 * 60)), // Julian date
+			D_DateSK:           int64(d.Unix() / (24 * 60 * 60)), // Unix day
 			D_DateID:           d.Format("2006-01-02"),
 			D_Date:             d,
 			D_MonthSeq:         year*12 + month - 1,
