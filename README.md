@@ -19,6 +19,8 @@ go build -o gengo .
 
 On Windows, build with `-o gengo.exe` and run `.\gengo.exe`.
 Run `gengo gen` without flags for interactive prompts.
+Use `--rows companies=3 --rows daily_stock_prices=17` to override counts from a financial size plan.
+Row overrides use lowercase plan names with underscores. Add `--dry-run` to inspect the resolved counts.
 
 | Model | Output |
 | --- | --- |
@@ -42,4 +44,3 @@ Run `gengo gen` without flags for interactive prompts.
 go test ./...
 go vet ./...
 ```
-

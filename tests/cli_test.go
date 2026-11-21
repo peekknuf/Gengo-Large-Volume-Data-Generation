@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"encoding/csv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,29 @@ func TestGenerationControls(t *testing.T) {
 		cmd.Dir = t.TempDir()
 		return cmd.CombinedOutput()
 	}
+	t.Run("exact_rows", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "financial")
+		out, err := run(t, "gen", "--model", "financial", "--format", "csv", "--size", "0.001", "--rows", "companies=3", "--rows", "daily_stock_prices=7", "--output", dir)
+		if err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		f, err := os.Open(filepath.Join(dir, "fact_daily_stock_prices.csv"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		rows, err := csv.NewReader(f).ReadAll()
+		if err != nil || len(rows) != 8 {
+			t.Fatalf("got %d records including header, err %v", len(rows), err)
+		}
+	})
+	t.Run("reject_row_overrides", func(t *testing.T) {
+		for _, arg := range []string{"unknown=1", "patients=-1", "patients=0", "doctors=999999999999999999999"} {
+			if out, err := run(t, "gen", "--model", "medical", "--format", "csv", "--size", "0.001", "--rows", arg, "--dry-run"); err == nil {
+				t.Fatalf("accepted %s: %s", arg, out)
+			}
+		}
+	})
 	t.Run("dry_run", func(t *testing.T) {
 		output := filepath.Join(t.TempDir(), "not-created")
 		out, err := run(t, "gen", "--model", "medical", "--size", "0.001", "--format", "csv", "--workers", "2", "--dry-run", "--output", output)

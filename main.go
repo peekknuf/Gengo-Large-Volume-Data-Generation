@@ -11,12 +11,13 @@ import (
 )
 
 var (
-	modelType string
-	targetGB  float64
-	format    string
-	outputDir string
-	dryRun    bool
-	workers   int
+	modelType    string
+	targetGB     float64
+	format       string
+	outputDir    string
+	dryRun       bool
+	workers      int
+	rowOverrides []string
 )
 
 var RootCmd = &cobra.Command{
@@ -51,7 +52,7 @@ Example:
 		if dryRun && dirFlag == "" {
 			dirFlag = "data"
 		}
-		model, counts, outputFormat, dir, err := core.GetUserInput(modelType, targetGB, format, dirFlag)
+		model, counts, outputFormat, dir, err := core.GetUserInput(modelType, targetGB, format, dirFlag, rowOverrides...)
 		if err != nil {
 			return err
 		}
@@ -83,6 +84,7 @@ func init() {
 	generateCmd.Flags().Float64VarP(&targetGB, "size", "s", 0, "Approximate target size in GB (e.g., 0.5, 10)")
 	generateCmd.Flags().StringVarP(&format, "format", "f", "", "Output format (csv, parquet)")
 	generateCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory name")
+	generateCmd.Flags().StringArrayVar(&rowOverrides, "rows", nil, "Override a planned table count (repeatable, e.g. --rows daily_stock_prices=17)")
 	generateCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show estimated row counts without generating files")
 	generateCmd.Flags().IntVarP(&workers, "workers", "w", runtime.GOMAXPROCS(0), "Maximum workers per fact table")
 }
