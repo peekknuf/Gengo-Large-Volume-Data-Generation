@@ -31,6 +31,37 @@ func TestGenerationControls(t *testing.T) {
 		cmd.Dir = t.TempDir()
 		return cmd.CombinedOutput()
 	}
+	t.Run("load_plan", func(t *testing.T) {
+		root := t.TempDir()
+		dataset := filepath.Join(root, "dataset")
+		out, err := run(t, "gen", "--model", "ecommerce", "--size", "0.000001", "--format", "csv", "--seed", "0", "--as-of", "2026-11-21", "--output", dataset)
+		if err != nil {
+			t.Fatalf("generate fixture: %v\n%s", err, out)
+		}
+		output := filepath.Join(root, "import")
+		out, err = run(t, "load", "plan", "--dataset", dataset, "--schema", "gengo_cli", "--output", output)
+		if err != nil {
+			t.Fatalf("load plan: %v\n%s", err, out)
+		}
+		ddl, err := os.ReadFile(filepath.Join(output, "schema.sql"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(ddl), `CREATE SCHEMA "gengo_cli";`) {
+			t.Fatal("load command did not use the requested schema")
+		}
+		for _, name := range []string{"run.psql", "load.sql", "indexes.sql", "foreign_keys.sql", "validate_foreign_keys.sql", "verify.sql", "analyze.sql"} {
+			if _, err := os.Stat(filepath.Join(output, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if out, err := run(t, "load", "plan", "--dataset", dataset, "--output", output); err == nil {
+			t.Fatalf("overwrote existing scripts: %s", out)
+		}
+		if out, err := run(t, "load", "plan", "--dataset", dataset); err == nil {
+			t.Fatalf("accepted missing output flag: %s", out)
+		}
+	})
 	t.Run("exact_rows", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "financial")
 		out, err := run(t, "gen", "--model", "financial", "--format", "csv", "--size", "0.001", "--rows", "companies=3", "--rows", "daily_stock_prices=7", "--output", dir)

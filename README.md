@@ -25,6 +25,10 @@ Use `--seed 0 --as-of 2026-11-21 --rows-per-file 100000` for repeatable output.
 Each completed run includes a manifest. See [reproducibility](docs/reproducibility.md)
 for guarantees, file partitioning, and timestamp units.
 
+Prepare PostgreSQL import scripts for an e-commerce CSV dataset with
+`gengo load plan --dataset data/example --schema gengo --output data/import`.
+See [PostgreSQL loading](docs/postgres-loading.md) and [product direction](docs/product-direction.md).
+
 | Model | Output |
 | --- | --- |
 | ecommerce | Customers, addresses, suppliers, categories, products, orders, order items |

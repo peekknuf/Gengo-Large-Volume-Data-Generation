@@ -89,6 +89,7 @@ Example:
 }
 
 func init() {
+	RootCmd.AddCommand(newLoadCommand())
 	RootCmd.AddCommand(generateCmd)
 	generateCmd.Flags().StringVarP(&modelType, "model", "m", "", "Data model to generate (ecommerce, ecommerce-ds, financial, medical)")
 	generateCmd.Flags().Float64VarP(&targetGB, "size", "s", 0, "Approximate target size in GB (e.g., 0.5, 10)")
