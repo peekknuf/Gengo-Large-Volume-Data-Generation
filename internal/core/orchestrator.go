@@ -268,19 +268,6 @@ func getSKsFromSlice(slice []interface{}) []int64 {
 	return sks
 }
 
-func getSKs(slice interface{}) []int64 {
-	v := reflect.ValueOf(slice)
-	if v.Kind() != reflect.Slice {
-		return nil
-	}
-	sks := make([]int64, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		// Assumes the first field is the SK
-		sks[i] = v.Index(i).Field(0).Int()
-	}
-	return sks
-}
-
 func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string, options ...generation.Config) error {
 	cfg := generation.Options(options)
 	var writersWg sync.WaitGroup

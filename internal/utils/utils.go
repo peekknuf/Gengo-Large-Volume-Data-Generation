@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"fmt"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -27,25 +25,4 @@ func AddUnderscores(n int) string {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
 	return strings.Join(parts, "_")
-}
-
-func PrintProgress(current, total int, label string) {
-	if os.Getenv("GENGO_TEST_MODE") == "true" {
-		if current == total {
-			fmt.Println()
-		}
-		return
-	}
-
-	if total == 0 {
-		return
-	}
-	percentage := float64(current) / float64(total) * 100
-	barLength := 40
-	filledLength := int(float64(barLength) * percentage / 100)
-	bar := strings.Repeat("=", filledLength) + strings.Repeat("-", barLength-filledLength)
-	fmt.Printf("\r%s: [%s] %d/%d (%.2f%%)", label, bar, current, total, percentage)
-	if current == total {
-		fmt.Println()
-	}
 }

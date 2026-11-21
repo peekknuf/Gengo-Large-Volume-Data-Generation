@@ -17,7 +17,7 @@ func (w failingCSVWriter) Write(p []byte) (int, error) { return 0, w.err }
 
 func TestCSVReportsFlushFailure(t *testing.T) {
 	want := errors.New("simulated disk failure")
-	err := writeCSVFile(filepath.Join(t.TempDir(), "rows.csv"), func(bw *bufio.Writer) error {
+	err := WriteCSVFile(filepath.Join(t.TempDir(), "rows.csv"), func(bw *bufio.Writer) error {
 		bw.Reset(failingCSVWriter{want})
 		_, err := bw.WriteString("buffered data")
 		return err
@@ -37,20 +37,22 @@ type csvTestRow struct {
 func TestCSVRoundTrip(t *testing.T) {
 	rows := []csvTestRow{{-12, "Málaga, \"quoted\"\nsecond line", 12.5, time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)}}
 	want := [][]string{{"id", "name", "price", "date"}, {"-12", rows[0].Name, "12.5", "2025-01-02T03:04:05Z"}}
-	for _, mode := range []string{"slice", "stream", "records"} {
+	for _, mode := range []string{"slice", "direct"} {
 		t.Run(mode, func(t *testing.T) {
 			filename := filepath.Join(t.TempDir(), "rows.csv")
 			var err error
 			switch mode {
 			case "slice":
 				err = writeSliceToCSV(rows, filename)
-			case "stream":
-				ch := make(chan interface{}, 1)
-				ch <- rows[0]
-				close(ch)
-				err = writeStreamToCSV(ch, filename)
-			case "records":
-				err = writeCSVHeaderAndRecords(filename, want[0], want[1:])
+			case "direct":
+				err = WriteCSVFile(filename, func(bw *bufio.Writer) error {
+					for _, record := range want {
+						if _, err := bw.Write(appendCSVRecord(nil, record)); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
 			}
 			if err != nil {
 				t.Fatal(err)

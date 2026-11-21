@@ -20,17 +20,6 @@ const (
 	NumYearsOfData        = 5
 )
 
-const (
-	AvgBytesStringTiny   = 8
-	AvgBytesStringShort  = 15
-	AvgBytesStringMedium = 30
-	AvgBytesStringLong   = 50
-	SizeBytesInt         = 4
-	SizeBytesInt64       = 8
-	SizeBytesFloat64     = 8
-	SizeBytesTimestamp   = 8
-)
-
 type ECommerceRowCounts struct {
 	Customers         int
 	CustomerAddresses int
@@ -136,42 +125,6 @@ func CalculateECommerceDSRowCounts(targetGB float64, format string) (ECommerceDS
 	}
 
 	return counts, nil
-}
-
-// estimateAvgRowSizeBytes estimates the average uncompressed size of a single row for a given table type.
-func estimateAvgRowSizeBytes(tableType string) (int, error) {
-	switch tableType {
-	// E-commerce (empirical estimates based on CSV output from calibration run)
-	case "customer":
-		return 78, nil
-	case "customer_address":
-		return 136, nil
-	case "supplier":
-		return 66, nil
-	case "product":
-		return 84, nil
-	case "order_header":
-		return 111, nil
-	case "order_item":
-		return 53, nil // Optimized after removing total_price column
-	// Financial (empirical estimates based on CSV output from calibration run)
-	case "company":
-		return 78, nil
-	case "exchange":
-		return 37, nil
-	case "daily_stock_price":
-		return 120, nil
-	case "patient":
-		return 80, nil
-	case "doctor":
-		return 70, nil
-	case "clinic":
-		return 100, nil
-	case "appointment":
-		return 90, nil
-	default:
-		return 0, fmt.Errorf("unknown table type: %s", tableType)
-	}
 }
 
 // CalculateECommerceRowCounts determines the target number of rows for each e-commerce table.

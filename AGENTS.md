@@ -27,10 +27,9 @@ Parquet. Import planning currently supports ecommerce CSV.
 | Manifest checks and psql script planning | internal/core/load_plan.go |
 | E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
-The CLI calls internal/simulation. The alternate internal/generators package
-contains BaseGenerator and MedicalGenerator with a separate common.GenerationConfig.
-Trace callers before extending that older implementation. The active reproducibility
-contract uses generation.Config.
+The CLI calls internal/simulation. generation.Config owns the reproducibility
+contract and generation.Partitions schedules fact work. The unused alternate
+generator framework and its worker pool have been removed.
 
 ## Commands
 

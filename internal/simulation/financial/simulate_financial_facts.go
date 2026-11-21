@@ -11,8 +11,6 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/financial"
 )
 
-const NumYearsOfData = 5
-
 // A company's RNG and previous close continue across every file boundary.
 type priceSeries struct {
 	rng       *rand.Rand

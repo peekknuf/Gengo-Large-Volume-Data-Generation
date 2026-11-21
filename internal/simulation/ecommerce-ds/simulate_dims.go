@@ -2,7 +2,6 @@ package ecommerceds
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -693,25 +692,4 @@ func daysInMonth(month, year int) int {
 	default:
 		return 30
 	}
-}
-
-func dayInQuarter(month, day, year int) int {
-	quarterStartMonth := ((month-1)/3)*3 + 1
-	quarterStartDay := 1
-
-	totalDays := 0
-	for m := quarterStartMonth; m < month; m++ {
-		totalDays += daysInMonth(m, year)
-	}
-	totalDays += day - quarterStartDay
-
-	return totalDays
-}
-
-func getSKsFromChan(ch <-chan interface{}) []int64 {
-	var sks []int64
-	for v := range ch {
-		sks = append(sks, reflect.ValueOf(v).Field(0).Int())
-	}
-	return sks
 }

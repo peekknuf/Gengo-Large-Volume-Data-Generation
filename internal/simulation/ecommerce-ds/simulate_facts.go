@@ -9,13 +9,11 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/peekknuf/Gengo/internal/formats"
 	"github.com/peekknuf/Gengo/internal/generation"
-	ecommerceds "github.com/peekknuf/Gengo/internal/models/ecommerce-ds"
 )
 
 // SaleDimensions keeps the generated customer relationships and calendar keys
@@ -131,44 +129,6 @@ func (s *AliasSampler) Sample(rng *rand.Rand) int64 {
 		return s.ids[i]
 	}
 	return s.ids[s.alias[i]]
-}
-
-// Block-based ID allocation to reduce atomic contention
-const (
-	idBlockSize = 100000 // Allocate IDs in blocks of 100K
-)
-
-type idBlock struct {
-	next int64
-	end  int64
-}
-
-func (b *idBlock) nextID() int64 {
-	if b.next >= b.end {
-		return -1 // Block exhausted
-	}
-	v := b.next
-	b.next++
-	return v
-}
-
-var globalID int64 // Global atomic counter
-
-func getIDBlock() idBlock {
-	start := atomicAddInt64(&globalID, idBlockSize) - idBlockSize
-	return idBlock{next: start, end: start + idBlockSize}
-}
-
-// Atomic add helper for ID block allocation
-func atomicAddInt64(addr *int64, delta int64) int64 {
-	// For Go 1.19+, we can use sync/atomic directly
-	return atomic.AddInt64(addr, delta)
-}
-
-// Worker-local ID generator for eliminating atomic contention
-type localIDGen struct {
-	next int64
-	end  int64
 }
 
 // appendPrice appends a float-like value with 2 decimal places
@@ -1112,27 +1072,4 @@ func GenerateWebSalesOptimized(ctx context.Context, count int, dims SaleDimensio
 	return writeSaleShards(ctx, count, outputDir, "web", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateWebSalesWorker(ctx, records, first, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
 	}, cfg)
-}
-
-// Legacy channel-based functions - kept for backward compatibility but not used in optimized flow
-
-// GenerateStoreSales generates a number of store sales records.
-func GenerateStoreSales(count int, itemSKs, customerSKs, storeSKs, promoSKs []int64, ch chan<- interface{}) {
-	// This function is kept for backward compatibility but replaced by GenerateStoreSalesOptimized
-	for i := 0; i < count; i++ {
-		quantity := rand.Intn(10) + 1
-		listPrice := 10.0 + rand.Float64()*1000
-		salesPrice := listPrice * (1 - rand.Float64()*0.2)
-
-		ch <- ecommerceds.StoreSales{
-			SS_ItemSK:       itemSKs[rand.Intn(len(itemSKs))],
-			SS_CustomerSK:   customerSKs[rand.Intn(len(customerSKs))],
-			SS_StoreSK:      storeSKs[rand.Intn(len(storeSKs))],
-			SS_PromoSK:      promoSKs[rand.Intn(len(promoSKs))],
-			SS_TicketNumber: int64(i + 1),
-			SS_Quantity:     quantity,
-			SS_ListPrice:    listPrice,
-			SS_SalesPrice:   salesPrice,
-		}
-	}
 }

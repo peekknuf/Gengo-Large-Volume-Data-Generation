@@ -2,15 +2,12 @@ module github.com/peekknuf/Gengo
 
 go 1.25
 
-require github.com/brianvoe/gofakeit/v6 v6.28.0
-
-require github.com/spf13/cobra v1.8.0
-
-require gonum.org/v1/gonum v0.16.0
-
 require (
 	github.com/apache/arrow-go/v18 v18.4.0
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/charmbracelet/lipgloss v0.9.1
+	github.com/spf13/cobra v1.8.0
+	golang.org/x/sync v0.15.0
 )
 
 require (
@@ -40,11 +37,11 @@ require (
 	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sync v0.15.0
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.26.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
+	gonum.org/v1/gonum v0.16.0 // indirect
 	google.golang.org/genproto v0.0.0-20210630183607-d20f26d13c79 // indirect
 	google.golang.org/grpc v1.73.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect

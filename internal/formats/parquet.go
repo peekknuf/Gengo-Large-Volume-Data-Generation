@@ -7,10 +7,6 @@ import (
 	"strings"
 	"time"
 
-	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
-	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
-	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -78,7 +74,7 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create parquet file %s: %w", targetFilename, err)
 	}
-	defer func() { // Defer check/close only for error path before writer setup/close
+	defer func() {
 		if err != nil && file != nil {
 			_ = file.Close()
 		}
@@ -91,8 +87,8 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 	writer, err = pqarrow.NewFileWriter(schema, file, props, arrowProps)
 	if err != nil {
 		return fmt.Errorf("failed to create parquet writer for %s: %w", targetFilename, err)
-	} // Error triggers file close defer
-	defer func() { // Use DEFER for writer close
+	}
+	defer func() {
 		if closeErr := writer.Close(); closeErr != nil && err == nil {
 			err = fmt.Errorf("error closing parquet writer for %s: %w", targetFilename, closeErr)
 		}
@@ -102,10 +98,6 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 
 	rowsInCurrentBatch := 0
 	fmt.Printf("Writing %d records to %s (Parquet)...\n", sliceLen, targetFilename)
-	progressStep := sliceLen / 20
-	if progressStep == 0 {
-		progressStep = 1
-	}
 	for i := 0; i < sliceLen; i++ {
 		elemVal := sliceVal.Index(i)
 
@@ -150,24 +142,16 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 		}
 		rowsInCurrentBatch++
 		if rowsInCurrentBatch >= parquetWriteBatchSize {
-			newBuilder, writeErr := writeParquetBatchCorrected(writer, builder, pool, schema, targetFilename)
-			if writeErr != nil {
-				err = writeErr
+			if err = WriteTypedBatch(writer, builder, targetFilename); err != nil {
 				return err
 			}
-			builder = newBuilder
 			rowsInCurrentBatch = 0
 		}
-		// if (i+1)%progressStep == 0 || i == sliceLen-1 {
-		// fmt.Printf("... %s / %s records processed for %s\n", utils.AddUnderscores(i+1), utils.AddUnderscores(sliceLen), targetFilename)
-		// }
 	}
 
 	if rowsInCurrentBatch > 0 {
 		fmt.Printf("Writing final %d rows for %s parquet...\n", rowsInCurrentBatch, targetFilename)
-		_, writeErr := writeParquetBatchCorrected(writer, builder, pool, schema, targetFilename)
-		if writeErr != nil {
-			err = writeErr
+		if err = WriteTypedBatch(writer, builder, targetFilename); err != nil {
 			return err
 		}
 	}
@@ -176,16 +160,6 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 		fmt.Printf("Successfully finished writing to %s (pending close)\n", targetFilename)
 	}
 	return err
-}
-
-// writeParquetBatchCorrected writes a batch, releases the builder, returns a new one.
-func writeParquetBatchCorrected(writer *pqarrow.FileWriter, builder *array.RecordBuilder, pool memory.Allocator, schema *arrow.Schema, errorContextFilename string) (*array.RecordBuilder, error) {
-	record := builder.NewRecord()
-	defer record.Release()
-	if err := writer.Write(record); err != nil {
-		return builder, fmt.Errorf("error writing batch to parquet file %s: %w", errorContextFilename, err)
-	}
-	return builder, nil
 }
 
 // getParquetFieldName determines the field name from tags or struct field name.
@@ -248,66 +222,4 @@ func buildArrowSchema(structType reflect.Type) (*arrow.Schema, error) {
 		fields = append(fields, arrow.Field{Name: fieldName, Type: arrowType, Nullable: true})
 	}
 	return arrow.NewSchema(fields, nil), nil
-}
-
-// Parquet writer functions for e-commerce models
-
-func WriteCustomersToParquet(customers []ecommercemodels.Customer, targetFilename string) error {
-	return WriteSliceToParquet(customers, targetFilename)
-}
-
-func WriteCustomerAddressesToParquet(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
-	return WriteSliceToParquet(addresses, targetFilename)
-}
-
-func WriteSuppliersToParquet(suppliers []ecommercemodels.Supplier, targetFilename string) error {
-	return WriteSliceToParquet(suppliers, targetFilename)
-}
-
-func WriteProductCategoriesToParquet(categories []ecommercemodels.ProductCategory, targetFilename string) error {
-	return WriteSliceToParquet(categories, targetFilename)
-}
-
-func WriteProductsToParquet(products []ecommercemodels.Product, targetFilename string) error {
-	return WriteSliceToParquet(products, targetFilename)
-}
-
-func WriteOrderHeadersToParquet(headers []ecommercemodels.OrderHeader, targetFilename string) error {
-	return WriteOrderHeadersToParquetTyped(headers, targetFilename)
-}
-
-func WriteOrderItemsToParquet(items []ecommercemodels.OrderItem, targetFilename string) error {
-	return WriteOrderItemsToParquetTyped(items, targetFilename)
-}
-
-// Parquet writer functions for financial models
-
-func WriteCompaniesToParquet(companies []financialmodels.Company, targetFilename string) error {
-	return WriteSliceToParquet(companies, targetFilename)
-}
-
-func WriteExchangesToParquet(exchanges []financialmodels.Exchange, targetFilename string) error {
-	return WriteSliceToParquet(exchanges, targetFilename)
-}
-
-func WriteDailyStockPricesToParquet(prices []financialmodels.DailyStockPrice, targetFilename string) error {
-	return WriteDailyStockPricesToParquetTyped(prices, targetFilename)
-}
-
-// Parquet writer functions for medical models
-
-func WritePatientsToParquet(patients []medicalmodels.Patient, targetFilename string) error {
-	return WriteSliceToParquet(patients, targetFilename)
-}
-
-func WriteDoctorsToParquet(doctors []medicalmodels.Doctor, targetFilename string) error {
-	return WriteSliceToParquet(doctors, targetFilename)
-}
-
-func WriteClinicsToParquet(clinics []medicalmodels.Clinic, targetFilename string) error {
-	return WriteSliceToParquet(clinics, targetFilename)
-}
-
-func WriteAppointmentsToParquet(appointments []medicalmodels.Appointment, targetFilename string) error {
-	return WriteAppointmentsToParquetTyped(appointments, targetFilename)
 }

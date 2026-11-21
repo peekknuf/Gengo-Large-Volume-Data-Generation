@@ -1,15 +1,14 @@
 # Codebase map for agent-assisted development
 
-Reviewed 21 November 2026 against the working tree based on commit 933a902,
-including the e-commerce import-planner increment.
+Reviewed 21 November 2026, including the e-commerce import planner and the
+subsequent cleanup of inactive generation and serialization paths.
 
 ## Assessment
 
 The active generation path has useful correctness and reproducibility coverage.
-Its package boundaries support incremental work. The main navigation hazard was
-duplicated, stale repository guidance alongside a separate generator abstraction
-that the CLI never calls. AGENTS.md now provides the shared starting point, and
-CLAUDE.md points to that guide.
+Its package boundaries support incremental work. AGENTS.md provides the shared
+starting point, and CLAUDE.md points to that guide. The unused alternate generator
+framework, worker pool, writer wrappers, and retail fallback have been removed.
 
 The project delivers generation and PostgreSQL import-script planning. The
 experiment runner, scenario YAML, telemetry, result comparison, and database
@@ -59,20 +58,23 @@ Tests exercise planning and CLI integration. Actual psql execution, transaction
 behavior on a running server, and representative joins still need the local
 PostgreSQL integration fixture.
 
-## Similar-looking code with different reachability
+## Generation and encoding boundaries
 
-| Location | Observed role |
+| Location | Role |
 | --- | --- |
 | internal/generation | Active run configuration, streams, partition scheduling, and writer inventory. |
-| internal/generators | Separate BaseGenerator and MedicalGenerator. No CLI or active simulation callers were found. It uses fixed counts and older global faker behavior. |
-| internal/common | Supports the alternate generator implementation. Worker-pool behavior has regression coverage. |
-| internal/formats/json.go | Component-level JSON support. CLI validation accepts CSV and Parquet. |
-| internal/formats/csv_chunks.go | Chunk-writer helper with no callers found. Deferred Flush and Close errors are discarded. |
-| ecommerce-ds.GenerateStoreSales | Older channel-based generator with no callers found. Active store sales use GenerateStoreSalesOptimized. |
+| internal/simulation | Active model-specific dimension and fact generation. |
+| formats.WriteSliceData | Generic CSV and Parquet encoding for dimensions and financial/medical facts. |
+| formats.WriteCSVFile | Shared buffered-write, flush, and close handling for generic CSV and direct e-commerce fact encoders. |
+| formats.WriteOrderHeadersToParquetTyped and WriteOrderItemsToParquetTyped | Active typed e-commerce fact encoders. |
+| formats.CreateTypedParquetWriter and WriteTypedBatch | Arrow setup for typed writers and batch handling shared with generic Parquet. Retail appends directly to Arrow builders. |
+| ecommerce-ds.GenerateStoreSalesOptimized | Active store-sales path alongside the catalog and web channel equivalents. |
 | cmd/profile | Separate entry point that generates a fixed 10 GiB e-commerce CSV run and writes cpu.prof. |
 
-Reachability was checked with repository searches. Repeat searches before migrating
-or deleting implementations, particularly after features add new callers.
+Inactive JSON, channel/chunk CSV helpers, model-specific writer wrappers, and
+duplicate typed writers were removed after checking callers. Generation supports
+CSV and Parquet. Shared metadata and direct encoders still require cross-format
+checks when schemas change.
 
 ## High-value extension points
 
@@ -120,8 +122,13 @@ or deleting implementations, particularly after features add new callers.
 | tests/e2e_test.go | Builds the CLI and exercises all eight generation model/format combinations. |
 
 The import increment passed build, vet, and the full local suite during this
-review. That verifies script preparation and the existing generator. The product
-checklist tracks live database and workload execution separately.
+review. Cleanup verification additionally compares fixed-seed data files before
+and after the changes across all eight model/format pairs. Using seed 42,
+as-of 2026-11-21, size 0.00001 GiB, two workers, and 17 rows per file produced
+90 data files. All 90 were byte-identical, and each dataset identity matched.
+Manifests contain runtime measurements and were compared by identity rather
+than file hash. The product checklist tracks live database and workload execution
+separately.
 
 ## Efficient agent workflow
 
