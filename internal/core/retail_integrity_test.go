@@ -21,7 +21,7 @@ func TestRetailSaleKeys(t *testing.T) {
 	for _, format := range []string{"csv", "parquet"} {
 		t.Run(format, func(t *testing.T) {
 			dir := t.TempDir()
-			if err := generateECommerceDSDataConcurrently(plan, format, dir); err != nil {
+			if err := generateECommerceDSDataConcurrently(plan, format, dir, fixedConfig(t, 0, 1, 100)); err != nil {
 				t.Fatal(err)
 			}
 			for _, tc := range []struct {

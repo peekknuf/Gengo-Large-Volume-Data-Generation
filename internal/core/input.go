@@ -210,14 +210,7 @@ func applyRowOverrides(counts any, overrides []string) error {
 	plan := reflect.ValueOf(counts).Elem()
 	fields := make(map[string]int, plan.NumField())
 	for i := 0; i < plan.NumField(); i++ {
-		var name strings.Builder
-		for j, r := range plan.Type().Field(i).Name {
-			if j > 0 && r >= 'A' && r <= 'Z' {
-				name.WriteByte('_')
-			}
-			name.WriteRune(r)
-		}
-		fields[strings.ToLower(name.String())] = i
+		fields[rowFieldName(plan.Type().Field(i).Name)] = i
 	}
 	for _, override := range overrides {
 		key, raw, ok := strings.Cut(override, "=")

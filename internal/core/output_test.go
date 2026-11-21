@@ -1,10 +1,11 @@
 package core
 
 import (
-	financial "github.com/peekknuf/Gengo/internal/simulation/financial"
 	"os"
 	"path/filepath"
 	"testing"
+
+	financial "github.com/peekknuf/Gengo/internal/simulation/financial"
 )
 
 func TestPublishCompletedDataset(t *testing.T) {
@@ -18,7 +19,10 @@ func TestPublishCompletedDataset(t *testing.T) {
 		t.Fatal("invalid plan succeeded")
 	}
 	if err := GenerateModelData("financial", financial.FinancialRowCounts{Companies: 1, Exchanges: 1, DailyStockPrices: 1}, "invalid-format", dir); err == nil {
-		t.Fatal("writer failure reported success")
+		t.Fatal("invalid format reported success")
+	}
+	if err := GenerateRun(RunPlan{Model: "financial", Rows: financial.FinancialRowCounts{Companies: 1, Exchanges: 1, DailyStockPrices: 10000000}, Format: "csv", Config: fixedConfig(t, 0, 2, 4)}, dir); err == nil {
+		t.Fatal("failed price generation reported success")
 	}
 	entries, err := os.ReadDir(parent)
 	if err != nil || len(entries) != 1 {
@@ -36,7 +40,7 @@ func TestPublishCompletedDataset(t *testing.T) {
 		t.Fatal("nonempty destination accepted")
 	}
 	entries, err = os.ReadDir(dir)
-	if err != nil || len(entries) != 3 {
+	if err != nil || len(entries) != 4 {
 		t.Fatalf("published files: %v %v", entries, err)
 	}
 }

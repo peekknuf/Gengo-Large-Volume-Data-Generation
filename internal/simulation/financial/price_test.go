@@ -23,15 +23,25 @@ func TestPriceDistribution(t *testing.T) {
 		if count == 0 {
 			continue
 		}
-		f, err := os.Open(filepath.Join(dir, "fact_daily_stock_prices.csv"))
+
+		files, err := filepath.Glob(filepath.Join(dir, "fact_daily_stock_prices_*.csv"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		rows, err := csv.NewReader(f).ReadAll()
-		f.Close()
-		if err != nil {
-			t.Fatal(err)
+		rows := [][]string{{}}
+		for _, path := range files {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			shard, err := csv.NewReader(f).ReadAll()
+			f.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows = append(rows, shard[1:]...)
 		}
+
 		if len(rows) != count+1 {
 			t.Fatalf("requested %d prices, got %d", count, len(rows)-1)
 		}

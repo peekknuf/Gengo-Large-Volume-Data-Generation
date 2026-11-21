@@ -1,113 +1,127 @@
 package financial
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
-	"runtime"
-	"sync"
 	"time"
 
-	gf "github.com/brianvoe/gofakeit/v6"
 	"github.com/peekknuf/Gengo/internal/formats"
+	"github.com/peekknuf/Gengo/internal/generation"
 	"github.com/peekknuf/Gengo/internal/models/financial"
 )
 
 const NumYearsOfData = 5
 
-// generateStockPricesForCompanies is a worker function that generates stock prices for a subset of companies.
-func generateStockPricesForCompanies(companies []financial.Company, exchanges []financial.Exchange, numPricesPerCompany, extra int, priceIDStart int64) []financial.DailyStockPrice {
-	prices := make([]financial.DailyStockPrice, 0, len(companies)*numPricesPerCompany+extra)
-	priceIDCounter := priceIDStart
+// A company's RNG and previous close continue across every file boundary.
+type priceSeries struct {
+	rng       *rand.Rand
+	lastClose float64
+	date      time.Time
+	companyID int
+	exchanges []financial.Exchange
+}
 
-	for index, company := range companies {
+func newPriceSeries(companyID, count int, exchanges []financial.Exchange, cfg generation.Config) *priceSeries {
+	rng := cfg.Rand("financial.prices", uint64(companyID))
+	return &priceSeries{rng: rng, lastClose: 20 + rng.Float64()*480, date: cfg.AsOf.AddDate(0, 0, 1-count), companyID: companyID, exchanges: exchanges}
+}
+func (s *priceSeries) next(id int64) financial.DailyStockPrice {
+	open := max(0.02, s.lastClose*(1+(s.rng.Float64()-0.5)*0.1))
+	high := open * (1 + s.rng.Float64()*0.05)
+	low := open * (1 - s.rng.Float64()*0.05)
+	close := low + s.rng.Float64()*(high-low)
+	row := financial.DailyStockPrice{PriceID: id, Date: s.date, CompanyID: s.companyID, ExchangeID: s.exchanges[s.rng.Intn(len(s.exchanges))].ExchangeID, OpenPrice: open, HighPrice: high, LowPrice: low, ClosePrice: close, Volume: 10000 + s.rng.Intn(9990001)}
+	s.lastClose = close
+	s.date = s.date.AddDate(0, 0, 1)
+	return row
+}
+
+// Retained for the price invariant regression fixture.
+func generateStockPricesForCompanies(companies []financial.Company, exchanges []financial.Exchange, numPricesPerCompany, extra int, priceIDStart int64, options ...generation.Config) []financial.DailyStockPrice {
+	cfg := generation.Options(options)
+	prices := make([]financial.DailyStockPrice, 0, len(companies)*numPricesPerCompany+extra)
+	for i, c := range companies {
 		count := numPricesPerCompany
-		if index < extra {
+		if i < extra {
 			count++
 		}
-		lastClose := gf.Float64Range(20, 500)
-		date := time.Now().AddDate(-NumYearsOfData, 0, 0)
-
-		for i := 0; i < count; i++ {
-			openPrice := max(0.02, lastClose*(1+(rand.Float64()-0.5)*0.1))
-			highPrice := openPrice * (1 + rand.Float64()*0.05)
-			lowPrice := openPrice * (1 - rand.Float64()*0.05)
-			closePrice := lowPrice + rand.Float64()*(highPrice-lowPrice)
-
-			prices = append(prices, financial.DailyStockPrice{
-				PriceID:    priceIDCounter,
-				Date:       date,
-				CompanyID:  company.CompanyID,
-				ExchangeID: exchanges[rand.Intn(len(exchanges))].ExchangeID,
-				OpenPrice:  openPrice,
-				HighPrice:  highPrice,
-				LowPrice:   lowPrice,
-				ClosePrice: closePrice,
-				Volume:     gf.Number(10000, 10000000),
-			})
-
-			lastClose = closePrice
-			date = date.AddDate(0, 0, 1)
-			priceIDCounter++
+		series := newPriceSeries(c.CompanyID, count, exchanges, cfg)
+		for range count {
+			prices = append(prices, series.next(priceIDStart))
+			priceIDStart++
 		}
 	}
 	return prices
 }
-
-func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []financial.Company, exchanges []financial.Exchange, format string, outputDir string) error {
+func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []financial.Company, exchanges []financial.Exchange, format, outputDir string, options ...generation.Config) error {
+	cfg := generation.Options(options)
 	if numPrices < 0 {
 		return fmt.Errorf("stock price count must be nonnegative")
-	}
-	if numPrices > 0 && (len(companies) == 0 || len(exchanges) == 0) {
-		return fmt.Errorf("stock prices require at least one company and exchange")
 	}
 	if numPrices == 0 {
 		return nil
 	}
+	if len(companies) == 0 || len(exchanges) == 0 {
+		return fmt.Errorf("stock prices require at least one company and exchange")
+	}
+	perCompany, extra := numPrices/len(companies), numPrices%len(companies)
 
-	numWorkers := min(runtime.GOMAXPROCS(0), len(companies), numPrices)
-	var wg sync.WaitGroup
-	resultsChan := make(chan []financial.DailyStockPrice, numWorkers)
-
-	avgPricesPerCompany := numPrices / len(companies)
-	remainder := numPrices % len(companies)
-	chunkSize := 1 + (len(companies)-1)/numWorkers
-	for start := 0; start < len(companies); start += chunkSize {
-		end := min(start+chunkSize, len(companies))
-		extra := max(0, min(end, remainder)-start)
-		if avgPricesPerCompany == 0 && extra == 0 {
-			break
+	maxPerCompany := perCompany
+	if extra > 0 {
+		maxPerCompany++
+	}
+	earliestDay := time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC).Unix() / 86400
+	availableDays := cfg.AsOf.Unix()/86400 - earliestDay + 1
+	if int64(maxPerCompany) > availableDays {
+		return fmt.Errorf("price history exceeds dates supported by the reference date")
+	}
+	companyJobs := cfg
+	companyJobs.RowsPerFile = max(1, cfg.RowsPerFile/maxPerCompany)
+	return generation.Partitions(context.Background(), len(companies), companyJobs, func(ctx context.Context, p generation.Partition) error {
+		rows := make([]financial.DailyStockPrice, 0, min(cfg.RowsPerFile, numPrices))
+		part := 0
+		flush := func() error {
+			if len(rows) == 0 {
+				return nil
+			}
+			name := fmt.Sprintf("fact_daily_stock_prices_%d_%d", p.Index, part)
+			if err := formats.WriteSliceData(rows, name, format, outputDir); err != nil {
+				return err
+			}
+			if err := cfg.RecordFile(name+"."+format, len(rows), rows[0].PriceID, rows[len(rows)-1].PriceID); err != nil {
+				return err
+			}
+			rows = rows[:0]
+			part++
+			return nil
 		}
-		startID := int64(start*avgPricesPerCompany+min(start, remainder)) + 1
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			resultsChan <- generateStockPricesForCompanies(companies[start:end], exchanges, avgPricesPerCompany, extra, startID)
-		}()
-	}
-	wg.Wait()
-	close(resultsChan)
+		for index := p.Start; index < p.Start+p.Count; index++ {
+			count := perCompany
+			if index < extra {
+				count++
+			}
+			first := index*perCompany + min(index, extra) + 1
+			series := newPriceSeries(companies[index].CompanyID, count, exchanges, cfg)
+			for i := 0; i < count; i++ {
+				if i%1024 == 0 && ctx.Err() != nil {
+					return ctx.Err()
+				}
+				rows = append(rows, series.next(int64(first+i)))
+				if len(rows) == cfg.RowsPerFile {
+					if err := flush(); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return flush()
+	})
 
-	fmt.Println("Aggregating results...")
-	allPrices := make([]financial.DailyStockPrice, 0, numPrices)
-	for prices := range resultsChan {
-		allPrices = append(allPrices, prices...)
-	}
-
-	fmt.Println("Writing fact data to file...")
-	return formats.WriteSliceData(allPrices, "fact_daily_stock_prices", format, outputDir)
 }
 
-type FinancialRowCounts struct {
-	Companies        int
-	Exchanges        int
-	DailyStockPrices int
-}
+type FinancialRowCounts struct{ Companies, Exchanges, DailyStockPrices int }
 
-func GenerateFinancialModelData(counts FinancialRowCounts, companies []financial.Company, exchanges []financial.Exchange, format string, outputDir string) error {
-	// Generate and write daily stock prices concurrently
-	if err := generateAndWriteDailyStockPricesConcurrently(counts.DailyStockPrices, companies, exchanges, format, outputDir); err != nil {
-		return fmt.Errorf("error generating daily stock prices: %w", err)
-	}
-
-	return nil
+func GenerateFinancialModelData(counts FinancialRowCounts, companies []financial.Company, exchanges []financial.Exchange, format, outputDir string, options ...generation.Config) error {
+	return generateAndWriteDailyStockPricesConcurrently(counts.DailyStockPrices, companies, exchanges, format, outputDir, options...)
 }

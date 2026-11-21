@@ -1,9 +1,7 @@
 package financial
 
 import (
-	"math/rand"
-
-	gf "github.com/brianvoe/gofakeit/v6"
+	"github.com/peekknuf/Gengo/internal/generation"
 	"github.com/peekknuf/Gengo/internal/models/financial"
 )
 
@@ -12,7 +10,10 @@ var (
 	exchangeNames = []string{"NASDAQ", "New York Stock Exchange", "London Stock Exchange", "Tokyo Stock Exchange", "Hong Kong Stock Exchange"}
 )
 
-func GenerateCompanies(count int) []financial.Company {
+func GenerateCompanies(count int, options ...generation.Config) []financial.Company {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("financial.GenerateCompanies", 0)
+	fake := cfg.Faker("financial.GenerateCompanies")
 	if count <= 0 {
 		return []financial.Company{}
 	}
@@ -20,15 +21,17 @@ func GenerateCompanies(count int) []financial.Company {
 	for i := 0; i < count; i++ {
 		companies[i] = financial.Company{
 			CompanyID:    i + 1,
-			CompanyName:  gf.Company(),
-			TickerSymbol: gf.LetterN(4),
-			Sector:       sectors[rand.Intn(len(sectors))],
+			CompanyName:  fake.Company(),
+			TickerSymbol: fake.LetterN(4),
+			Sector:       sectors[rng.Intn(len(sectors))],
 		}
 	}
 	return companies
 }
 
-func GenerateExchanges(count int) []financial.Exchange {
+func GenerateExchanges(count int, options ...generation.Config) []financial.Exchange {
+	cfg := generation.Options(options)
+	fake := cfg.Faker("financial.GenerateExchanges")
 	if count <= 0 {
 		return []financial.Exchange{}
 	}
@@ -37,7 +40,7 @@ func GenerateExchanges(count int) []financial.Exchange {
 		exchanges[i] = financial.Exchange{
 			ExchangeID:   i + 1,
 			ExchangeName: exchangeNames[i%len(exchangeNames)],
-			Country:      gf.Country(),
+			Country:      fake.Country(),
 		}
 	}
 	return exchanges

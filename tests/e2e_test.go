@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"encoding/csv"
 	"io"
 	"os"
@@ -11,8 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"context"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/apache/arrow-go/v18/parquet/pqarrow"
@@ -244,7 +243,7 @@ func getSchemaSpecs(model string) (dims []string, facts []fileSpec) {
 			"dim_exchanges",
 		}
 		facts = []fileSpec{
-			{baseName: "fact_daily_stock_prices", sharded: false},
+			{baseName: "fact_daily_stock_prices", sharded: true},
 		}
 	case "medical":
 		dims = []string{
@@ -253,7 +252,7 @@ func getSchemaSpecs(model string) (dims []string, facts []fileSpec) {
 			"dim_clinics",
 		}
 		facts = []fileSpec{
-			{baseName: "fact_appointments", sharded: false},
+			{baseName: "fact_appointments", sharded: true},
 		}
 	}
 	return

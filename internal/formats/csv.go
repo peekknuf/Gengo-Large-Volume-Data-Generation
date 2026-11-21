@@ -64,6 +64,11 @@ func WriteStream(data <-chan interface{}, filename, format, outputDir string) er
 
 // writeCSVFile reports buffered write and close failures before returning success.
 func writeCSVFile(filename string, write func(*bufio.Writer) error) (err error) {
+	return WriteCSVFile(filename, write)
+}
+
+// WriteCSVFile shares buffered write and close error handling with direct encoders.
+func WriteCSVFile(filename string, write func(*bufio.Writer) error) (err error) {
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", filename, err)
@@ -102,7 +107,7 @@ func appendCSVRow(buf []byte, row reflect.Value) []byte {
 			buf = appendCSVField(buf, field.String())
 		case reflect.Struct:
 			if t, ok := field.Interface().(time.Time); ok {
-				buf = t.AppendFormat(buf, time.RFC3339)
+				buf = t.AppendFormat(buf, time.RFC3339Nano)
 			}
 		}
 	}

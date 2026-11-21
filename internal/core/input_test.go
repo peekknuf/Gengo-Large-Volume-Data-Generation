@@ -18,3 +18,11 @@ func TestInputRejectsUnsupportedJSON(t *testing.T) {
 		t.Fatal("accepted unsupported JSON output")
 	}
 }
+
+func TestInputRejectsUnrepresentableRows(t *testing.T) {
+	for _, model := range []string{"ecommerce", "ecommerce-ds", "medical", "financial"} {
+		if _, _, _, _, err := GetUserInput(model, math.MaxFloat64, "csv", "unused"); err == nil {
+			t.Errorf("%s accepted overflow", model)
+		}
+	}
+}

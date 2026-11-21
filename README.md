@@ -21,6 +21,9 @@ On Windows, build with `-o gengo.exe` and run `.\gengo.exe`.
 Run `gengo gen` without flags for interactive prompts.
 Use `--rows companies=3 --rows daily_stock_prices=17` to override counts from a financial size plan.
 Row overrides use lowercase plan names with underscores. Add `--dry-run` to inspect the resolved counts.
+Use `--seed 0 --as-of 2026-11-21 --rows-per-file 100000` for repeatable output.
+Each completed run includes a manifest. See [reproducibility](docs/reproducibility.md)
+for guarantees, file partitioning, and timestamp units.
 
 | Model | Output |
 | --- | --- |

@@ -2,12 +2,11 @@ package ecommerce
 
 import (
 	"fmt"
-	"math/rand"
+	"math"
 	"strings"
 
-	gf "github.com/brianvoe/gofakeit/v6"
+	"github.com/peekknuf/Gengo/internal/generation"
 	"github.com/peekknuf/Gengo/internal/models/ecommerce"
-	"gonum.org/v1/gonum/stat/distuv"
 )
 
 // --- Static Data for Generators ---
@@ -18,32 +17,38 @@ var (
 )
 
 // generateCustomers creates a slice of Customer structs.
-func GenerateCustomers(count int) []ecommerce.Customer {
+func GenerateCustomers(count int, options ...generation.Config) []ecommerce.Customer {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce.GenerateCustomers", 0)
+	fake := cfg.Faker("ecommerce.GenerateCustomers")
 	if count <= 0 {
 		return []ecommerce.Customer{}
 	}
 	customers := make([]ecommerce.Customer, count)
 	for i := 0; i < count; i++ {
-		firstName := gf.FirstName()
-		lastName := gf.LastName()
-		emailProvider := emailProviders[rand.Intn(len(emailProviders))]
+		firstName := fake.FirstName()
+		lastName := fake.LastName()
+		emailProvider := emailProviders[rng.Intn(len(emailProviders))]
 		email := fmt.Sprintf("%s.%s%d@%s",
 			strings.ToLower(firstName),
 			strings.ToLower(lastName),
-			gf.Number(1, 999),
+			fake.Number(1, 999),
 			emailProvider)
 
 		customers[i] = ecommerce.Customer{
 			CustomerID: i + 1,
 			FirstName:  firstName,
 			LastName:   lastName,
-			Email:      gf.Numerify(email),
+			Email:      fake.Numerify(email),
 		}
 	}
 	return customers
 }
 
-func GenerateCustomerAddresses(customers []ecommerce.Customer, count int) []ecommerce.CustomerAddress {
+func GenerateCustomerAddresses(customers []ecommerce.Customer, count int, options ...generation.Config) []ecommerce.CustomerAddress {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce.GenerateCustomerAddresses", 0)
+	fake := cfg.Faker("ecommerce.GenerateCustomerAddresses")
 	if len(customers) == 0 {
 		return []ecommerce.CustomerAddress{}
 	}
@@ -51,10 +56,10 @@ func GenerateCustomerAddresses(customers []ecommerce.Customer, count int) []ecom
 	addressIDCounter := 1
 
 	for i, customer := range customers {
-		numAddresses := childCount(count-len(addresses), len(customers)-i-1, 3, rand.Intn)
+		numAddresses := childCount(count-len(addresses), len(customers)-i-1, 3, rng.Intn)
 		for j := 0; j < numAddresses; j++ {
-			addrInfo := gf.Address()
-			addressType := addressTypes[rand.Intn(len(addressTypes))]
+			addrInfo := fake.Address()
+			addressType := addressTypes[rng.Intn(len(addressTypes))]
 
 			addresses = append(addresses, ecommerce.CustomerAddress{
 				AddressID:   addressIDCounter,
@@ -72,7 +77,9 @@ func GenerateCustomerAddresses(customers []ecommerce.Customer, count int) []ecom
 	return addresses
 }
 
-func GenerateSuppliers(count int) []ecommerce.Supplier {
+func GenerateSuppliers(count int, options ...generation.Config) []ecommerce.Supplier {
+	cfg := generation.Options(options)
+	fake := cfg.Faker("ecommerce.GenerateSuppliers")
 	if count <= 0 {
 		return []ecommerce.Supplier{}
 	}
@@ -80,8 +87,8 @@ func GenerateSuppliers(count int) []ecommerce.Supplier {
 	for i := 0; i < count; i++ {
 		suppliers[i] = ecommerce.Supplier{
 			SupplierID:   i + 1,
-			SupplierName: gf.Company(),
-			Country:      gf.Country(),
+			SupplierName: fake.Company(),
+			Country:      fake.Country(),
 		}
 	}
 	return suppliers
@@ -98,27 +105,28 @@ func GenerateProductCategories() []ecommerce.ProductCategory {
 	return categories
 }
 
-func GenerateProducts(count int, supplierIDs []int, categoryIDs []int) []ecommerce.Product {
+func GenerateProducts(count int, supplierIDs []int, categoryIDs []int, options ...generation.Config) []ecommerce.Product {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce.GenerateProducts", 0)
+	fake := cfg.Faker("ecommerce.GenerateProducts")
 	if count <= 0 || len(supplierIDs) == 0 {
 		return []ecommerce.Product{}
 	}
 	products := make([]ecommerce.Product, count)
 
-	priceDist := distuv.Normal{Mu: 75, Sigma: 45}
-
 	for i := 0; i < count; i++ {
-		productName := gf.ProductName()
-		price := priceDist.Rand()
+		productName := fake.ProductName()
+		price := 75 + 45*rng.NormFloat64()
 		if price < 5.0 {
-			price = gf.Float64Range(5.0, 25.0)
+			price = fake.Float64Range(5.0, 25.0)
 		}
 
 		products[i] = ecommerce.Product{
 			ProductID:   i + 1,
-			SupplierID:  supplierIDs[rand.Intn(len(supplierIDs))],
+			SupplierID:  supplierIDs[rng.Intn(len(supplierIDs))],
 			ProductName: productName,
-			CategoryID:  categoryIDs[rand.Intn(len(categoryIDs))],
-			BasePrice:   price,
+			CategoryID:  categoryIDs[rng.Intn(len(categoryIDs))],
+			BasePrice:   math.Round(price*100) / 100,
 		}
 	}
 	return products

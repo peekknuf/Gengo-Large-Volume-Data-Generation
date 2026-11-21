@@ -37,15 +37,28 @@ func TestGenerationControls(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %s", err, out)
 		}
-		f, err := os.Open(filepath.Join(dir, "fact_daily_stock_prices.csv"))
+
+		files, err := filepath.Glob(filepath.Join(dir, "fact_daily_stock_prices_*.csv"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer f.Close()
-		rows, err := csv.NewReader(f).ReadAll()
-		if err != nil || len(rows) != 8 {
-			t.Fatalf("got %d records including header, err %v", len(rows), err)
+		count := 0
+		for _, path := range files {
+			f, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows, err := csv.NewReader(f).ReadAll()
+			f.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			count += len(rows) - 1
 		}
+		if count != 7 {
+			t.Fatalf("generated %d prices, want 7", count)
+		}
+
 	})
 	t.Run("reject_row_overrides", func(t *testing.T) {
 		for _, arg := range []string{"unknown=1", "patients=-1", "patients=0", "doctors=999999999999999999999"} {
@@ -81,9 +94,9 @@ func TestGenerationControls(t *testing.T) {
 			}
 		}
 	})
-	t.Run("worker_shards", func(t *testing.T) {
+	t.Run("stable_shards", func(t *testing.T) {
 		output := t.TempDir()
-		out, err := run(t, "gen", "--model", "ecommerce-ds", "--size", "0.0001", "--format", "csv", "--workers", "2", "--output", output)
+		out, err := run(t, "gen", "--model", "ecommerce-ds", "--size", "0.0001", "--format", "csv", "--workers", "2", "--rows-per-file", "4", "--rows", "store_sales=7", "--rows", "catalog_sales=7", "--rows", "web_sales=7", "--seed", "0", "--as-of", "2026-11-21", "--output", output)
 		if err != nil {
 			t.Fatalf("generation: %v\n%s", err, out)
 		}

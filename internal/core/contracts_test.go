@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -203,7 +202,7 @@ func TestSmallDatasetContracts(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(tc.model+"_"+format, func(t *testing.T) {
 				dir := t.TempDir()
-				if err := GenerateModelData(tc.model, tc.plan, format, dir); err != nil {
+				if err := GenerateModelData(tc.model, tc.plan, format, dir, fixedConfig(t, 0, 3, 4)); err != nil {
 					t.Fatal(err)
 				}
 				if tc.model == "ecommerce-ds" {

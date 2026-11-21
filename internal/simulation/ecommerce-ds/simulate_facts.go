@@ -5,18 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"math"
 	"math/rand"
 	"os"
-	"runtime"
 	"strconv"
 	"sync/atomic"
-	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/peekknuf/Gengo/internal/formats"
+	"github.com/peekknuf/Gengo/internal/generation"
 	ecommerceds "github.com/peekknuf/Gengo/internal/models/ecommerce-ds"
 )
 
@@ -433,28 +431,20 @@ func generateStoreSalesWorkerParquet(ctx context.Context, count int, startTicket
 	return nil
 }
 
-func writeSaleShards(parent context.Context, count int, dir, channel, format string, write func(context.Context, int, int64, string, *rand.Rand) error) error {
-	workers := min(runtime.GOMAXPROCS(0), count)
-	perWorker, extra := count/workers, count%workers
-	group, ctx := errgroup.WithContext(parent)
-	seed := time.Now().UnixNano()
-	for i := 0; i < workers; i++ {
-		rows := perWorker
-		if i < extra {
-			rows++
+func writeSaleShards(parent context.Context, count int, dir, channel, format string, write func(context.Context, int, int64, string, *rand.Rand) error, cfg generation.Config) error {
+	return generation.Partitions(parent, count, cfg, func(ctx context.Context, p generation.Partition) error {
+		rng := cfg.Rand("retail."+channel, uint64(p.Start))
+		filename := fmt.Sprintf("%s/fact_%s_sales_%d.%s", dir, channel, p.Index, format)
+		if err := write(ctx, p.Count, int64(p.Start)+1, filename, rng); err != nil {
+			return err
 		}
-		first := int64(i*perWorker+min(i, extra)) + 1
-		group.Go(func() error {
-			rng := rand.New(rand.NewSource(seed + int64(i)*0x9e3779b9))
-			filename := fmt.Sprintf("%s/fact_%s_sales_%d.%s", dir, channel, i, format)
-			return write(ctx, rows, first, filename, rng)
-		})
-	}
-	return group.Wait()
+		return cfg.RecordFile(filename, p.Count, int64(p.Start)+1, int64(p.Start+p.Count))
+	})
 }
 
 // GenerateStoreSalesOptimized generates store sales using worker-based file sharding
-func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string, options ...generation.Config) error {
+	cfg := generation.Options(options)
 	if count <= 0 {
 		return nil
 	}
@@ -483,7 +473,7 @@ func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimens
 
 	return writeSaleShards(ctx, count, outputDir, "store", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateStoreSalesWorker(ctx, records, first, dims, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng, format)
-	})
+	}, cfg)
 }
 
 // High-performance worker function for generating catalog sales with direct file writing
@@ -729,6 +719,13 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 		extWholesaleCost := wholesaleCents * int64(quantity)
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
+		key1 := dims.Times[rng.Intn(len(dims.Times))]
+		key11 := callCenterSKs[rng.Intn(len(callCenterSKs))]
+		key12 := catalogPageSKs[rng.Intn(len(catalogPageSKs))]
+		key13 := shipModeSKs[rng.Intn(len(shipModeSKs))]
+		key14 := warehouseSKs[rng.Intn(len(warehouseSKs))]
+		key15 := itemSKs[rng.Intn(len(itemSKs))]
+		key16 := promoSKs[rng.Intn(len(promoSKs))]
 		extShipCost := int64(500 + rng.Intn(2000))
 		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
@@ -737,7 +734,7 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 		netProfit := netPaid - extWholesaleCost
 
 		b0.Append(sold)
-		b1.Append(dims.Times[rng.Intn(len(dims.Times))])
+		b1.Append(key1)
 		b2.Append(shipped)
 		b3.Append(bill.ID)
 		b4.Append(bill.Demographics)
@@ -747,12 +744,12 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 		b8.Append(ship.Demographics)
 		b9.Append(ship.Household)
 		b10.Append(ship.Address)
-		b11.Append(callCenterSKs[rng.Intn(len(callCenterSKs))])
-		b12.Append(catalogPageSKs[rng.Intn(len(catalogPageSKs))])
-		b13.Append(shipModeSKs[rng.Intn(len(shipModeSKs))])
-		b14.Append(warehouseSKs[rng.Intn(len(warehouseSKs))])
-		b15.Append(itemSKs[rng.Intn(len(itemSKs))])
-		b16.Append(promoSKs[rng.Intn(len(promoSKs))])
+		b11.Append(key11)
+		b12.Append(key12)
+		b13.Append(key13)
+		b14.Append(key14)
+		b15.Append(key15)
+		b16.Append(key16)
 		b17.Append(startOrder + int64(i))
 		b18.Append(int32(quantity))
 		b19.Append(float64(wholesaleCents) / 100.0)
@@ -787,14 +784,15 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 }
 
 // GenerateCatalogSalesOptimized generates catalog sales using worker-based file sharding
-func GenerateCatalogSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateCatalogSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string, options ...generation.Config) error {
+	cfg := generation.Options(options)
 	if count <= 0 {
 		return nil
 	}
 
 	return writeSaleShards(ctx, count, outputDir, "catalog", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateCatalogSalesWorker(ctx, records, first, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
-	})
+	}, cfg)
 }
 
 // High-performance worker function for generating web sales with direct file writing
@@ -1040,6 +1038,13 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 		extWholesaleCost := wholesaleCents * int64(quantity)
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
+		key1 := dims.Times[rng.Intn(len(dims.Times))]
+		key3 := itemSKs[rng.Intn(len(itemSKs))]
+		key12 := webPageSKs[rng.Intn(len(webPageSKs))]
+		key13 := webSiteSKs[rng.Intn(len(webSiteSKs))]
+		key14 := shipModeSKs[rng.Intn(len(shipModeSKs))]
+		key15 := warehouseSKs[rng.Intn(len(warehouseSKs))]
+		key16 := promoSKs[rng.Intn(len(promoSKs))]
 		extShipCost := int64(500 + rng.Intn(2000))
 		netPaid := extSalesPrice // Unit sales price already includes the discount.
 		netPaidIncTax := netPaid + extTax
@@ -1048,9 +1053,9 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 		netProfit := netPaid - extWholesaleCost
 
 		b0.Append(sold)
-		b1.Append(dims.Times[rng.Intn(len(dims.Times))])
+		b1.Append(key1)
 		b2.Append(shipped)
-		b3.Append(itemSKs[rng.Intn(len(itemSKs))])
+		b3.Append(key3)
 		b4.Append(bill.ID)
 		b5.Append(bill.Demographics)
 		b6.Append(bill.Household)
@@ -1059,11 +1064,11 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 		b9.Append(ship.Demographics)
 		b10.Append(ship.Household)
 		b11.Append(ship.Address)
-		b12.Append(webPageSKs[rng.Intn(len(webPageSKs))])
-		b13.Append(webSiteSKs[rng.Intn(len(webSiteSKs))])
-		b14.Append(shipModeSKs[rng.Intn(len(shipModeSKs))])
-		b15.Append(warehouseSKs[rng.Intn(len(warehouseSKs))])
-		b16.Append(promoSKs[rng.Intn(len(promoSKs))])
+		b12.Append(key12)
+		b13.Append(key13)
+		b14.Append(key14)
+		b15.Append(key15)
+		b16.Append(key16)
 		b17.Append(startOrder + int64(i))
 		b18.Append(int32(quantity))
 		b19.Append(float64(wholesaleCents) / 100.0)
@@ -1098,14 +1103,15 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 }
 
 // GenerateWebSalesOptimized generates web sales using worker-based file sharding
-func GenerateWebSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateWebSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string, options ...generation.Config) error {
+	cfg := generation.Options(options)
 	if count <= 0 {
 		return nil
 	}
 
 	return writeSaleShards(ctx, count, outputDir, "web", format, func(ctx context.Context, records int, first int64, filename string, rng *rand.Rand) error {
 		return generateWebSalesWorker(ctx, records, first, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng, format)
-	})
+	}, cfg)
 }
 
 // Legacy channel-based functions - kept for backward compatibility but not used in optimized flow

@@ -2,16 +2,18 @@ package ecommerceds
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strings"
 	"time"
 
+	"github.com/peekknuf/Gengo/internal/generation"
 	ecommerceds "github.com/peekknuf/Gengo/internal/models/ecommerce-ds"
 )
 
 // GenerateStores generates a number of stores.
-func GenerateStores(count int) []interface{} {
+func GenerateStores(count int, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateStores", 0)
 	stores := make([]interface{}, count)
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
 	states := []string{"NY", "CA", "IL", "TX", "AZ", "PA", "TX", "CA", "TX", "CA"}
@@ -24,92 +26,96 @@ func GenerateStores(count int) []interface{} {
 			S_StoreID:        fmt.Sprintf("store_%d", i+1),
 			S_StoreName:      fmt.Sprintf("Store %d", i+1),
 			S_StoreNumber:    1000 + i,
-			S_StreetNumber:   fmt.Sprintf("%d", rand.Intn(9999)+1),
+			S_StreetNumber:   fmt.Sprintf("%d", rng.Intn(9999)+1),
 			S_StreetName:     fmt.Sprintf("Main St"),
 			S_StreetType:     "Street",
-			S_SuiteNumber:    fmt.Sprintf("Suite %d", rand.Intn(100)+1),
+			S_SuiteNumber:    fmt.Sprintf("Suite %d", rng.Intn(100)+1),
 			S_City:           cities[cityIdx],
 			S_County:         counties[cityIdx],
 			S_State:          states[cityIdx],
-			S_Zip:            fmt.Sprintf("%05d", rand.Intn(99999)+1),
+			S_Zip:            fmt.Sprintf("%05d", rng.Intn(99999)+1),
 			S_Country:        "USA",
 			S_GmtOffset:      -5.0,
-			S_TaxPrecentage:  0.08 + rand.Float64()*0.05,
-			S_FloorSpace:     1000 + rand.Intn(4000),
+			S_TaxPrecentage:  0.08 + rng.Float64()*0.05,
+			S_FloorSpace:     1000 + rng.Intn(4000),
 			S_Hours:          "8am-10pm",
 			S_Manager:        fmt.Sprintf("Manager %d", i+1),
-			S_MarketID:       rand.Intn(10) + 1,
-			S_GeographyClass: fmt.Sprintf("Class %d", rand.Intn(5)+1),
-			S_MarketDesc:     fmt.Sprintf("Market %d", rand.Intn(5)+1),
+			S_MarketID:       rng.Intn(10) + 1,
+			S_GeographyClass: fmt.Sprintf("Class %d", rng.Intn(5)+1),
+			S_MarketDesc:     fmt.Sprintf("Market %d", rng.Intn(5)+1),
 			S_MarketManager:  fmt.Sprintf("Market Manager %d", i+1),
-			S_DivisionID:     rand.Intn(5) + 1,
-			S_DivisionName:   fmt.Sprintf("Division %d", rand.Intn(5)+1),
-			S_CompanyID:      rand.Intn(3) + 1,
-			S_CompanyName:    fmt.Sprintf("Company %d", rand.Intn(3)+1),
+			S_DivisionID:     rng.Intn(5) + 1,
+			S_DivisionName:   fmt.Sprintf("Division %d", rng.Intn(5)+1),
+			S_CompanyID:      rng.Intn(3) + 1,
+			S_CompanyName:    fmt.Sprintf("Company %d", rng.Intn(3)+1),
 		}
 	}
 	return stores
 }
 
 // GenerateCallCenters generates a number of call centers.
-func GenerateCallCenters(count int, dates []int64) []interface{} {
+func GenerateCallCenters(count int, dates []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateCallCenters", 0)
 	centers := make([]interface{}, count)
 
 	for i := 0; i < count; i++ {
-		employees := 50 + rand.Intn(200)
+		employees := 50 + rng.Intn(200)
 		hours := []string{"24/7", "8am-8pm", "9am-9pm", "7am-11pm", "6am-10pm"}
-		hourIdx := rand.Intn(len(hours))
+		hourIdx := rng.Intn(len(hours))
 
 		centers[i] = ecommerceds.CallCenter{
 			CC_CallCenterSK:  int64(i + 1),
 			CC_CallCenterID:  fmt.Sprintf("cc_%d", i+1),
-			CC_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
-			CC_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
+			CC_RecStartDate:  fmt.Sprintf("%04d-01-01", cfg.AsOf.Year()-6+rng.Intn(5)),
+			CC_RecEndDate:    fmt.Sprintf("%04d-12-31", cfg.AsOf.Year()-2+rng.Intn(2)),
 			CC_ClosedDateSK:  0, // Zero denotes an open location with no closing date.
-			CC_OpenDateSK:    dates[rand.Intn(len(dates))],
+			CC_OpenDateSK:    dates[rng.Intn(len(dates))],
 			CC_Name:          fmt.Sprintf("Call Center %d", i+1),
-			CC_Class:         fmt.Sprintf("Class %d", rand.Intn(5)+1),
+			CC_Class:         fmt.Sprintf("Class %d", rng.Intn(5)+1),
 			CC_Employees:     employees,
-			CC_SqFt:          5000 + rand.Intn(15000),
+			CC_SqFt:          5000 + rng.Intn(15000),
 			CC_Hours:         hours[hourIdx],
 			CC_Manager:       fmt.Sprintf("Manager %d", i+1),
-			CC_MktID:         rand.Intn(10) + 1,
-			CC_MktClass:      fmt.Sprintf("Market Class %d", rand.Intn(3)+1),
-			CC_MktDesc:       fmt.Sprintf("Market Description %d", rand.Intn(5)+1),
+			CC_MktID:         rng.Intn(10) + 1,
+			CC_MktClass:      fmt.Sprintf("Market Class %d", rng.Intn(3)+1),
+			CC_MktDesc:       fmt.Sprintf("Market Description %d", rng.Intn(5)+1),
 			CC_MarketManager: fmt.Sprintf("Market Manager %d", i+1),
-			CC_Division:      rand.Intn(5) + 1,
-			CC_DivisionName:  fmt.Sprintf("Division %d", rand.Intn(5)+1),
-			CC_Company:       rand.Intn(3) + 1,
-			CC_CompanyName:   fmt.Sprintf("Company %d", rand.Intn(3)+1),
-			CC_StreetNumber:  fmt.Sprintf("%d", 1000+rand.Intn(9000)),
-			CC_StreetName:    fmt.Sprintf("Street %d", rand.Intn(500)+1),
+			CC_Division:      rng.Intn(5) + 1,
+			CC_DivisionName:  fmt.Sprintf("Division %d", rng.Intn(5)+1),
+			CC_Company:       rng.Intn(3) + 1,
+			CC_CompanyName:   fmt.Sprintf("Company %d", rng.Intn(3)+1),
+			CC_StreetNumber:  fmt.Sprintf("%d", 1000+rng.Intn(9000)),
+			CC_StreetName:    fmt.Sprintf("Street %d", rng.Intn(500)+1),
 			CC_StreetType:    "Street",
-			CC_SuiteNumber:   fmt.Sprintf("Suite %d", rand.Intn(200)+1),
-			CC_City:          fmt.Sprintf("City %d", rand.Intn(50)+1),
-			CC_County:        fmt.Sprintf("County %d", rand.Intn(30)+1),
-			CC_State:         fmt.Sprintf("ST%d", rand.Intn(50)+1),
-			CC_Zip:           fmt.Sprintf("%05d", rand.Intn(100000)),
+			CC_SuiteNumber:   fmt.Sprintf("Suite %d", rng.Intn(200)+1),
+			CC_City:          fmt.Sprintf("City %d", rng.Intn(50)+1),
+			CC_County:        fmt.Sprintf("County %d", rng.Intn(30)+1),
+			CC_State:         fmt.Sprintf("ST%d", rng.Intn(50)+1),
+			CC_Zip:           fmt.Sprintf("%05d", rng.Intn(100000)),
 			CC_Country:       "United States",
-			CC_GmtOffset:     float64(rand.Intn(5) - 5),
-			CC_TaxPercentage: 0.05 + rand.Float64()*0.15,
+			CC_GmtOffset:     float64(rng.Intn(5) - 5),
+			CC_TaxPercentage: 0.05 + rng.Float64()*0.15,
 		}
 	}
 	return centers
 }
 
 // GenerateCatalogPages generates a number of catalog pages.
-func GenerateCatalogPages(count int, dates []int64) []interface{} {
+func GenerateCatalogPages(count int, dates []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateCatalogPages", 0)
 	pages := make([]interface{}, count)
 	departments := []string{"Electronics", "Clothing", "Home", "Sports", "Books", "Toys", "Beauty", "Automotive", "Garden", "Health"}
 
 	for i := 0; i < count; i++ {
 		deptIdx := i % len(departments)
-		catalogNum := rand.Intn(5) + 1
-		pageNum := rand.Intn(100) + 1
+		catalogNum := rng.Intn(5) + 1
+		pageNum := rng.Intn(100) + 1
 		pageType := []string{"Regular", "Sale", "Clearance", "Featured", "New"}
-		typeIdx := rand.Intn(len(pageType))
+		typeIdx := rng.Intn(len(pageType))
 
-		start := rand.Intn(len(dates))
+		start := rng.Intn(len(dates))
 		end := min(start+90, len(dates)-1)
 
 		pages[i] = ecommerceds.CatalogPage{
@@ -128,74 +134,80 @@ func GenerateCatalogPages(count int, dates []int64) []interface{} {
 }
 
 // GenerateWebSites generates a number of web sites.
-func GenerateWebSites(count int, dates []int64) []interface{} {
+func GenerateWebSites(count int, dates []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateWebSites", 0)
 	sites := make([]interface{}, count)
 
 	for i := 0; i < count; i++ {
-		managerID := rand.Intn(20) + 1
+		managerID := rng.Intn(20) + 1
 
 		sites[i] = ecommerceds.WebSite{
 			Web_SiteSK:        int64(i + 1),
 			Web_SiteID:        fmt.Sprintf("web_%d", i+1),
-			Web_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
-			Web_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
+			Web_RecStartDate:  fmt.Sprintf("%04d-01-01", cfg.AsOf.Year()-6+rng.Intn(5)),
+			Web_RecEndDate:    fmt.Sprintf("%04d-12-31", cfg.AsOf.Year()-2+rng.Intn(2)),
 			Web_Name:          fmt.Sprintf("Web Site %d", i+1),
-			Web_OpenDateSK:    dates[rand.Intn(len(dates))],
+			Web_OpenDateSK:    dates[rng.Intn(len(dates))],
 			Web_CloseDateSK:   0, // Zero denotes an open location with no closing date.
-			Web_Class:         fmt.Sprintf("Class %d", rand.Intn(5)+1),
+			Web_Class:         fmt.Sprintf("Class %d", rng.Intn(5)+1),
 			Web_Manager:       fmt.Sprintf("Web Manager %d", managerID),
-			Web_MktID:         rand.Intn(10) + 1,
-			Web_MktClass:      fmt.Sprintf("Market Class %d", rand.Intn(5)+1),
-			Web_MktDesc:       fmt.Sprintf("Market Description %d", rand.Intn(10)+1),
-			Web_MarketManager: fmt.Sprintf("Market Manager %d", rand.Intn(20)+1),
-			Web_CompanyID:     rand.Intn(10) + 1,
-			Web_CompanyName:   fmt.Sprintf("Web Company %d", rand.Intn(10)+1),
-			Web_StreetNumber:  fmt.Sprintf("%d", 100+rand.Intn(9900)),
-			Web_StreetName:    fmt.Sprintf("Street %d", rand.Intn(500)+1),
+			Web_MktID:         rng.Intn(10) + 1,
+			Web_MktClass:      fmt.Sprintf("Market Class %d", rng.Intn(5)+1),
+			Web_MktDesc:       fmt.Sprintf("Market Description %d", rng.Intn(10)+1),
+			Web_MarketManager: fmt.Sprintf("Market Manager %d", rng.Intn(20)+1),
+			Web_CompanyID:     rng.Intn(10) + 1,
+			Web_CompanyName:   fmt.Sprintf("Web Company %d", rng.Intn(10)+1),
+			Web_StreetNumber:  fmt.Sprintf("%d", 100+rng.Intn(9900)),
+			Web_StreetName:    fmt.Sprintf("Street %d", rng.Intn(500)+1),
 			Web_StreetType:    "Street",
-			Web_SuiteNumber:   fmt.Sprintf("Suite %d", rand.Intn(200)+1),
-			Web_City:          fmt.Sprintf("City %d", rand.Intn(50)+1),
-			Web_County:        fmt.Sprintf("County %d", rand.Intn(30)+1),
-			Web_State:         fmt.Sprintf("ST%d", rand.Intn(50)+1),
-			Web_Zip:           fmt.Sprintf("%05d", rand.Intn(100000)),
+			Web_SuiteNumber:   fmt.Sprintf("Suite %d", rng.Intn(200)+1),
+			Web_City:          fmt.Sprintf("City %d", rng.Intn(50)+1),
+			Web_County:        fmt.Sprintf("County %d", rng.Intn(30)+1),
+			Web_State:         fmt.Sprintf("ST%d", rng.Intn(50)+1),
+			Web_Zip:           fmt.Sprintf("%05d", rng.Intn(100000)),
 			Web_Country:       "United States",
-			Web_GmtOffset:     float64(rand.Intn(5) - 5),
-			Web_TaxPercentage: 0.05 + rand.Float64()*0.15,
+			Web_GmtOffset:     float64(rng.Intn(5) - 5),
+			Web_TaxPercentage: 0.05 + rng.Float64()*0.15,
 		}
 	}
 	return sites
 }
 
 // GenerateWebPages generates a number of web pages.
-func GenerateWebPages(count int, dates, customerKeys []int64) []interface{} {
+func GenerateWebPages(count int, dates, customerKeys []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateWebPages", 0)
 	pages := make([]interface{}, count)
 	pageTypes := []string{"Product", "Category", "Search", "Checkout", "Account", "Home", "About", "Contact"}
 
 	for i := 0; i < count; i++ {
-		typeIdx := rand.Intn(len(pageTypes))
+		typeIdx := rng.Intn(len(pageTypes))
 
 		pages[i] = ecommerceds.WebPage{
 			WP_WebPageSK:      int64(i + 1),
 			WP_WebPageID:      fmt.Sprintf("wp_%d", i+1),
-			WP_RecStartDate:   fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
-			WP_RecEndDate:     fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
+			WP_RecStartDate:   fmt.Sprintf("%04d-01-01", cfg.AsOf.Year()-6+rng.Intn(5)),
+			WP_RecEndDate:     fmt.Sprintf("%04d-12-31", cfg.AsOf.Year()-2+rng.Intn(2)),
 			WP_CreationDateSK: dates[i%len(dates)],
 			WP_AccessDateSK:   dates[min(i%len(dates)+1, len(dates)-1)],
 			WP_AutogenFlag:    "N",
-			WP_CustomerSK:     customerKeys[rand.Intn(len(customerKeys))],
+			WP_CustomerSK:     customerKeys[rng.Intn(len(customerKeys))],
 			WP_URL:            fmt.Sprintf("http://example.com/page%d", i+1),
 			WP_Type:           pageTypes[typeIdx],
-			WP_CharCount:      rand.Intn(50000) + 1000,
-			WP_LinkCount:      rand.Intn(200) + 10,
-			WP_ImageCount:     rand.Intn(50) + 1,
-			WP_MaxAdCount:     rand.Intn(10) + 1,
+			WP_CharCount:      rng.Intn(50000) + 1000,
+			WP_LinkCount:      rng.Intn(200) + 10,
+			WP_ImageCount:     rng.Intn(50) + 1,
+			WP_MaxAdCount:     rng.Intn(10) + 1,
 		}
 	}
 	return pages
 }
 
 // GenerateCustomers generates a number of customers.
-func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []int64) []interface{} {
+func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateCustomers", 0)
 	customers := make([]interface{}, count)
 	firstNames := []string{"John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Jennifer"}
 	lastNames := []string{"Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis", "Garcia", "Rodriguez", "Wilson"}
@@ -205,22 +217,22 @@ func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []i
 			continue // Skip if required dependencies are not available
 		}
 
-		firstName := firstNames[rand.Intn(len(firstNames))]
-		lastName := lastNames[rand.Intn(len(lastNames))]
-		birthDate := time.Date(1950+rand.Intn(50), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, 0, 0, 0, 0, time.UTC)
+		firstName := firstNames[rng.Intn(len(firstNames))]
+		lastName := lastNames[rng.Intn(len(lastNames))]
+		birthDate := time.Date(cfg.AsOf.Year()-76+rng.Intn(50), time.Month(rng.Intn(12)+1), rng.Intn(28)+1, 0, 0, 0, 0, time.UTC)
 
 		customers[i] = ecommerceds.Customer{
 			C_CustomerSK:        int64(i + 1),
 			C_CustomerID:        fmt.Sprintf("cust_%d", i+1),
-			C_CurrentCDemoSK:    cdemoSKs[rand.Intn(len(cdemoSKs))],
-			C_CurrentHDemoSK:    hdemoSKs[rand.Intn(len(hdemoSKs))],
-			C_CurrentAddrSK:     addrSKs[rand.Intn(len(addrSKs))],
+			C_CurrentCDemoSK:    cdemoSKs[rng.Intn(len(cdemoSKs))],
+			C_CurrentHDemoSK:    hdemoSKs[rng.Intn(len(hdemoSKs))],
+			C_CurrentAddrSK:     addrSKs[rng.Intn(len(addrSKs))],
 			C_FirstShiptoDateSK: dates[min(i%len(dates)+1, len(dates)-1)],
 			C_FirstSalesDateSK:  dates[i%len(dates)],
-			C_Salutation:        []string{"Mr", "Ms", "Mrs", "Dr"}[rand.Intn(4)],
+			C_Salutation:        []string{"Mr", "Ms", "Mrs", "Dr"}[rng.Intn(4)],
 			C_FirstName:         firstName,
 			C_LastName:          lastName,
-			C_PreferredCustFlag: []string{"Y", "N"}[rand.Intn(2)],
+			C_PreferredCustFlag: []string{"Y", "N"}[rng.Intn(2)],
 			C_BirthDay:          birthDate.Day(),
 			C_BirthMonth:        int(birthDate.Month()),
 			C_BirthYear:         birthDate.Year(),
@@ -234,7 +246,9 @@ func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []i
 }
 
 // GenerateCustomerAddresses generates a number of customer addresses.
-func GenerateCustomerAddresses(count int, dates []int64) []interface{} {
+func GenerateCustomerAddresses(count int, dates []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateCustomerAddresses", 0)
 	addresses := make([]interface{}, count)
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
 	states := []string{"NY", "CA", "IL", "TX", "AZ", "PA", "TX", "CA", "TX", "CA"}
@@ -247,24 +261,26 @@ func GenerateCustomerAddresses(count int, dates []int64) []interface{} {
 			CA_AddressSK:     int64(i + 1),
 			CA_AddressID:     fmt.Sprintf("addr_%d", i+1),
 			CA_AddressDateSK: dates[0],
-			CA_StreetNumber:  fmt.Sprintf("%d", rand.Intn(9999)+1),
-			CA_StreetName:    streets[rand.Intn(len(streets))],
+			CA_StreetNumber:  fmt.Sprintf("%d", rng.Intn(9999)+1),
+			CA_StreetName:    streets[rng.Intn(len(streets))],
 			CA_StreetType:    "St",
-			CA_SuiteNumber:   fmt.Sprintf("Apt %d", rand.Intn(500)+1),
+			CA_SuiteNumber:   fmt.Sprintf("Apt %d", rng.Intn(500)+1),
 			CA_City:          cities[cityIdx],
 			CA_County:        fmt.Sprintf("%s County", cities[cityIdx]),
 			CA_State:         states[cityIdx],
-			CA_Zip:           fmt.Sprintf("%05d", rand.Intn(99999)+1),
+			CA_Zip:           fmt.Sprintf("%05d", rng.Intn(99999)+1),
 			CA_Country:       "USA",
 			CA_GmtOffset:     -5.0,
-			CA_LocationType:  []string{"Residential", "Business", "PO Box", "Military"}[rand.Intn(4)],
+			CA_LocationType:  []string{"Residential", "Business", "PO Box", "Military"}[rng.Intn(4)],
 		}
 	}
 	return addresses
 }
 
 // GenerateCustomerDemographics generates a number of customer demographics.
-func GenerateCustomerDemographics(count int) []interface{} {
+func GenerateCustomerDemographics(count int, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateCustomerDemographics", 0)
 	demos := make([]interface{}, count)
 	genders := []string{"M", "F"}
 	maritalStatuses := []string{"Single", "Married", "Divorced", "Widowed"}
@@ -272,31 +288,33 @@ func GenerateCustomerDemographics(count int) []interface{} {
 	creditRatings := []string{"Poor", "Fair", "Good", "Excellent"}
 
 	for i := 0; i < count; i++ {
-		gender := genders[rand.Intn(len(genders))]
-		maritalStatus := maritalStatuses[rand.Intn(len(maritalStatuses))]
-		education := educationLevels[rand.Intn(len(educationLevels))]
-		creditRating := creditRatings[rand.Intn(len(creditRatings))]
+		gender := genders[rng.Intn(len(genders))]
+		maritalStatus := maritalStatuses[rng.Intn(len(maritalStatuses))]
+		education := educationLevels[rng.Intn(len(educationLevels))]
+		creditRating := creditRatings[rng.Intn(len(creditRatings))]
 
 		demos[i] = ecommerceds.CustomerDemographics{
 			CD_DemoSK:              int64(i + 1),
 			CD_Gender:              gender,
 			CD_MaritalStatus:       maritalStatus,
 			CD_EducationStatus:     education,
-			CD_PurchaseEstimate:    1000 + rand.Intn(9000),
+			CD_PurchaseEstimate:    1000 + rng.Intn(9000),
 			CD_CreditRating:        creditRating,
-			CD_DepCount:            rand.Intn(5),
-			CD_DepEmployedCount:    rand.Intn(5),
-			CD_DepCollegeCount:     rand.Intn(5),
-			CD_HouseholdSize:       1 + rand.Intn(8),
-			CD_AverageYearlyIncome: int64(20000 + rand.Intn(150000)),
-			CD_CustomerSegment:     []string{"Basic", "Standard", "Premium", "VIP"}[rand.Intn(4)],
+			CD_DepCount:            rng.Intn(5),
+			CD_DepEmployedCount:    rng.Intn(5),
+			CD_DepCollegeCount:     rng.Intn(5),
+			CD_HouseholdSize:       1 + rng.Intn(8),
+			CD_AverageYearlyIncome: int64(20000 + rng.Intn(150000)),
+			CD_CustomerSegment:     []string{"Basic", "Standard", "Premium", "VIP"}[rng.Intn(4)],
 		}
 	}
 	return demos
 }
 
 // GenerateHouseholdDemographics generates a number of household demographics.
-func GenerateHouseholdDemographics(count int, incomeBandSKs []int64) []interface{} {
+func GenerateHouseholdDemographics(count int, incomeBandSKs []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateHouseholdDemographics", 0)
 	demos := make([]interface{}, count)
 	buyPotentials := []string{"<1000", "1000-5000", "5000-10000", "10000-20000", ">20000"}
 
@@ -307,17 +325,19 @@ func GenerateHouseholdDemographics(count int, incomeBandSKs []int64) []interface
 
 		demos[i] = ecommerceds.HouseholdDemographics{
 			HD_DemoSK:       int64(i + 1),
-			HD_IncomeBandSK: incomeBandSKs[rand.Intn(len(incomeBandSKs))],
-			HD_BuyPotential: buyPotentials[rand.Intn(len(buyPotentials))],
-			HD_DepCount:     1 + rand.Intn(8),
-			HD_VehicleCount: rand.Intn(5),
+			HD_IncomeBandSK: incomeBandSKs[rng.Intn(len(incomeBandSKs))],
+			HD_BuyPotential: buyPotentials[rng.Intn(len(buyPotentials))],
+			HD_DepCount:     1 + rng.Intn(8),
+			HD_VehicleCount: rng.Intn(5),
 		}
 	}
 	return demos
 }
 
 // GenerateItems generates a number of items.
-func GenerateItems(count int) []interface{} {
+func GenerateItems(count int, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateItems", 0)
 	items := make([]interface{}, count)
 	categories := []string{"Electronics", "Clothing", "Home", "Sports", "Books", "Toys", "Beauty", "Automotive", "Garden", "Health"}
 	brands := []string{"TechCorp", "FashionHub", "HomeStyle", "SportPro", "BookWorld", "ToyLand", "BeautyPlus", "AutoMax", "GardenGreen", "HealthFirst"}
@@ -327,33 +347,33 @@ func GenerateItems(count int) []interface{} {
 	containers := []string{"Box", "Bag", "Can", "Bottle", "Tube", "Jar", "Pouch", "Case", "Pack", "Set"}
 
 	for i := 0; i < count; i++ {
-		category := categories[rand.Intn(len(categories))]
-		brand := brands[rand.Intn(len(brands))]
-		wholesaleCost := 5.0 + rand.Float64()*500
-		retailPrice := wholesaleCost * (1.2 + rand.Float64()*0.8)
+		category := categories[rng.Intn(len(categories))]
+		brand := brands[rng.Intn(len(brands))]
+		wholesaleCost := 5.0 + rng.Float64()*500
+		retailPrice := wholesaleCost * (1.2 + rng.Float64()*0.8)
 
 		items[i] = ecommerceds.Item{
 			I_ItemSK:        int64(i + 1),
 			I_ItemID:        fmt.Sprintf("item_%d", i+1),
-			I_RecStartDate:  fmt.Sprintf("20%d-01-01", 20+rand.Intn(5)),
-			I_RecEndDate:    fmt.Sprintf("20%d-12-31", 24+rand.Intn(2)),
+			I_RecStartDate:  fmt.Sprintf("%04d-01-01", cfg.AsOf.Year()-6+rng.Intn(5)),
+			I_RecEndDate:    fmt.Sprintf("%04d-12-31", cfg.AsOf.Year()-2+rng.Intn(2)),
 			I_ItemDesc:      fmt.Sprintf("%s %s %d", brand, category, i+1),
 			I_CurrentPrice:  retailPrice,
 			I_WholesaleCost: wholesaleCost,
-			I_BrandID:       rand.Intn(100) + 1,
+			I_BrandID:       rng.Intn(100) + 1,
 			I_Brand:         brand,
-			I_ClassID:       rand.Intn(20) + 1,
-			I_Class:         fmt.Sprintf("Class %d", rand.Intn(20)+1),
-			I_CategoryID:    rand.Intn(10) + 1,
+			I_ClassID:       rng.Intn(20) + 1,
+			I_Class:         fmt.Sprintf("Class %d", rng.Intn(20)+1),
+			I_CategoryID:    rng.Intn(10) + 1,
 			I_Category:      category,
-			I_ManufactID:    rand.Intn(50) + 1,
-			I_Manufact:      fmt.Sprintf("Manufacturer %d", rand.Intn(50)+1),
-			I_Size:          sizes[rand.Intn(len(sizes))],
-			I_Formulation:   fmt.Sprintf("Formulation %d", rand.Intn(10)+1),
-			I_Color:         colors[rand.Intn(len(colors))],
-			I_Units:         units[rand.Intn(len(units))],
-			I_Container:     containers[rand.Intn(len(containers))],
-			I_ManagerID:     rand.Intn(10) + 1,
+			I_ManufactID:    rng.Intn(50) + 1,
+			I_Manufact:      fmt.Sprintf("Manufacturer %d", rng.Intn(50)+1),
+			I_Size:          sizes[rng.Intn(len(sizes))],
+			I_Formulation:   fmt.Sprintf("Formulation %d", rng.Intn(10)+1),
+			I_Color:         colors[rng.Intn(len(colors))],
+			I_Units:         units[rng.Intn(len(units))],
+			I_Container:     containers[rng.Intn(len(containers))],
+			I_ManagerID:     rng.Intn(10) + 1,
 			I_ProductName:   fmt.Sprintf("%s %s", brand, category),
 		}
 	}
@@ -406,14 +426,16 @@ func GenerateReasons(count int) []interface{} {
 }
 
 // GenerateShipModes generates a fixed set of shipping modes.
-func GenerateShipModes(count int) []interface{} {
+func GenerateShipModes(count int, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateShipModes", 0)
 	shipModes := make([]interface{}, count)
 	shipTypes := []string{"Ground", "Air", "Sea", "Rail", "Express", "Overnight", "Standard", "Economy"}
 	carriers := []string{"UPS", "FedEx", "USPS", "DHL", "Amazon Logistics", "OnTrac", "LaserShip", "Regional Carrier"}
 
 	for i := 0; i < count; i++ {
 		shipType := shipTypes[i%len(shipTypes)]
-		carrier := carriers[rand.Intn(len(carriers))]
+		carrier := carriers[rng.Intn(len(carriers))]
 
 		shipModes[i] = ecommerceds.ShipMode{
 			SM_ShipModeSK: int64(i + 1),
@@ -445,7 +467,9 @@ func GenerateIncomeBands(count int) []interface{} {
 }
 
 // GeneratePromotions generates a number of promotions.
-func GeneratePromotions(count int, dates []int64, itemSKs []int64) []interface{} {
+func GeneratePromotions(count int, dates []int64, itemSKs []int64, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GeneratePromotions", 0)
 	promotions := make([]interface{}, count)
 	promoTypes := []string{"Discount", "Coupon", "Bundle", "BOGO", "Clearance", "Seasonal", "New Customer", "Loyalty", "Referral", "Flash Sale"}
 
@@ -454,27 +478,27 @@ func GeneratePromotions(count int, dates []int64, itemSKs []int64) []interface{}
 			continue // Skip if no items available
 		}
 
-		start := rand.Intn(len(dates))
-		end := min(start+30+rand.Intn(90), len(dates)-1)
+		start := rng.Intn(len(dates))
+		end := min(start+30+rng.Intn(90), len(dates)-1)
 
 		promotions[i] = ecommerceds.Promotion{
 			P_PromoSK:           int64(i + 1),
 			P_PromoID:           fmt.Sprintf("promo_%d", i+1),
 			P_StartDateSK:       dates[start],
 			P_EndDateSK:         dates[end],
-			P_ItemSK:            itemSKs[rand.Intn(len(itemSKs))],
-			P_Cost:              rand.Float64() * 10000,
-			P_TargetMarketClass: []string{"Mass", "Upscale", "Luxury", "Budget"}[rand.Intn(4)],
-			P_PromoName:         fmt.Sprintf("%s Promotion %d", promoTypes[rand.Intn(len(promoTypes))], i+1),
-			P_ChannelDmail:      []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelEmail:      []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelCatalog:    []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelTv:         []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelRadio:      []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelPress:      []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelEvent:      []string{"Y", "N"}[rand.Intn(2)],
-			P_ChannelDemo:       []string{"Y", "N"}[rand.Intn(2)],
-			P_Purpose:           fmt.Sprintf("%s campaign", promoTypes[rand.Intn(len(promoTypes))]),
+			P_ItemSK:            itemSKs[rng.Intn(len(itemSKs))],
+			P_Cost:              rng.Float64() * 10000,
+			P_TargetMarketClass: []string{"Mass", "Upscale", "Luxury", "Budget"}[rng.Intn(4)],
+			P_PromoName:         fmt.Sprintf("%s Promotion %d", promoTypes[rng.Intn(len(promoTypes))], i+1),
+			P_ChannelDmail:      []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelEmail:      []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelCatalog:    []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelTv:         []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelRadio:      []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelPress:      []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelEvent:      []string{"Y", "N"}[rng.Intn(2)],
+			P_ChannelDemo:       []string{"Y", "N"}[rng.Intn(2)],
+			P_Purpose:           fmt.Sprintf("%s campaign", promoTypes[rng.Intn(len(promoTypes))]),
 			P_DiscountActive:    "Y",
 		}
 	}
@@ -482,31 +506,33 @@ func GeneratePromotions(count int, dates []int64, itemSKs []int64) []interface{}
 }
 
 // GenerateWarehouses generates a number of warehouses.
-func GenerateWarehouses(count int) []interface{} {
+func GenerateWarehouses(count int, options ...generation.Config) []interface{} {
+	cfg := generation.Options(options)
+	rng := cfg.Rand("ecommerce-ds.GenerateWarehouses", 0)
 	warehouses := make([]interface{}, count)
 	states := []string{"CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"}
 	warehouseTypes := []string{"Distribution Center", "Fulfillment Center", "Cross-Dock", "Cold Storage", "Bulk Storage", "Retail Warehouse"}
 
 	for i := 0; i < count; i++ {
-		state := states[rand.Intn(len(states))]
-		warehouseType := warehouseTypes[rand.Intn(len(warehouseTypes))]
+		state := states[rng.Intn(len(states))]
+		warehouseType := warehouseTypes[rng.Intn(len(warehouseTypes))]
 
 		warehouses[i] = ecommerceds.Warehouse{
 			W_WarehouseSK:   int64(i + 1),
 			W_WarehouseID:   fmt.Sprintf("wh_%d", i+1),
 			W_WarehouseName: fmt.Sprintf("%s %d", warehouseType, i+1),
-			W_WarehouseSqFt: 50000 + rand.Intn(500000),
-			W_StreetNumber:  fmt.Sprintf("%d", rand.Intn(9999)+1),
+			W_WarehouseSqFt: 50000 + rng.Intn(500000),
+			W_StreetNumber:  fmt.Sprintf("%d", rng.Intn(9999)+1),
 			W_StreetName:    "Industrial Blvd",
 			W_StreetType:    "Street",
-			W_SuiteNumber:   fmt.Sprintf("Suite %d", rand.Intn(100)+1),
+			W_SuiteNumber:   fmt.Sprintf("Suite %d", rng.Intn(100)+1),
 			W_City:          fmt.Sprintf("Industrial City %d", i+1),
 			W_County:        fmt.Sprintf("Manufacturing County %d", i+1),
 			W_State:         state,
-			W_Zip:           fmt.Sprintf("%05d", rand.Intn(99999)+1),
+			W_Zip:           fmt.Sprintf("%05d", rng.Intn(99999)+1),
 			W_Country:       "USA",
 			W_GmtOffset:     -5.0,
-			W_TaxPercentage: 0.08 + rand.Float64()*0.05,
+			W_TaxPercentage: 0.08 + rng.Float64()*0.05,
 		}
 	}
 	return warehouses
