@@ -54,7 +54,7 @@ func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []fin
 		return nil
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	companyChunks := make([][]financial.Company, numWorkers)
 	chunkSize := (len(companies) + numWorkers - 1) / numWorkers
 

@@ -21,7 +21,7 @@ type BaseGenerator struct {
 func NewBaseGenerator(config common.GenerationConfig) *BaseGenerator {
 	// Use reasonable defaults if not specified
 	if config.NumWorkers == 0 {
-		config.NumWorkers = runtime.NumCPU()
+		config.NumWorkers = runtime.GOMAXPROCS(0)
 	}
 	if config.BatchSize == 0 {
 		config.BatchSize = 10000

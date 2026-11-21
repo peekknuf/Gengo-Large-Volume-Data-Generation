@@ -44,7 +44,7 @@ func generateAppointmentsConcurrently(count int, patients []medical.Patient, doc
 		return []medical.Appointment{}
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	appointmentsPerWorker := (count + numWorkers - 1) / numWorkers
 
 	var wg sync.WaitGroup

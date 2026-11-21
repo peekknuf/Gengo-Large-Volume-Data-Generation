@@ -446,7 +446,7 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 		return fmt.Errorf("failed to create promo sampler: %w", err)
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	recordsPerWorker := count / numWorkers
 	extraRecords := count % numWorkers
 
@@ -782,7 +782,7 @@ func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hd
 		return nil
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	recordsPerWorker := count / numWorkers
 	extraRecords := count % numWorkers
 
@@ -1118,7 +1118,7 @@ func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoS
 		return nil
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	recordsPerWorker := count / numWorkers
 	extraRecords := count % numWorkers
 

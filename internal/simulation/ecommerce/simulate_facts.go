@@ -223,7 +223,7 @@ func generateECommerceModelDataCSV(numOrders int, customerIDs []int, customerAdd
 		return fmt.Errorf("failed to set up customer sampler: %w", err)
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	ordersPerWorker := (numOrders + numWorkers - 1) / numWorkers
 
 	headerFile, err := os.Create(fmt.Sprintf("%s/fact_orders_header.csv", outputDir))
@@ -383,7 +383,7 @@ func generateECommerceModelDataParquet(numOrders int, customerIDs []int, custome
 		return fmt.Errorf("failed to set up customer sampler: %w", err)
 	}
 
-	numWorkers := runtime.NumCPU()
+	numWorkers := runtime.GOMAXPROCS(0)
 	ordersPerWorker := (numOrders + numWorkers - 1) / numWorkers
 
 	const avgItemsPerOrder = 11.0
