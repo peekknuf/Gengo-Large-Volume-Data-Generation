@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"time"
@@ -49,11 +50,21 @@ type ECommerceDSRowCounts struct {
 func GenerateModelData(modelType string, counts interface{}, format string, outputDir string) error {
 	startTime := time.Now()
 
-	err := os.MkdirAll(outputDir, 0755)
+	destination, err := filepath.Abs(outputDir)
 	if err != nil {
-		return fmt.Errorf("error creating output directory %s: %w", outputDir, err)
+		return err
 	}
-	fmt.Printf("Ensured output directory exists: %s\n", outputDir)
+	if err = os.MkdirAll(filepath.Dir(destination), 0755); err != nil {
+		return err
+	}
+	if err = checkEmptyDestination(destination); err != nil {
+		return err
+	}
+	outputDir, err = os.MkdirTemp(filepath.Dir(destination), "."+filepath.Base(destination)+"-partial-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(outputDir)
 
 	switch modelType {
 	case "ecommerce":
@@ -72,6 +83,17 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 		return err
 	}
 
+	if err = checkEmptyDestination(destination); err != nil {
+		return err
+	}
+	// Windows requires the target of a directory rename to be absent.
+	if err = os.Remove(destination); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err = os.Rename(outputDir, destination); err != nil {
+		return fmt.Errorf("publish dataset: %w", err)
+	}
+	outputDir = destination
 	fmt.Printf("\nTotal model generation completed in %s.\n", time.Since(startTime).Round(time.Second))
 
 	fmt.Println("\nGenerated files:")
@@ -90,6 +112,27 @@ func GenerateModelData(modelType string, counts interface{}, format string, outp
 				}
 			}
 		}
+	}
+	return nil
+}
+
+func checkEmptyDestination(path string) error {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("output path %s must be a directory", path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	if len(entries) > 0 {
+		return fmt.Errorf("output directory %s must be empty", path)
 	}
 	return nil
 }

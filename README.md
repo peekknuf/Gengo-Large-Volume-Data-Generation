@@ -34,7 +34,7 @@ Run `gengo gen` without flags for interactive prompts.
 - The retail model is TPC-DS-inspired. Returns and inventory are not generated;
   foreign-key consistency is incomplete. Do not use it for audited TPC-DS results.
 - Some generators keep all rows in memory. Large runs can require substantial RAM.
-- Use a fresh output directory. Matching files are overwritten; stale shards remain.
+- Use an empty or new output directory. Gengo publishes it after generation succeeds.
 
 ## Check
 
@@ -42,3 +42,4 @@ Run `gengo gen` without flags for interactive prompts.
 go test ./...
 go vet ./...
 ```
+
