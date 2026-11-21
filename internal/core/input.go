@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -41,23 +42,23 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 			return
 		}
 	}
-	if targetGB <= 0 {
-		err = fmt.Errorf("target size must be positive")
+	if targetGB <= 0 || math.IsNaN(targetGB) || math.IsInf(targetGB, 0) {
+		err = fmt.Errorf("target size must be finite and positive")
 		return
 	}
 
 	// --- Output Format (determined before row counts for format-aware sizing) ---
 	format = formatFlag
 	if format == "" {
-		fmt.Print("Enter the desired output format (csv/json/parquet): ")
+		fmt.Print("Enter the desired output format (csv/parquet): ")
 		if _, scanErr := fmt.Scanln(&format); scanErr != nil {
 			err = fmt.Errorf("error reading output format: %w", scanErr)
 			return
 		}
 	}
 	format = strings.ToLower(strings.TrimSpace(format))
-	if format != "csv" && format != "json" && format != "parquet" {
-		err = fmt.Errorf("unsupported output format: %s", format)
+	if format != "csv" && format != "parquet" {
+		err = fmt.Errorf("unsupported output format: %s (choose csv or parquet)", format)
 		return
 	}
 
@@ -92,10 +93,7 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		fmt.Printf("Store Sales:       %s\n", utils.AddUnderscores(ecommerceDSCounts.StoreSales))
 		fmt.Printf("Web Sales:         %s\n", utils.AddUnderscores(ecommerceDSCounts.WebSales))
 		fmt.Printf("Catalog Sales:     %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogSales))
-		fmt.Printf("Store Returns:     %s\n", utils.AddUnderscores(ecommerceDSCounts.StoreReturns))
-		fmt.Printf("Web Returns:       %s\n", utils.AddUnderscores(ecommerceDSCounts.WebReturns))
-		fmt.Printf("Catalog Returns:   %s\n", utils.AddUnderscores(ecommerceDSCounts.CatalogReturns))
-		fmt.Printf("Inventory:         %s\n", utils.AddUnderscores(ecommerceDSCounts.Inventory))
+		fmt.Println("Returns and inventory generation are not implemented.")
 
 		fmt.Println("\n🏢 CORE DIMENSIONS:")
 		fmt.Printf("Customers:         %s\n", utils.AddUnderscores(ecommerceDSCounts.Customers))
@@ -122,15 +120,11 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 
 		// Calculate business metrics
 		totalSales := ecommerceDSCounts.StoreSales + ecommerceDSCounts.WebSales + ecommerceDSCounts.CatalogSales
-		totalReturns := ecommerceDSCounts.StoreReturns + ecommerceDSCounts.WebReturns + ecommerceDSCounts.CatalogReturns
 		avgOrdersPerCustomer := float64(totalSales) / float64(ecommerceDSCounts.Customers)
-		overallReturnRate := float64(totalReturns) / float64(totalSales) * 100
 
 		fmt.Println("\n📈 BUSINESS METRICS:")
 		fmt.Printf("Total Sales:       %s\n", utils.AddUnderscores(totalSales))
-		fmt.Printf("Total Returns:      %s\n", utils.AddUnderscores(totalReturns))
 		fmt.Printf("Orders/Customer:   %.1f\n", avgOrdersPerCustomer)
-		fmt.Printf("Return Rate:       %.1f%%\n", overallReturnRate)
 		fmt.Printf("Sales Distribution: Store %.0f%%, Web %.0f%%, Catalog %.0f%%\n",
 			float64(ecommerceDSCounts.StoreSales)/float64(totalSales)*100,
 			float64(ecommerceDSCounts.WebSales)/float64(totalSales)*100,
@@ -194,6 +188,6 @@ func matchModelType(input string) (string, error) {
 	case "medical", "med", "m":
 		return "medical", nil
 	default:
-		return "", fmt.Errorf("unsupported model type: %s. Please choose ecommerce, financial, or medical", input)
+		return "", fmt.Errorf("unsupported model type: %s. Please choose ecommerce, ecommerce-ds, financial, or medical", input)
 	}
 }

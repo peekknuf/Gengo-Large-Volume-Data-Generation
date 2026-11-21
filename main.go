@@ -64,7 +64,7 @@ func init() {
 	RootCmd.AddCommand(generateCmd)
 	generateCmd.Flags().StringVarP(&modelType, "model", "m", "", "Data model to generate (ecommerce, ecommerce-ds, financial, medical)")
 	generateCmd.Flags().Float64VarP(&targetGB, "size", "s", 0, "Approximate target size in GB (e.g., 0.5, 10)")
-	generateCmd.Flags().StringVarP(&format, "format", "f", "", "Output format (csv, json, parquet)")
+	generateCmd.Flags().StringVarP(&format, "format", "f", "", "Output format (csv, parquet)")
 	generateCmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory name")
 }
 
