@@ -256,167 +256,142 @@ func appendCSVField(buf []byte, field string) []byte {
 // --- Dimension Writers (kept as original for focus) ---
 
 func WriteCustomersToCSV(customers []ecommercemodels.Customer, targetFilename string) error {
-	startTime := time.Now()
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
 
-	bw := bufio.NewWriterSize(file, 16*1024*1024)
-	defer bw.Flush()
+		if _, err := bw.WriteString("customer_id,first_name,last_name,email\n"); err != nil {
+			return err
+		}
 
-	bw.WriteString("customer_id,first_name,last_name,email\n")
+		rowBuf := make([]byte, 0, 256)
+		for _, c := range customers {
+			rowBuf = rowBuf[:0]
+			rowBuf = fastItoa(rowBuf, int64(c.CustomerID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, c.FirstName)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, c.LastName)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, c.Email)
+			rowBuf = append(rowBuf, '\n')
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
 
-	rowBuf := make([]byte, 0, 256)
-	for _, c := range customers {
-		rowBuf = rowBuf[:0]
-		rowBuf = fastItoa(rowBuf, int64(c.CustomerID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = appendCSVField(rowBuf, c.FirstName)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = appendCSVField(rowBuf, c.LastName)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = appendCSVField(rowBuf, c.Email)
-		rowBuf = append(rowBuf, '\n')
-		bw.Write(rowBuf)
-	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(customers), targetFilename, duration.Round(time.Millisecond))
-	return nil
+		return nil
+	})
 }
 
 func WriteCustomerAddressesToCSV(addresses []ecommercemodels.CustomerAddress, targetFilename string) error {
-	startTime := time.Now()
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
 
-	bw := bufio.NewWriterSize(file, 16*1024*1024)
-	defer bw.Flush()
+		if _, err := bw.WriteString("address_id,customer_id,address_type,address,city,state,zip,country\n"); err != nil {
+			return err
+		}
 
-	bw.WriteString("address_id,customer_id,address_type,address,city,state,zip,country\n")
+		rowBuf := make([]byte, 0, 512)
+		for _, a := range addresses {
+			rowBuf = rowBuf[:0]
+			rowBuf = fastItoa(rowBuf, int64(a.AddressID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(a.CustomerID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, a.AddressType)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, a.Address)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, a.City)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, a.State)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, a.Zip)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, a.Country)
+			rowBuf = append(rowBuf, '\n')
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
 
-	rowBuf := make([]byte, 0, 512)
-	for _, a := range addresses {
-		rowBuf = rowBuf[:0]
-		rowBuf = fastItoa(rowBuf, int64(a.AddressID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(a.CustomerID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, a.AddressType...)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = appendCSVField(rowBuf, a.Address)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, a.City...)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, a.State...)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, a.Zip...)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, a.Country...)
-		rowBuf = append(rowBuf, '\n')
-		bw.Write(rowBuf)
-	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(addresses), targetFilename, duration.Round(time.Millisecond))
-	return nil
+		return nil
+	})
 }
 
 func WriteSuppliersToCSV(suppliers []ecommercemodels.Supplier, targetFilename string) error {
-	startTime := time.Now()
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
 
-	bw := bufio.NewWriterSize(file, 16*1024*1024)
-	defer bw.Flush()
+		if _, err := bw.WriteString("supplier_id,supplier_name,country\n"); err != nil {
+			return err
+		}
 
-	bw.WriteString("supplier_id,supplier_name,country\n")
+		rowBuf := make([]byte, 0, 256)
+		for _, s := range suppliers {
+			rowBuf = rowBuf[:0]
+			rowBuf = fastItoa(rowBuf, int64(s.SupplierID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, s.SupplierName)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, s.Country)
+			rowBuf = append(rowBuf, '\n')
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
 
-	rowBuf := make([]byte, 0, 256)
-	for _, s := range suppliers {
-		rowBuf = rowBuf[:0]
-		rowBuf = fastItoa(rowBuf, int64(s.SupplierID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = appendCSVField(rowBuf, s.SupplierName)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, s.Country...)
-		rowBuf = append(rowBuf, '\n')
-		bw.Write(rowBuf)
-	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(suppliers), targetFilename, duration.Round(time.Millisecond))
-	return nil
+		return nil
+	})
 }
 
 func WriteProductCategoriesToCSV(categories []ecommercemodels.ProductCategory, targetFilename string) error {
-	startTime := time.Now()
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
 
-	bw := bufio.NewWriterSize(file, 16*1024*1024)
-	defer bw.Flush()
+		if _, err := bw.WriteString("category_id,category_name\n"); err != nil {
+			return err
+		}
 
-	bw.WriteString("category_id,category_name\n")
+		rowBuf := make([]byte, 0, 128)
+		for _, c := range categories {
+			rowBuf = rowBuf[:0]
+			rowBuf = fastItoa(rowBuf, int64(c.CategoryID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, c.CategoryName)
+			rowBuf = append(rowBuf, '\n')
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
 
-	rowBuf := make([]byte, 0, 128)
-	for _, c := range categories {
-		rowBuf = rowBuf[:0]
-		rowBuf = fastItoa(rowBuf, int64(c.CategoryID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = append(rowBuf, c.CategoryName...)
-		rowBuf = append(rowBuf, '\n')
-		bw.Write(rowBuf)
-	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(categories), targetFilename, duration.Round(time.Millisecond))
-	return nil
+		return nil
+	})
 }
 
 func WriteProductsToCSV(products []ecommercemodels.Product, targetFilename string) error {
-	startTime := time.Now()
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bw *bufio.Writer) error {
 
-	bw := bufio.NewWriterSize(file, 16*1024*1024)
-	defer bw.Flush()
+		if _, err := bw.WriteString("product_id,supplier_id,product_name,category_id,base_price\n"); err != nil {
+			return err
+		}
 
-	bw.WriteString("product_id,supplier_id,product_name,category_id,base_price\n")
+		rowBuf := make([]byte, 0, 256)
+		for _, p := range products {
+			rowBuf = rowBuf[:0]
+			rowBuf = fastItoa(rowBuf, int64(p.ProductID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(p.SupplierID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = appendCSVField(rowBuf, p.ProductName)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(p.CategoryID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = strconv.AppendFloat(rowBuf, p.BasePrice, 'f', 2, 64)
+			rowBuf = append(rowBuf, '\n')
+			if _, err := bw.Write(rowBuf); err != nil {
+				return err
+			}
+		}
 
-	rowBuf := make([]byte, 0, 256)
-	for _, p := range products {
-		rowBuf = rowBuf[:0]
-		rowBuf = fastItoa(rowBuf, int64(p.ProductID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(p.SupplierID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = appendCSVField(rowBuf, p.ProductName)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(p.CategoryID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendFloat(rowBuf, p.BasePrice, 'f', 2, 64)
-		rowBuf = append(rowBuf, '\n')
-		bw.Write(rowBuf)
-	}
-
-	duration := time.Since(startTime)
-	fmt.Printf("Successfully wrote %d records to %s in %s\n", len(products), targetFilename, duration.Round(time.Millisecond))
-	return nil
+		return nil
+	})
 }
 
 // --- Fact Table Streaming Writers ---
@@ -424,126 +399,106 @@ func WriteProductsToCSV(products []ecommercemodels.Product, targetFilename strin
 // WriteStreamOrderHeadersToCSV writes OrderHeader structs from a channel to a CSV file using a buffered writer.
 // WriteStreamOrderHeadersToCSV writes order headers using direct byte formatting for better performance
 func WriteStreamOrderHeadersToCSV(headerChan <-chan ecommercemodels.OrderHeader, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bufferedWriter *bufio.Writer) error {
 
-	// Use large buffered writer for better performance with high-volume data
-	bufferedWriter := bufio.NewWriterSize(file, 2*1024*1024) // 2MB buffer
-	defer bufferedWriter.Flush()
+		// Write header directly
+		if _, err := bufferedWriter.WriteString("order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp,order_status\n"); err != nil {
+			return err
+		}
 
-	// Write header directly
-	bufferedWriter.WriteString("order_id,customer_id,shipping_address_id,billing_address_id,order_timestamp,order_status\n")
+		// Pre-allocate buffer for row construction to reduce allocations
+		rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
+		var recordCount int64
 
-	// Pre-allocate buffer for row construction to reduce allocations
-	rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
-	var recordCount int64
+		for h := range headerChan {
+			// Reset buffer for reuse
+			rowBuf = rowBuf[:0]
 
-	for h := range headerChan {
-		// Reset buffer for reuse
-		rowBuf = rowBuf[:0]
+			// Build row with direct byte operations
+			rowBuf = fastItoa(rowBuf, int64(h.OrderID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(h.CustomerID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(h.ShippingAddressID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(h.BillingAddressID))
+			rowBuf = append(rowBuf, ',')
 
-		// Build row with direct byte operations
-		rowBuf = fastItoa(rowBuf, int64(h.OrderID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(h.CustomerID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(h.ShippingAddressID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(h.BillingAddressID))
-		rowBuf = append(rowBuf, ',')
+			// Format timestamp
+			timestamp := h.OrderTimestamp.Format(time.RFC3339)
+			rowBuf = append(rowBuf, timestamp...)
+			rowBuf = append(rowBuf, ',')
 
-		// Format timestamp
-		timestamp := h.OrderTimestamp.Format(time.RFC3339)
-		rowBuf = append(rowBuf, timestamp...)
-		rowBuf = append(rowBuf, ',')
+			// Add order status (escape if needed)
+			rowBuf = appendCSVField(rowBuf, h.OrderStatus)
+			rowBuf = append(rowBuf, '\n')
 
-		// Add order status (escape if needed)
-		if needsQuoting(h.OrderStatus) {
-			rowBuf = append(rowBuf, '"')
-			for _, r := range h.OrderStatus {
-				if r == '"' {
-					rowBuf = append(rowBuf, '"', '"')
-				} else {
-					rowBuf = append(rowBuf, byte(r))
+			// Write the row
+			if _, err := bufferedWriter.Write(rowBuf); err != nil {
+				return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
+			}
+			recordCount++
+
+			// Periodically flush to avoid memory buildup
+			if recordCount%20000 == 0 {
+				if err := bufferedWriter.Flush(); err != nil {
+					return err
 				}
 			}
-			rowBuf = append(rowBuf, '"')
-		} else {
-			rowBuf = append(rowBuf, h.OrderStatus...)
 		}
-		rowBuf = append(rowBuf, '\n')
 
-		// Write the row
-		if _, err := bufferedWriter.Write(rowBuf); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
-		}
-		recordCount++
-
-		// Periodically flush to avoid memory buildup
-		if recordCount%20000 == 0 {
-			bufferedWriter.Flush()
-		}
-	}
-
-	fmt.Printf("Successfully wrote %d order header records to %s\n", recordCount, targetFilename)
-	return nil
+		return nil
+	})
 }
 
 // WriteStreamOrderItemsToCSV writes OrderItem structs from a channel to a CSV file using a buffered writer.
 // WriteStreamOrderItemsToCSV writes order items using direct byte formatting for better performance
 func WriteStreamOrderItemsToCSV(itemChan <-chan ecommercemodels.OrderItem, targetFilename string) error {
-	file, err := os.Create(targetFilename)
-	if err != nil {
-		return fmt.Errorf("failed to create csv file %s: %w", targetFilename, err)
-	}
-	defer file.Close()
+	return writeCSVFile(targetFilename, func(bufferedWriter *bufio.Writer) error {
 
-	// Use large buffered writer for better performance with high-volume data
-	bufferedWriter := bufio.NewWriterSize(file, 2*1024*1024) // 2MB buffer
-	defer bufferedWriter.Flush()
-
-	// Write header directly
-	bufferedWriter.WriteString("order_item_id,order_id,product_id,quantity,unit_price,discount\n")
-
-	// Pre-allocate buffer for row construction to reduce allocations
-	rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
-	var recordCount int64
-
-	for item := range itemChan {
-		// Reset buffer for reuse
-		rowBuf = rowBuf[:0]
-
-		// Build row with direct byte operations
-		rowBuf = fastItoa(rowBuf, int64(item.OrderItemID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(item.OrderID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(item.ProductID))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = fastItoa(rowBuf, int64(item.Quantity))
-		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendFloat(rowBuf, item.UnitPrice, 'f', 2, 64)
-		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendFloat(rowBuf, item.Discount, 'f', 4, 64)
-		rowBuf = append(rowBuf, '\n')
-
-		// Write the row
-		if _, err := bufferedWriter.Write(rowBuf); err != nil {
-			return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
+		// Write header directly
+		if _, err := bufferedWriter.WriteString("order_item_id,order_id,product_id,quantity,unit_price,discount\n"); err != nil {
+			return err
 		}
-		recordCount++
 
-		// Periodically flush to avoid memory buildup
-		if recordCount%20000 == 0 {
-			bufferedWriter.Flush()
+		// Pre-allocate buffer for row construction to reduce allocations
+		rowBuf := make([]byte, 0, 1024) // 1KB buffer per row for better performance
+		var recordCount int64
+
+		for item := range itemChan {
+			// Reset buffer for reuse
+			rowBuf = rowBuf[:0]
+
+			// Build row with direct byte operations
+			rowBuf = fastItoa(rowBuf, int64(item.OrderItemID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(item.OrderID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(item.ProductID))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = fastItoa(rowBuf, int64(item.Quantity))
+			rowBuf = append(rowBuf, ',')
+			rowBuf = strconv.AppendFloat(rowBuf, item.UnitPrice, 'f', 2, 64)
+			rowBuf = append(rowBuf, ',')
+			rowBuf = strconv.AppendFloat(rowBuf, item.Discount, 'f', 4, 64)
+			rowBuf = append(rowBuf, '\n')
+
+			// Write the row
+			if _, err := bufferedWriter.Write(rowBuf); err != nil {
+				return fmt.Errorf("failed to write csv record to %s: %w", targetFilename, err)
+			}
+			recordCount++
+
+			// Periodically flush to avoid memory buildup
+			if recordCount%20000 == 0 {
+				if err := bufferedWriter.Flush(); err != nil {
+					return err
+				}
+			}
 		}
-	}
 
-	fmt.Printf("Successfully wrote %d order item records to %s\n", recordCount, targetFilename)
-	return nil
+		return nil
+	})
 }
 
 // --- Other Model Writers (kept as original for focus) ---
