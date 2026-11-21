@@ -18,6 +18,21 @@ import (
 	ecommerceds "github.com/peekknuf/Gengo/internal/models/ecommerce-ds"
 )
 
+// SaleDimensions keeps the generated customer relationships and calendar keys
+// shared by every retail channel.
+type SaleDimensions struct {
+	Dates, Times []int64
+	Customers    []CustomerKeys
+}
+
+type CustomerKeys struct{ ID, Demographics, Household, Address int64 }
+
+func (d SaleDimensions) datesForShipment(rng *rand.Rand) (int64, int64) {
+	sold := rng.Intn(len(d.Dates))
+	shipped := min(sold+rng.Intn(8), len(d.Dates)-1)
+	return d.Dates[sold], d.Dates[shipped]
+}
+
 // Performance optimization constants
 const (
 	bufferSize     = 64 << 20 // 64MB buffer for NVMe optimization (increased from 32MB)
@@ -177,13 +192,13 @@ func appendPrice(buf []byte, cents int64) []byte {
 }
 
 // High-performance worker function for generating store sales with direct file writing
-func generateStoreSalesWorker(count int, startTicket int64, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand, format string) error {
+func generateStoreSalesWorker(count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand, format string) error {
 	if count <= 0 {
 		return nil
 	}
 
 	if format == "parquet" {
-		return generateStoreSalesWorkerParquet(count, startTicket, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng)
+		return generateStoreSalesWorkerParquet(count, startTicket, dims, itemSampler, customerSampler, storeSampler, promoSampler, filename, rng)
 	}
 
 	startTime := time.Now()
@@ -201,16 +216,12 @@ func generateStoreSalesWorker(count int, startTicket int64, itemSampler, custome
 	writer.WriteString(header)
 
 	// Pre-calculate common ranges for better performance
-	dateSKRange := 2000  // Date SK range (1-2000)
-	timeSKRange := 86400 // Time SK range (0-86399)
-	cdemoSKRange := 1000 // Customer demo SK range (1-1000)
-	hdemoSKRange := 1000 // Household demo SK range (1-1000)
-	addrSKRange := 1500  // Address SK range (1-1500)
 
 	// Pre-allocate buffer for row construction (increased to 4KB to reduce allocations)
 	rowBuf := make([]byte, 0, 4096)
 
 	for i := 0; i < count; i++ {
+		buyer := dims.Customers[customerSampler.Sample(rng)]
 		rowBuf = rowBuf[:0] // Reset buffer
 
 		quantity := rng.Intn(10) + 1
@@ -219,19 +230,19 @@ func generateStoreSalesWorker(count int, startTicket int64, itemSampler, custome
 		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100 // 60-80% of sales price
 
 		// Build CSV row with byte-level formatting using weighted sampling and pre-calculated ranges
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(dateSKRange)+1), 10) // date_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Dates[rng.Intn(len(dims.Dates))], 10) // date_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(timeSKRange)), 10) // time_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10) // time_sk
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, itemSampler.Sample(rng), 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, customerSampler.Sample(rng), 10)
+		rowBuf = strconv.AppendInt(rowBuf, buyer.ID, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(cdemoSKRange)+1), 10) // cdemo_sk
+		rowBuf = strconv.AppendInt(rowBuf, buyer.Demographics, 10) // cdemo_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(hdemoSKRange)+1), 10) // hdemo_sk
+		rowBuf = strconv.AppendInt(rowBuf, buyer.Household, 10) // hdemo_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(addrSKRange)+1), 10) // addr_sk
+		rowBuf = strconv.AppendInt(rowBuf, buyer.Address, 10) // addr_sk
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, storeSampler.Sample(rng), 10)
 		rowBuf = append(rowBuf, ',')
@@ -290,14 +301,8 @@ func generateStoreSalesWorker(count int, startTicket int64, itemSampler, custome
 	return nil
 }
 
-func generateStoreSalesWorkerParquet(count int, startTicket int64, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand) (err error) {
+func generateStoreSalesWorkerParquet(count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand) (err error) {
 	startTime := time.Now()
-
-	dateSKRange := 2000
-	timeSKRange := 86400
-	cdemoSKRange := 1000
-	hdemoSKRange := 1000
-	addrSKRange := 1500
 
 	schema := arrow.NewSchema([]arrow.Field{
 		{Name: "ss_sold_date_sk", Type: arrow.PrimitiveTypes.Int64},
@@ -366,6 +371,7 @@ func generateStoreSalesWorkerParquet(count int, startTicket int64, itemSampler, 
 	b22 := builder.Field(22).(*array.Float64Builder)
 
 	for i := 0; i < count; i++ {
+		buyer := dims.Customers[customerSampler.Sample(rng)]
 		quantity := rng.Intn(10) + 1
 		listPriceCents := int64(1000 + rng.Intn(100000))
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
@@ -380,13 +386,13 @@ func generateStoreSalesWorkerParquet(count int, startTicket int64, itemSampler, 
 		netPaidIncTax := netPaid + extTax
 		netProfit := netPaid - extWholesaleCost
 
-		b0.Append(int64(rng.Intn(dateSKRange) + 1))
-		b1.Append(int64(rng.Intn(timeSKRange)))
+		b0.Append(dims.Dates[rng.Intn(len(dims.Dates))])
+		b1.Append(dims.Times[rng.Intn(len(dims.Times))])
 		b2.Append(itemSampler.Sample(rng))
-		b3.Append(customerSampler.Sample(rng))
-		b4.Append(int64(rng.Intn(cdemoSKRange) + 1))
-		b5.Append(int64(rng.Intn(hdemoSKRange) + 1))
-		b6.Append(int64(rng.Intn(addrSKRange) + 1))
+		b3.Append(buyer.ID)
+		b4.Append(buyer.Demographics)
+		b5.Append(buyer.Household)
+		b6.Append(buyer.Address)
 		b7.Append(storeSampler.Sample(rng))
 		b8.Append(promoSampler.Sample(rng))
 		b9.Append(startTicket + int64(i))
@@ -423,7 +429,7 @@ func generateStoreSalesWorkerParquet(count int, startTicket int64, itemSampler, 
 }
 
 // GenerateStoreSalesOptimized generates store sales using worker-based file sharding
-func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateStoreSalesOptimized(count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -433,7 +439,11 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 	if err != nil {
 		return fmt.Errorf("failed to create item sampler: %w", err)
 	}
-	customerSampler, err := NewAliasSampler64(customerSKs)
+	indices := make([]int64, len(dims.Customers))
+	for i := range indices {
+		indices[i] = int64(i)
+	}
+	customerSampler, err := NewAliasSampler64(indices)
 	if err != nil {
 		return fmt.Errorf("failed to create customer sampler: %w", err)
 	}
@@ -474,7 +484,7 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 
 			go func(records int, ticket int64, fname string, workerRNG *rand.Rand) {
 				defer wg.Done()
-				if err := generateStoreSalesWorker(records, ticket, itemSampler, customerSampler, storeSampler, promoSampler, fname, workerRNG, format); err != nil {
+				if err := generateStoreSalesWorker(records, ticket, dims, itemSampler, customerSampler, storeSampler, promoSampler, fname, workerRNG, format); err != nil {
 					fmt.Printf("Error in store sales worker: %v\n", err)
 				}
 			}(workerRecords, workerStartTicket, filename, rng)
@@ -486,13 +496,13 @@ func GenerateStoreSalesOptimized(count int, itemSKs, customerSKs, storeSKs, prom
 }
 
 // High-performance worker function for generating catalog sales with direct file writing
-func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
+func generateCatalogSalesWorker(count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
 	if count <= 0 {
 		return nil
 	}
 
 	if format == "parquet" {
-		return generateCatalogSalesWorkerParquet(count, startOrder, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
+		return generateCatalogSalesWorkerParquet(count, startOrder, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
 	}
 
 	startTime := time.Now()
@@ -512,6 +522,9 @@ func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSK
 	rowBuf := make([]byte, 0, 4096) // Increased to 4KB to reduce allocations
 
 	for i := 0; i < count; i++ {
+		sold, shipped := dims.datesForShipment(rng)
+		bill := dims.Customers[rng.Intn(len(dims.Customers))]
+		ship := dims.Customers[rng.Intn(len(dims.Customers))]
 		rowBuf = rowBuf[:0]
 
 		quantity := rng.Intn(10) + 1
@@ -519,27 +532,27 @@ func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSK
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
 		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
 
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(2000)+1), 10) // sold_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, sold, 10) // sold_date_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(86400)), 10) // sold_time_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10) // sold_time_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(2000)+1), 10) // ship_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, shipped, 10) // ship_date_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, customerSKs[rng.Intn(len(customerSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.ID, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, cdemoSKs[rng.Intn(len(cdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.Demographics, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, hdemoSKs[rng.Intn(len(hdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.Household, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, addrSKs[rng.Intn(len(addrSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.Address, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, customerSKs[rng.Intn(len(customerSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.ID, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, cdemoSKs[rng.Intn(len(cdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.Demographics, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, hdemoSKs[rng.Intn(len(hdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.Household, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, addrSKs[rng.Intn(len(addrSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.Address, 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, callCenterSKs[rng.Intn(len(callCenterSKs))], 10)
 		rowBuf = append(rowBuf, ',')
@@ -614,7 +627,7 @@ func generateCatalogSalesWorker(count int, startOrder int64, itemSKs, customerSK
 	return nil
 }
 
-func generateCatalogSalesWorkerParquet(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
+func generateCatalogSalesWorkerParquet(count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
 	startTime := time.Now()
 
 	schema := arrow.NewSchema([]arrow.Field{
@@ -706,6 +719,9 @@ func generateCatalogSalesWorkerParquet(count int, startOrder int64, itemSKs, cus
 	b33 := builder.Field(33).(*array.Float64Builder)
 
 	for i := 0; i < count; i++ {
+		sold, shipped := dims.datesForShipment(rng)
+		bill := dims.Customers[rng.Intn(len(dims.Customers))]
+		ship := dims.Customers[rng.Intn(len(dims.Customers))]
 		quantity := rng.Intn(10) + 1
 		listPriceCents := int64(1000 + rng.Intn(100000))
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
@@ -723,17 +739,17 @@ func generateCatalogSalesWorkerParquet(count int, startOrder int64, itemSKs, cus
 		netPaidIncShipTax := netPaidIncShip + extTax
 		netProfit := netPaid - extWholesaleCost
 
-		b0.Append(int64(rng.Intn(2000) + 1))
-		b1.Append(int64(rng.Intn(86400)))
-		b2.Append(int64(rng.Intn(2000) + 1))
-		b3.Append(customerSKs[rng.Intn(len(customerSKs))])
-		b4.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
-		b5.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
-		b6.Append(addrSKs[rng.Intn(len(addrSKs))])
-		b7.Append(customerSKs[rng.Intn(len(customerSKs))])
-		b8.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
-		b9.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
-		b10.Append(addrSKs[rng.Intn(len(addrSKs))])
+		b0.Append(sold)
+		b1.Append(dims.Times[rng.Intn(len(dims.Times))])
+		b2.Append(shipped)
+		b3.Append(bill.ID)
+		b4.Append(bill.Demographics)
+		b5.Append(bill.Household)
+		b6.Append(bill.Address)
+		b7.Append(ship.ID)
+		b8.Append(ship.Demographics)
+		b9.Append(ship.Household)
+		b10.Append(ship.Address)
 		b11.Append(callCenterSKs[rng.Intn(len(callCenterSKs))])
 		b12.Append(catalogPageSKs[rng.Intn(len(catalogPageSKs))])
 		b13.Append(shipModeSKs[rng.Intn(len(shipModeSKs))])
@@ -777,7 +793,7 @@ func generateCatalogSalesWorkerParquet(count int, startOrder int64, itemSKs, cus
 }
 
 // GenerateCatalogSalesOptimized generates catalog sales using worker-based file sharding
-func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateCatalogSalesOptimized(count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -810,7 +826,7 @@ func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hd
 
 			go func(records int, order int64, fname string, workerRNG *rand.Rand) {
 				defer wg.Done()
-				if err := generateCatalogSalesWorker(records, order, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
+				if err := generateCatalogSalesWorker(records, order, dims, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
 					fmt.Printf("Error in catalog sales worker: %v\n", err)
 				}
 			}(workerRecords, workerStartOrder, filename, rng)
@@ -822,13 +838,13 @@ func GenerateCatalogSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hd
 }
 
 // High-performance worker function for generating web sales with direct file writing
-func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
+func generateWebSalesWorker(count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) error {
 	if count <= 0 {
 		return nil
 	}
 
 	if format == "parquet" {
-		return generateWebSalesWorkerParquet(count, startOrder, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
+		return generateWebSalesWorkerParquet(count, startOrder, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, filename, rng)
 	}
 
 	startTime := time.Now()
@@ -848,6 +864,9 @@ func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, c
 	rowBuf := make([]byte, 0, 4096) // Increased to 4KB to reduce allocations
 
 	for i := 0; i < count; i++ {
+		sold, shipped := dims.datesForShipment(rng)
+		bill := dims.Customers[rng.Intn(len(dims.Customers))]
+		ship := dims.Customers[rng.Intn(len(dims.Customers))]
 		rowBuf = rowBuf[:0]
 
 		quantity := rng.Intn(10) + 1
@@ -855,29 +874,29 @@ func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, c
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
 		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
 
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(2000)+1), 10) // sold_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, sold, 10) // sold_date_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(86400)), 10) // sold_time_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10) // sold_time_sk
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, int64(rng.Intn(2000)+1), 10) // ship_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, shipped, 10) // ship_date_sk
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, itemSKs[rng.Intn(len(itemSKs))], 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, customerSKs[rng.Intn(len(customerSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.ID, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, cdemoSKs[rng.Intn(len(cdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.Demographics, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, hdemoSKs[rng.Intn(len(hdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.Household, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, addrSKs[rng.Intn(len(addrSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, bill.Address, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, customerSKs[rng.Intn(len(customerSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.ID, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, cdemoSKs[rng.Intn(len(cdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.Demographics, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, hdemoSKs[rng.Intn(len(hdemoSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.Household, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, addrSKs[rng.Intn(len(addrSKs))], 10)
+		rowBuf = strconv.AppendInt(rowBuf, ship.Address, 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, webPageSKs[rng.Intn(len(webPageSKs))], 10)
 		rowBuf = append(rowBuf, ',')
@@ -950,7 +969,7 @@ func generateWebSalesWorker(count int, startOrder int64, itemSKs, customerSKs, c
 	return nil
 }
 
-func generateWebSalesWorkerParquet(count int, startOrder int64, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
+func generateWebSalesWorkerParquet(count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand) (err error) {
 	startTime := time.Now()
 
 	schema := arrow.NewSchema([]arrow.Field{
@@ -1042,6 +1061,9 @@ func generateWebSalesWorkerParquet(count int, startOrder int64, itemSKs, custome
 	b33 := builder.Field(33).(*array.Float64Builder)
 
 	for i := 0; i < count; i++ {
+		sold, shipped := dims.datesForShipment(rng)
+		bill := dims.Customers[rng.Intn(len(dims.Customers))]
+		ship := dims.Customers[rng.Intn(len(dims.Customers))]
 		quantity := rng.Intn(10) + 1
 		listPriceCents := int64(1000 + rng.Intn(100000))
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
@@ -1059,18 +1081,18 @@ func generateWebSalesWorkerParquet(count int, startOrder int64, itemSKs, custome
 		netPaidIncShipTax := netPaidIncShip + extTax
 		netProfit := netPaid - extWholesaleCost
 
-		b0.Append(int64(rng.Intn(2000) + 1))
-		b1.Append(int64(rng.Intn(86400)))
-		b2.Append(int64(rng.Intn(2000) + 1))
+		b0.Append(sold)
+		b1.Append(dims.Times[rng.Intn(len(dims.Times))])
+		b2.Append(shipped)
 		b3.Append(itemSKs[rng.Intn(len(itemSKs))])
-		b4.Append(customerSKs[rng.Intn(len(customerSKs))])
-		b5.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
-		b6.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
-		b7.Append(addrSKs[rng.Intn(len(addrSKs))])
-		b8.Append(customerSKs[rng.Intn(len(customerSKs))])
-		b9.Append(cdemoSKs[rng.Intn(len(cdemoSKs))])
-		b10.Append(hdemoSKs[rng.Intn(len(hdemoSKs))])
-		b11.Append(addrSKs[rng.Intn(len(addrSKs))])
+		b4.Append(bill.ID)
+		b5.Append(bill.Demographics)
+		b6.Append(bill.Household)
+		b7.Append(bill.Address)
+		b8.Append(ship.ID)
+		b9.Append(ship.Demographics)
+		b10.Append(ship.Household)
+		b11.Append(ship.Address)
 		b12.Append(webPageSKs[rng.Intn(len(webPageSKs))])
 		b13.Append(webSiteSKs[rng.Intn(len(webSiteSKs))])
 		b14.Append(shipModeSKs[rng.Intn(len(shipModeSKs))])
@@ -1113,7 +1135,7 @@ func generateWebSalesWorkerParquet(count int, startOrder int64, itemSKs, custome
 }
 
 // GenerateWebSalesOptimized generates web sales using worker-based file sharding
-func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
+func GenerateWebSalesOptimized(count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string) error {
 	if count <= 0 {
 		return nil
 	}
@@ -1146,7 +1168,7 @@ func GenerateWebSalesOptimized(count int, itemSKs, customerSKs, cdemoSKs, hdemoS
 
 			go func(records int, order int64, fname string, workerRNG *rand.Rand) {
 				defer wg.Done()
-				if err := generateWebSalesWorker(records, order, itemSKs, customerSKs, cdemoSKs, hdemoSKs, addrSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
+				if err := generateWebSalesWorker(records, order, dims, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs, fname, workerRNG, format); err != nil {
 					fmt.Printf("Error in web sales worker: %v\n", err)
 				}
 			}(workerRecords, workerStartOrder, filename, rng)

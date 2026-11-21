@@ -9,6 +9,7 @@ import (
 
 	"github.com/peekknuf/Gengo/internal/formats"
 	ecommercemodels "github.com/peekknuf/Gengo/internal/models/ecommerce"
+	dsmodels "github.com/peekknuf/Gengo/internal/models/ecommerce-ds"
 	financialmodels "github.com/peekknuf/Gengo/internal/models/financial"
 	medicalmodels "github.com/peekknuf/Gengo/internal/models/medical"
 	"github.com/peekknuf/Gengo/internal/simulation/ecommerce"
@@ -206,38 +207,39 @@ func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format str
 		errChan <- formats.WriteSliceData(dateDim, "dim_date", format, outputDir)
 	}()
 
+	saleDims := ecommercedssimulation.SaleDimensions{Dates: getSKsFromSlice(dateDim), Times: getSKsFromSlice(timeDim), Customers: make([]ecommercedssimulation.CustomerKeys, len(customers))}
+	for i, row := range customers {
+		c := row.(dsmodels.Customer)
+		saleDims.Customers[i] = ecommercedssimulation.CustomerKeys{ID: c.C_CustomerSK, Demographics: c.C_CurrentCDemoSK, Household: c.C_CurrentHDemoSK, Address: c.C_CurrentAddrSK}
+	}
 	dimSKs := map[string][]int64{
-		"items":                  getSKsFromSlice(items),
-		"customers":              getSKsFromSlice(customers),
-		"customer_addresses":     getSKsFromSlice(customerAddresses),
-		"customer_demographics":  getSKsFromSlice(customerDemographics),
-		"household_demographics": getSKsFromSlice(householdDemographics),
-		"promotions":             getSKsFromSlice(promotions),
-		"stores":                 getSKsFromSlice(stores),
-		"call_centers":           getSKsFromSlice(callCenters),
-		"catalog_pages":          getSKsFromSlice(catalogPages),
-		"web_sites":              getSKsFromSlice(webSites),
-		"web_pages":              getSKsFromSlice(webPages),
-		"warehouses":             getSKsFromSlice(warehouses),
-		"ship_modes":             getSKsFromSlice(shipModes),
+		"items":         getSKsFromSlice(items),
+		"promotions":    getSKsFromSlice(promotions),
+		"stores":        getSKsFromSlice(stores),
+		"call_centers":  getSKsFromSlice(callCenters),
+		"catalog_pages": getSKsFromSlice(catalogPages),
+		"web_sites":     getSKsFromSlice(webSites),
+		"web_pages":     getSKsFromSlice(webPages),
+		"warehouses":    getSKsFromSlice(warehouses),
+		"ship_modes":    getSKsFromSlice(shipModes),
 	}
 
 	writersWg.Add(3) // One for each fact table generator
 	go func() {
 		defer writersWg.Done()
-		if err := ecommercedssimulation.GenerateStoreSalesOptimized(counts.StoreSales, dimSKs["items"], dimSKs["customers"], dimSKs["stores"], dimSKs["promotions"], outputDir, format); err != nil {
+		if err := ecommercedssimulation.GenerateStoreSalesOptimized(counts.StoreSales, saleDims, dimSKs["items"], dimSKs["stores"], dimSKs["promotions"], outputDir, format); err != nil {
 			errChan <- fmt.Errorf("failed to generate store sales: %w", err)
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
-		if err := ecommercedssimulation.GenerateCatalogSalesOptimized(counts.CatalogSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["call_centers"], dimSKs["catalog_pages"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir, format); err != nil {
+		if err := ecommercedssimulation.GenerateCatalogSalesOptimized(counts.CatalogSales, saleDims, dimSKs["items"], dimSKs["call_centers"], dimSKs["catalog_pages"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir, format); err != nil {
 			errChan <- fmt.Errorf("failed to generate catalog sales: %w", err)
 		}
 	}()
 	go func() {
 		defer writersWg.Done()
-		if err := ecommercedssimulation.GenerateWebSalesOptimized(counts.WebSales, dimSKs["items"], dimSKs["customers"], dimSKs["customer_demographics"], dimSKs["household_demographics"], dimSKs["customer_addresses"], dimSKs["web_pages"], dimSKs["web_sites"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir, format); err != nil {
+		if err := ecommercedssimulation.GenerateWebSalesOptimized(counts.WebSales, saleDims, dimSKs["items"], dimSKs["web_pages"], dimSKs["web_sites"], dimSKs["ship_modes"], dimSKs["warehouses"], dimSKs["promotions"], outputDir, format); err != nil {
 			errChan <- fmt.Errorf("failed to generate web sales: %w", err)
 		}
 	}()
