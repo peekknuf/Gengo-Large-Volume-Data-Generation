@@ -52,13 +52,12 @@ func CalculateECommerceDSRowCounts(targetGB float64, format string) (ECommerceDS
 
 	// Realistic row size estimates based on TPC-DS schema analysis
 	const (
-		storeSalesRowSize     = 245.0 // Complete TPC-DS store_sales with all fields
-		storeReturnsRowSize   = 195.0 // Complete TPC-DS store_returns with all fields
-		catalogSalesRowSize   = 305.0 // Complete TPC-DS catalog_sales with all fields
-		catalogReturnsRowSize = 255.0 // Complete TPC-DS catalog_returns with all fields
-		webSalesRowSize       = 285.0 // Complete TPC-DS web_sales with all fields
-		webReturnsRowSize     = 215.0 // Complete TPC-DS web_returns with all fields
-		inventoryRowSize      = 48.0  // Complete TPC-DS inventory with all fields
+		storeSalesRowSize = 245.0 // Complete TPC-DS store_sales with all fields
+
+		catalogSalesRowSize = 305.0 // Complete TPC-DS catalog_sales with all fields
+
+		webSalesRowSize = 285.0 // Complete TPC-DS web_sales with all fields
+
 	)
 
 	// Business-realistic sales channel distribution (modern e-commerce patterns)
@@ -66,13 +65,6 @@ func CalculateECommerceDSRowCounts(targetGB float64, format string) (ECommerceDS
 		storeSalesRatio   = 0.55 // 55% traditional retail
 		webSalesRatio     = 0.30 // 30% e-commerce
 		catalogSalesRatio = 0.15 // 15% catalog sales
-	)
-
-	// Return rates by channel (industry averages)
-	const (
-		storeReturnRate   = 0.08 // 8% for in-store purchases
-		webReturnRate     = 0.12 // 12% for online purchases
-		catalogReturnRate = 0.10 // 10% for catalog purchases
 	)
 
 	// Calculate base fact table distribution using weighted average row size
@@ -94,13 +86,9 @@ func CalculateECommerceDSRowCounts(targetGB float64, format string) (ECommerceDS
 	}
 	totalSalesRows := int(rows)
 
-	numStoreSales := int(float64(totalSalesRows) * storeSalesRatio)
 	numWebSales := int(float64(totalSalesRows) * webSalesRatio)
 	numCatalogSales := int(float64(totalSalesRows) * catalogSalesRatio)
-
-	numStoreReturns := int(float64(numStoreSales) * storeReturnRate)
-	numWebReturns := int(float64(numWebSales) * webReturnRate)
-	numCatalogReturns := int(float64(numCatalogSales) * catalogReturnRate)
+	numStoreSales := totalSalesRows - numWebSales - numCatalogSales
 
 	// Business-driven dimension scaling for complete TPC-DS schema
 	numCustomers := int(math.Max(1000.0, float64(numStoreSales+numWebSales+numCatalogSales)/25.0)) // 25 transactions per customer annually
@@ -125,18 +113,11 @@ func CalculateECommerceDSRowCounts(targetGB float64, format string) (ECommerceDS
 	reasons := int(math.Max(20.0, 35.0*businessScaleFactor))
 	shipModes := int(math.Max(6.0, 10.0*businessScaleFactor))
 
-	// Inventory: track weekly inventory for all items across warehouses
-	inventoryWeeks := 52                                       // One year of weekly snapshots
-	numInventory := numItems * warehouses * inventoryWeeks / 4 // Quarterly snapshots
-
 	counts := ECommerceDSRowCounts{
-		StoreSales:            numStoreSales,
-		WebSales:              numWebSales,
-		CatalogSales:          numCatalogSales,
-		StoreReturns:          numStoreReturns,
-		WebReturns:            numWebReturns,
-		CatalogReturns:        numCatalogReturns,
-		Inventory:             numInventory,
+		StoreSales:   numStoreSales,
+		WebSales:     numWebSales,
+		CatalogSales: numCatalogSales,
+
 		Customers:             numCustomers,
 		Items:                 numItems,
 		CustomerAddresses:     numCustomerAddresses,
@@ -205,7 +186,7 @@ func CalculateECommerceRowCounts(targetGB float64) (ECommerceRowCounts, error) {
 	const effectiveSizePerOrderItem = 65.0 // Bytes/item, includes proportional share of all dimensions and header
 
 	rows := math.Max(1, math.Round(targetBytes/effectiveSizePerOrderItem))
-	if math.IsNaN(rows) || rows >= float64(math.MaxInt32) {
+	if math.IsNaN(rows) || rows > math.MaxInt32 {
 		return ECommerceRowCounts{}, fmt.Errorf("target size exceeds supported row count")
 	}
 	numOrderItems := int(rows)
@@ -258,7 +239,7 @@ func CalculateFinancialRowCounts(targetGB float64) (financialsimulation.Financia
 	const effectiveSizePerDailyStockPrice = 139.0 // Bytes/price, includes proportional share of all dimensions
 
 	rows := math.Max(1, math.Round(targetBytes/effectiveSizePerDailyStockPrice))
-	if math.IsNaN(rows) || rows >= float64(math.MaxInt32) {
+	if math.IsNaN(rows) || rows >= float64(math.MaxInt) || math.Round(rows/(AvgTradingDaysPerYear*NumYearsOfData)) > math.MaxInt32 {
 		return financialsimulation.FinancialRowCounts{}, fmt.Errorf("target size exceeds supported row count")
 	}
 	numPrices := int(rows)
@@ -294,7 +275,7 @@ func CalculateMedicalRowCounts(targetGB float64) (medicalsimulation.MedicalRowCo
 	const effectiveSizePerAppointment = 200.0 // Bytes/appointment, estimate for medical data
 
 	rows := math.Max(1, math.Round(targetBytes/effectiveSizePerAppointment))
-	if math.IsNaN(rows) || rows >= float64(math.MaxInt32) {
+	if math.IsNaN(rows) || rows >= float64(math.MaxInt) || math.Round(rows/5) > math.MaxInt32 {
 		return medicalsimulation.MedicalRowCounts{}, fmt.Errorf("target size exceeds supported row count")
 	}
 	numAppointments := int(rows)

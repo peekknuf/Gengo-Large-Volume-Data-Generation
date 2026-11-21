@@ -17,6 +17,9 @@ func TestPublishCompletedDataset(t *testing.T) {
 	if err := GenerateModelData("financial", invalid, "csv", dir); err == nil {
 		t.Fatal("invalid plan succeeded")
 	}
+	if err := GenerateModelData("financial", financial.FinancialRowCounts{Companies: 1, Exchanges: 1, DailyStockPrices: 1}, "invalid-format", dir); err == nil {
+		t.Fatal("writer failure reported success")
+	}
 	entries, err := os.ReadDir(parent)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("after failure: %v %v", entries, err)

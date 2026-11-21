@@ -48,6 +48,9 @@ type ECommerceDSRowCounts struct {
 
 // GenerateModelData orchestrates the generation and writing of the relational model.
 func GenerateModelData(modelType string, counts interface{}, format string, outputDir string) error {
+	if err := validateRowPlan(modelType, counts); err != nil {
+		return err
+	}
 	startTime := time.Now()
 
 	destination, err := filepath.Abs(outputDir)
@@ -322,9 +325,6 @@ func getSKs(slice interface{}) []int64 {
 }
 
 func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string) error {
-	if counts.CustomerAddresses < counts.Customers || int64(counts.CustomerAddresses) > 3*int64(counts.Customers) {
-		return fmt.Errorf("customer addresses require 1 to 3 rows per customer")
-	}
 	var writersWg sync.WaitGroup
 	errChan := make(chan error, 10)
 
@@ -352,7 +352,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	}()
 	go func() {
 		defer categoriesWg.Done()
-		productCategories = ecommerce.GenerateProductCategories()
+		productCategories = ecommerce.GenerateProductCategories()[:counts.ProductCategories]
 	}()
 	go func() {
 		defer productsWg.Done()
