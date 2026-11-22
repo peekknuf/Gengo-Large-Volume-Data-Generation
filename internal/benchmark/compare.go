@@ -55,6 +55,7 @@ type Comparison struct {
 	DatasetID       string             `json:"dataset_id"`
 	Scenario        Scenario           `json:"scenario"`
 	WorkloadVersion int                `json:"workload_version"`
+	WorkloadSHA256  string             `json:"workload_sha256,omitempty"`
 	LoadModel       string             `json:"load_model"`
 	StartingState   string             `json:"starting_state"`
 	Baseline        RunReference       `json:"baseline"`
@@ -113,22 +114,40 @@ func ReadResult(path string) (*Result, error) {
 }
 
 func validateComparableResult(result *Result) error {
-	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || result.Scenario.Workload != "customer-lookup" || result.Scenario.Protocol != "simple" || result.LoadModel != "closed-loop-concurrency" || result.StartingState != "read-only-reuse" {
-		return fmt.Errorf("comparison supports version-1 read-only customer-lookup results using simple protocol")
+	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.Scenario.Protocol != "simple" || result.LoadModel != "closed-loop-concurrency" || result.StartingState != "read-only-reuse" {
+		return fmt.Errorf("comparison supports version-1 read-only customer-lookup and custom-sql results using simple protocol")
+	}
+	custom := result.Scenario.Workload == "custom-sql"
+	if custom {
+		hash, err := hex.DecodeString(result.WorkloadSHA256)
+		if err != nil || len(hash) != sha256.Size || result.WorkloadSHA256 != strings.ToLower(result.WorkloadSHA256) || result.Scenario.SQLFile == "" {
+			return fmt.Errorf("custom SQL result requires sql_file and a valid workload SHA-256 identity")
+		}
+	} else if result.WorkloadSHA256 != "" || result.Scenario.SQLFile != "" {
+		return fmt.Errorf("customer-lookup result contains custom SQL metadata")
 	}
 	if (result.Status != "completed" && result.Status != "failed") || result.StartedAt.IsZero() || result.FinishedAt == nil || result.FinishedAt.Before(result.StartedAt) || result.PgbenchVersion == "" {
 		return fmt.Errorf("comparison requires finished experiments with recorded software versions")
 	}
-	if result.DatasetID == "" || result.DatasetIdentity.Model != "ecommerce" || result.DatasetIdentity.Counts["dim_customers"] < 1 || result.Scenario.Seed == nil || *result.Scenario.Seed > math.MaxInt64 || result.Scenario.Schema == "" {
+	if result.Scenario.Seed == nil || *result.Scenario.Seed > math.MaxInt64 || (!custom && result.Scenario.Schema == "") {
 		return fmt.Errorf("saved result is missing dataset or workload identity metadata")
 	}
-	identity, err := json.Marshal(result.DatasetIdentity)
-	if err != nil {
-		return fmt.Errorf("invalid dataset identity metadata")
-	}
-	hash := sha256.Sum256(identity)
-	if result.DatasetIdentity.SchemaVersion != core.SchemaVersion || result.DatasetID != hex.EncodeToString(hash[:]) {
-		return fmt.Errorf("saved dataset identity does not match its metadata")
+	if custom && result.DatasetID == "" {
+		if result.Scenario.Dataset != "" || !reflect.DeepEqual(result.DatasetIdentity, core.DatasetIdentity{}) {
+			return fmt.Errorf("saved result has dataset metadata without dataset identity")
+		}
+	} else {
+		if result.DatasetID == "" || result.DatasetIdentity.Model != "ecommerce" || result.DatasetIdentity.Counts["dim_customers"] < 1 {
+			return fmt.Errorf("saved result is missing dataset identity metadata")
+		}
+		identity, err := json.Marshal(result.DatasetIdentity)
+		if err != nil {
+			return fmt.Errorf("invalid dataset identity metadata")
+		}
+		hash := sha256.Sum256(identity)
+		if result.DatasetIdentity.SchemaVersion != core.SchemaVersion || result.DatasetID != hex.EncodeToString(hash[:]) {
+			return fmt.Errorf("saved dataset identity does not match its metadata")
+		}
 	}
 	warmup, warmupErr := time.ParseDuration(result.Scenario.Warmup)
 	duration, durationErr := time.ParseDuration(result.Scenario.Duration)
@@ -223,6 +242,8 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		name                string
 		baseline, candidate any
 	}{
+		{"workload", baseline.Scenario.Workload, candidate.Scenario.Workload},
+		{"workload SQL identity", baseline.WorkloadSHA256, candidate.WorkloadSHA256},
 		{"dataset identity", baseline.DatasetID, candidate.DatasetID},
 		{"dataset metadata", baseline.DatasetIdentity, candidate.DatasetIdentity},
 		{"schema", baseline.Scenario.Schema, candidate.Scenario.Schema},
@@ -255,6 +276,7 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		"Single-run differences do not establish statistical significance or a repeatable improvement.",
 		"Target labels do not verify identical endpoints, hardware, pool sizing, or background traffic.",
 	}}
+	comparison.WorkloadSHA256 = baseline.WorkloadSHA256
 	if baseline.PgbenchVersion != candidate.PgbenchVersion {
 		comparison.Warnings = append(comparison.Warnings, "pgbench versions differ; client behavior may affect measurements.")
 	}

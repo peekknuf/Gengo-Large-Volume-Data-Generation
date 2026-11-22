@@ -29,6 +29,13 @@ func init() {
 		os.Exit(0)
 	}
 	if strings.Contains(arguments, "--set=ON_ERROR_STOP=on") {
+		if mode == "custom" {
+			if !strings.Contains(arguments, "SELECT current_setting('server_version');") {
+				os.Exit(2)
+			}
+			fmt.Println("17.12")
+			os.Exit(0)
+		}
 		if mode == "preflight-error" {
 			fmt.Println("17.12|2|1|3|2")
 		} else {
@@ -36,12 +43,22 @@ func init() {
 		}
 		os.Exit(0)
 	}
-	for _, required := range []string{"--no-vacuum", "--exit-on-abort", "--protocol=simple", "--max-tries=1", "--random-seed=0", "--define=customer_count=3"} {
+	requiredArgs := []string{"--no-vacuum", "--exit-on-abort", "--protocol=simple", "--max-tries=1", "--random-seed=0"}
+	if mode != "custom" {
+		requiredArgs = append(requiredArgs, "--define=customer_count=3")
+	}
+	for _, required := range requiredArgs {
 		if !strings.Contains(arguments, required) {
 			os.Exit(2)
 		}
 	}
 	for _, argument := range os.Args[1:] {
+		if script, found := strings.CutPrefix(argument, "--file="); found && mode == "custom" {
+			contents, err := os.ReadFile(strings.TrimSuffix(script, "@1"))
+			if err != nil || string(contents) != "BEGIN READ ONLY;\n\\set id random(1, 3)\nSELECT :id;\nCOMMIT;\n" {
+				os.Exit(2)
+			}
+		}
 		if prefix, found := strings.CutPrefix(argument, "--log-prefix="); found {
 			if mode == "execution-error" {
 				fmt.Fprintln(os.Stderr, "SQL error "+os.Getenv("PGPASSWORD"))

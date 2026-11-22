@@ -3,6 +3,8 @@ package benchmark
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,6 +50,7 @@ type Result struct {
 	DatasetID       string                `json:"dataset_id"`
 	DatasetIdentity core.DatasetIdentity  `json:"dataset_identity"`
 	WorkloadVersion int                   `json:"workload_version"`
+	WorkloadSHA256  string                `json:"workload_sha256,omitempty"`
 	PgbenchVersion  string                `json:"pgbench_version"`
 	LoadModel       string                `json:"load_model"`
 	StartingState   string                `json:"starting_state"`
@@ -99,10 +102,18 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 		}
 		return result, runErr
 	}
+	workload := "\\set customer_id random(1, :customer_count)\nSELECT customer_id, first_name, last_name, email FROM \"" + plan.Scenario.Schema + "\".dim_customers WHERE customer_id = :customer_id;\n"
+	if plan.Scenario.Workload == "custom-sql" {
+		if plan.SQL == "" {
+			return finish(fmt.Errorf("custom SQL plan has no script; load the scenario before running"))
+		}
+		workload = plan.SQL
+		hash := sha256.Sum256([]byte(workload))
+		result.WorkloadSHA256 = hex.EncodeToString(hash[:])
+	}
 	if err := saveResult(output, result); err != nil {
 		return nil, err
 	}
-	workload := "\\set customer_id random(1, :customer_count)\nSELECT customer_id, first_name, last_name, email FROM \"" + plan.Scenario.Schema + "\".dim_customers WHERE customer_id = :customer_id;\n"
 	script := filepath.Join(output, "workload.sql")
 	if err := os.WriteFile(script, []byte(workload), 0644); err != nil {
 		return finish(err)
@@ -192,6 +203,16 @@ func checkDataset(ctx context.Context, client *postgres.Client, plan Plan) (stri
 	checkContext, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	var output, diagnostics bytes.Buffer
+	if plan.Scenario.Workload == "custom-sql" {
+		if err := client.Run(checkContext, []string{"-At", "--command", "SELECT current_setting('server_version');"}, &output, &diagnostics); err != nil {
+			return "", fmt.Errorf("connection preflight failed: %w; %s", err, strings.TrimSpace(diagnostics.String()))
+		}
+		version := strings.TrimSpace(output.String())
+		if version == "" {
+			return "", fmt.Errorf("connection preflight returned no server version")
+		}
+		return version, nil
+	}
 	query := `SELECT current_setting('server_version'), count(*), min(customer_id), max(customer_id), count(DISTINCT customer_id) FROM "` + plan.Scenario.Schema + `".dim_customers;`
 	if err := client.Run(checkContext, []string{"-At", "--command", query}, &output, &diagnostics); err != nil {
 		return "", fmt.Errorf("dataset preflight failed: %w; %s", err, strings.TrimSpace(diagnostics.String()))
@@ -210,7 +231,10 @@ func runPhase(ctx context.Context, client *postgres.Client, plan Plan, concurren
 		phase.Error = err.Error()
 		return phase
 	}
-	arguments := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--protocol=simple", "--jobs=1", "--client=" + strconv.Itoa(concurrency), "--time=" + strconv.Itoa(int(duration/time.Second)), "--random-seed=" + strconv.FormatUint(*plan.Scenario.Seed, 10), "--define=customer_count=" + strconv.FormatInt(plan.Dataset.Identity.Counts["dim_customers"], 10), "--file=" + script + "@1"}
+	arguments := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--protocol=simple", "--jobs=1", "--client=" + strconv.Itoa(concurrency), "--time=" + strconv.Itoa(int(duration/time.Second)), "--random-seed=" + strconv.FormatUint(*plan.Scenario.Seed, 10), "--file=" + script + "@1"}
+	if plan.Dataset.DatasetID != "" {
+		arguments = append(arguments, "--define=customer_count="+strconv.FormatInt(plan.Dataset.Identity.Counts["dim_customers"], 10))
+	}
 	prefix := filepath.Join(directory, "transactions")
 	if measured {
 		arguments = append(arguments, "--log", "--log-prefix="+prefix)

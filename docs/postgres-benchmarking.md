@@ -1,4 +1,7 @@
-# Run a PostgreSQL customer-lookup benchmark
+# Run PostgreSQL workload benchmarks
+
+For application queries, see [custom SQL workloads](custom-sql.md). This guide
+uses the built-in customer lookup to explain shared controls and measurements.
 
 Build Gengo and install PostgreSQL client tools with `psql` and `pgbench` 17 or
 later on `PATH`. Configure the endpoint variables described in
@@ -45,9 +48,9 @@ one point lookup. The built-in workload version is 1. The workload seed is
 separate from the dataset generation seed; both are recorded in results. Seed
 zero is valid. A seed does not make timing or concurrent scheduling reproducible.
 
-Version 1 accepts only `customer-lookup` and the simple SQL protocol, with
-persistent client connections and one pgbench worker thread. It does not execute
-arbitrary SQL. Dataset metadata must describe a completed e-commerce dataset with
+Version 1 accepts `customer-lookup` and `custom-sql` with the simple SQL protocol,
+persistent client connections and one pgbench worker thread. For customer lookups,
+dataset metadata must describe a completed e-commerce dataset with
 a matching dataset identity. Before each target, Gengo checks that database
 customer keys are unique and cover the manifest's contiguous `1..N` range. This
 checks customer suitability, not the identity of every imported table.
@@ -102,7 +105,7 @@ the command a nonzero exit code after saving results. Cancellation ends the swee
 The output directory contains:
 
 - `result.json`, a version-1 result updated after each completed phase and step.
-- `workload.sql`, the exact generated point-lookup script.
+- `workload.sql`, the exact executed built-in or wrapped custom script.
 - Per-phase directories with redacted `pgbench.txt` client output.
 - Per-measurement `transactions.*` logs with numeric per-iteration timings.
 
@@ -169,7 +172,7 @@ Saved experiments can be compared offline with
 [benchmark comparisons](benchmark-comparisons.md) for compatibility checks and
 interpretation limits.
 
-Longer repeated measurements, varying endpoint order, custom SQL, write/reset
+Longer repeated measurements, varying endpoint order, write/reset
 policies, arrival rates, backend telemetry, additional
 protocols, and a local PostgreSQL/PgBouncer reference environment remain roadmap
 work.

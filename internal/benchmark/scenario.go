@@ -1,6 +1,7 @@
 package benchmark
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,6 +31,7 @@ type Scenario struct {
 	Schema      string     `yaml:"schema" json:"schema"`
 	Targets     []string   `yaml:"targets" json:"targets"`
 	Workload    string     `yaml:"workload" json:"workload"`
+	SQLFile     string     `yaml:"sql_file,omitempty" json:"sql_file,omitempty"`
 	Seed        *uint64    `yaml:"seed" json:"seed"`
 	Protocol    string     `yaml:"protocol" json:"protocol"`
 	Concurrency []int      `yaml:"concurrency" json:"concurrency"`
@@ -43,6 +45,7 @@ type Plan struct {
 	Dataset  core.Manifest
 	Warmup   time.Duration
 	Duration time.Duration
+	SQL      string
 }
 
 func LoadScenario(path string) (Plan, error) {
@@ -68,11 +71,31 @@ func LoadScenario(path string) (Plan, error) {
 	if scenario.Version != 1 || strings.TrimSpace(scenario.Name) == "" || len(scenario.Name) > 100 {
 		return Plan{}, fmt.Errorf("scenario requires version 1 and a name of 1 to 100 characters")
 	}
-	if !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`).MatchString(scenario.Schema) {
+	if (scenario.Schema != "" || scenario.Workload == "customer-lookup") && !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`).MatchString(scenario.Schema) {
 		return Plan{}, fmt.Errorf("schema must be an ASCII PostgreSQL identifier of 1 to 63 characters")
 	}
-	if scenario.Workload != "customer-lookup" || scenario.Protocol != "simple" {
-		return Plan{}, fmt.Errorf("version 1 supports workload customer-lookup and protocol simple")
+	if (scenario.Workload != "customer-lookup" && scenario.Workload != "custom-sql") || scenario.Protocol != "simple" {
+		return Plan{}, fmt.Errorf("version 1 supports workloads customer-lookup and custom-sql with protocol simple")
+	}
+	var sql string
+	if scenario.Workload == "custom-sql" {
+		if scenario.SQLFile == "" {
+			return Plan{}, fmt.Errorf("custom-sql requires sql_file")
+		}
+		if !filepath.IsAbs(scenario.SQLFile) {
+			scenario.SQLFile = filepath.Join(filepath.Dir(path), scenario.SQLFile)
+		}
+		scenario.SQLFile, err = filepath.Abs(scenario.SQLFile)
+		if err != nil {
+			return Plan{}, err
+		}
+		contents, err := readSQL(scenario.SQLFile)
+		if err != nil {
+			return Plan{}, err
+		}
+		sql = "BEGIN READ ONLY;\n" + contents + "\nCOMMIT;\n"
+	} else if scenario.SQLFile != "" {
+		return Plan{}, fmt.Errorf("sql_file is only supported for custom-sql")
 	}
 	if scenario.Seed == nil || *scenario.Seed > math.MaxInt64 {
 		return Plan{}, fmt.Errorf("seed must be explicitly set between 0 and 9223372036854775807")
@@ -110,6 +133,9 @@ func LoadScenario(path string) (Plan, error) {
 		return Plan{}, fmt.Errorf("thresholds require positive max_p95_ms, max_error_rate between 0 and 1, and nonnegative min_tps")
 	}
 	if scenario.Dataset == "" {
+		if scenario.Workload == "custom-sql" {
+			return Plan{Scenario: scenario, Warmup: warmup, Duration: duration, SQL: sql}, nil
+		}
 		return Plan{}, fmt.Errorf("dataset directory is required")
 	}
 	if !filepath.IsAbs(scenario.Dataset) {
@@ -144,7 +170,24 @@ func LoadScenario(path string) (Plan, error) {
 	if manifest.Version != 1 || !manifest.Complete || manifest.Identity.SchemaVersion != core.SchemaVersion || manifest.Identity.Model != "ecommerce" || manifest.Identity.Counts["dim_customers"] < 1 || manifest.DatasetID != hex.EncodeToString(hash[:]) {
 		return Plan{}, fmt.Errorf("expected a completed ecommerce manifest with valid identity and positive customer count")
 	}
-	return Plan{Scenario: scenario, Dataset: manifest, Warmup: warmup, Duration: duration}, nil
+	return Plan{Scenario: scenario, Dataset: manifest, Warmup: warmup, Duration: duration, SQL: sql}, nil
+}
+
+func readSQL(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("read sql_file: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
+		return "", fmt.Errorf("sql_file must be a regular file of at most 1 MiB")
+	}
+	contents, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
+	if err != nil || len(contents) > 1<<20 || strings.TrimSpace(string(contents)) == "" || bytes.IndexByte(contents, 0) >= 0 {
+		return "", fmt.Errorf("sql_file must contain nonempty SQL without NUL bytes, at most 1 MiB")
+	}
+	return string(contents), nil
 }
 
 func finite(value float64) bool {

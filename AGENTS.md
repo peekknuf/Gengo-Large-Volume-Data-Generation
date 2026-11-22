@@ -111,7 +111,11 @@ and two clients. Temporary libpq hostaddr overrides avoided intermittent DNS
 failures during that smoke verification; stored credentials were unchanged.
 Offline saved-run comparisons validate configuration and measurement consistency;
 their tests and CLI verification do not require a database or credentials.
-Custom workloads, broader load controls, repetitions, telemetry, and a local
+Read-only custom SQL supports scenario-relative files, optional datasets, and
+SHA-256 workload identity in saved results and comparisons.
+Live custom sweeps and offline comparisons passed on all three endpoints;
+table-read, read-only write rejection, and SQL-error continuation checks passed.
+Broader load controls, repetitions, telemetry, and a local
 PostgreSQL/PgBouncer reference fixture remain pending.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV

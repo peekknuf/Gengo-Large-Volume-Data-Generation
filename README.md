@@ -40,6 +40,10 @@ Edit the scenario's dataset path and schema after import. Results include JSON,
 client logs, throughput, latency percentiles, and threshold status. See
 [PostgreSQL benchmarking](docs/postgres-benchmarking.md).
 
+Test application queries with `workload: custom-sql` and a separate `sql_file`.
+Custom workloads support the same sweeps without requiring a generated dataset.
+See [custom SQL](docs/custom-sql.md) and `examples/postgres/custom.yaml`.
+
 Compare saved runs offline with
 `gengo bench compare data/before/result.json data/after/result.json --output data/comparison.json`.
 Gengo checks configuration compatibility before reporting measured changes. See

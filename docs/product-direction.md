@@ -131,7 +131,7 @@ Concrete abstractions are introduced alongside working implementations.
 
 ### Current workload increments
 
-- [ ] Custom SQL files with workload identity in saved results and comparisons.
+- [x] Read-only custom SQL files with workload identity in saved results and comparisons.
 - [ ] Read/write workloads with setup, reset, and explicit state-reuse policies.
 - [ ] Target arrival-rate tests with requested and achieved load measurements.
 - [ ] Connection churn, bursts, and supported protocol comparisons.

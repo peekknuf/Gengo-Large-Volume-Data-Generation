@@ -14,7 +14,7 @@ func newBenchmarkCommand() *cobra.Command {
 	var scenarioPath, envFile, output string
 	run := &cobra.Command{
 		Use:   "run",
-		Short: "Run a versioned YAML customer-lookup scenario",
+		Short: "Run a versioned YAML built-in or custom SQL scenario",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plan, err := benchmark.LoadScenario(scenarioPath)

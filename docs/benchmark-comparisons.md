@@ -18,7 +18,7 @@ the CLI still prints its startup logo to stdout.
 
 ## Check compatibility
 
-Version 1 supports the current read-only `customer-lookup` workload, simple
+Version 1 supports read-only `customer-lookup` and `custom-sql` workloads, simple
 protocol, closed-loop concurrency, and read-only state reuse. Both inputs must
 contain finished, complete sweeps with successful preflights and completed
 measurement phases. A finished experiment whose steps failed performance
@@ -27,13 +27,19 @@ are rejected rather than compared as zero-throughput measurements.
 
 These settings must match:
 
+- Workload kind and, for custom SQL, the SHA-256 of the executed script.
 - Dataset ID and identity metadata, including the generation seed and row plan.
 - Imported schema and workload seed, including explicit seed zero.
 - Target list and order, and concurrency levels.
 - Warm-up and measurement durations. Equivalent spellings such as `60s` and `1m` match.
 - Latency, error-rate, and throughput thresholds.
 
-Scenario names and local dataset directory paths may differ. Steps are paired by
+Scenario names, SQL file paths, and local dataset directory paths may differ.
+Custom SQL results require a valid `workload_sha256`. Changed SQL is rejected
+even if the filename is unchanged. Original SQL files are not needed for offline
+comparison. Runs without datasets can only compare with other runs without
+datasets; application data equivalence is the operator's responsibility.
+Steps are paired by
 target label and client count, not by their array position. PostgreSQL or pgbench
 version differences produce warnings instead of rejecting the comparison, so an
 intentional software upgrade can be evaluated.
