@@ -109,7 +109,8 @@ Concrete abstractions are introduced alongside working implementations.
 - [ ] Weighted workloads, hot subsets, and reset handling.
 - [ ] PostgreSQL and pooler telemetry.
 - [ ] Explicit protocol comparisons and connection churn.
-- [ ] Saved-run comparisons and configurable stop conditions.
+- [x] Offline saved-run comparisons with compatibility checks and observed metric/capacity changes.
+- [ ] Configurable stop conditions.
 - [ ] Additional generation models and workload presets.
 - [ ] Native Go execution engine.
 - [ ] Supavisor, Auth, Storage, Edge Functions, and Realtime scenarios.

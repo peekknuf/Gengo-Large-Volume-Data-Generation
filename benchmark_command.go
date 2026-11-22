@@ -36,6 +36,41 @@ func newBenchmarkCommand() *cobra.Command {
 	run.Flags().StringVar(&output, "output", "", "New directory for results, workload, and client logs")
 	_ = run.MarkFlagRequired("scenario")
 	_ = run.MarkFlagRequired("output")
-	bench.AddCommand(run)
+	bench.AddCommand(run, newBenchmarkCompareCommand())
 	return bench
+}
+
+func newBenchmarkCompareCommand() *cobra.Command {
+	var output string
+	compare := &cobra.Command{
+		Use:   "compare BASELINE_JSON CANDIDATE_JSON",
+		Short: "Compare compatible saved experiments without database access",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseline, err := benchmark.ReadResult(args[0])
+			if err != nil {
+				return fmt.Errorf("baseline result: %w", err)
+			}
+			candidate, err := benchmark.ReadResult(args[1])
+			if err != nil {
+				return fmt.Errorf("candidate result: %w", err)
+			}
+			comparison, err := benchmark.Compare(baseline, candidate)
+			if err != nil {
+				return err
+			}
+			if output != "" {
+				if err := benchmark.WriteComparison(output, comparison); err != nil {
+					return err
+				}
+			}
+			benchmark.PrintComparison(cmd.OutOrStdout(), comparison)
+			if output != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Saved comparison in %s\n", output)
+			}
+			return nil
+		},
+	}
+	compare.Flags().StringVar(&output, "output", "", "Optional new JSON file for the comparison")
+	return compare
 }

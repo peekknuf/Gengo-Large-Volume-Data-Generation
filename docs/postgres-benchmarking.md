@@ -164,7 +164,12 @@ failing sweeps with a temporary direct-endpoint hostaddr override.
 
 Short live runs prove execution and result handling, not endpoint performance.
 Run comparisons without overlapping experiments or unrelated database load.
+Saved experiments can be compared offline with
+`gengo bench compare BASELINE_JSON CANDIDATE_JSON`; see
+[benchmark comparisons](benchmark-comparisons.md) for compatibility checks and
+interpretation limits.
+
 Longer repeated measurements, varying endpoint order, custom SQL, write/reset
-policies, arrival rates, saved-run comparisons, backend telemetry, additional
+policies, arrival rates, backend telemetry, additional
 protocols, and a local PostgreSQL/PgBouncer reference environment remain roadmap
 work.

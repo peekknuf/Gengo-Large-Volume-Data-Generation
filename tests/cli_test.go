@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/peekknuf/Gengo/internal/benchmark"
+	"github.com/peekknuf/Gengo/internal/core"
 	"github.com/peekknuf/Gengo/internal/postgres"
 )
 
@@ -67,6 +68,87 @@ func TestGenerationControls(t *testing.T) {
 		if out, err := run(t, "load", "plan", "--dataset", dataset); err == nil {
 			t.Fatalf("accepted missing output flag: %s", out)
 		}
+		t.Run("bench_compare_offline", func(t *testing.T) {
+			manifestBytes, err := os.ReadFile(filepath.Join(dataset, "manifest.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var manifest core.Manifest
+			if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			seed := uint64(0)
+			started := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+			finished := started.Add(time.Minute)
+			baseline := benchmark.Result{
+				Version: 1, Status: "completed", StartedAt: started, FinishedAt: &finished,
+				DatasetID: manifest.DatasetID, DatasetIdentity: manifest.Identity,
+				WorkloadVersion: 1, PgbenchVersion: "pgbench (PostgreSQL) 17.12", LoadModel: "closed-loop-concurrency", StartingState: "read-only-reuse",
+				Scenario: benchmark.Scenario{Version: 1, Name: "offline-cli-fixture", Dataset: dataset, Schema: "gengo_cli", Workload: "customer-lookup", Protocol: "simple", Seed: &seed, Targets: []string{"direct"}, Concurrency: []int{1}, Warmup: "0s", Duration: "2s", Thresholds: benchmark.Thresholds{MaxP95MS: 100}},
+				Targets:  map[string]benchmark.TargetInfo{"direct": {ServerVersion: "17.12"}}, Capacity: map[string]int{"direct": 1},
+				Steps: []benchmark.Step{{Target: "direct", Concurrency: 1, Status: "passed", Failures: []string{}, Measurement: &benchmark.Phase{Status: "completed", Metrics: &benchmark.Metrics{CompletedIterations: 100, TPS: 100, P95MS: 10}}}},
+			}
+			before, err := json.Marshal(baseline)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var candidate benchmark.Result
+			if err := json.Unmarshal(before, &candidate); err != nil {
+				t.Fatal(err)
+			}
+			candidate.Steps[0].Measurement.Metrics.TPS = 125
+			candidate.Steps[0].Measurement.Metrics.P95MS = 8
+			after, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			baselinePath := filepath.Join(root, "baseline.json")
+			candidatePath := filepath.Join(root, "candidate.json")
+			for path, contents := range map[string][]byte{baselinePath: before, candidatePath: after} {
+				if err := os.WriteFile(path, contents, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			report := filepath.Join(root, "comparison.json")
+			output, err := run(t, "bench", "compare", baselinePath, candidatePath, "--output", report)
+			if err != nil || !strings.Contains(string(output), "+25.00") || !strings.Contains(string(output), "-20.00") || !strings.Contains(string(output), "statistical significance") {
+				t.Fatalf("offline comparison: %v\n%s", err, output)
+			}
+			encoded, err := os.ReadFile(report)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var saved benchmark.Comparison
+			if err := json.Unmarshal(encoded, &saved); err != nil || saved.Version != 1 || len(saved.Steps) != 1 || saved.Steps[0].TPS.Delta != 25 || saved.Steps[0].P95MS.Delta != -2 {
+				t.Fatalf("incorrect saved comparison: %v\n%s", err, encoded)
+			}
+			if output, err := run(t, "bench", "compare", baselinePath, candidatePath, "--output", report); err == nil {
+				t.Fatalf("overwrote saved comparison: %s", output)
+			}
+			for path, expected := range map[string][]byte{baselinePath: before, candidatePath: after, report: encoded} {
+				contents, err := os.ReadFile(path)
+				if err != nil || !bytes.Equal(contents, expected) {
+					t.Fatalf("comparison damaged %s: %v", path, err)
+				}
+			}
+			incompatibleSeed := uint64(1)
+			candidate.Scenario.Seed = &incompatibleSeed
+			incompatible, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			incompatiblePath := filepath.Join(root, "incompatible.json")
+			if err := os.WriteFile(incompatiblePath, incompatible, 0600); err != nil {
+				t.Fatal(err)
+			}
+			rejectedOutput := filepath.Join(root, "rejected.json")
+			if output, err := run(t, "bench", "compare", baselinePath, incompatiblePath, "--output", rejectedOutput); err == nil || !strings.Contains(string(output), "workload seed") {
+				t.Fatalf("compared incompatible workload seeds: %v\n%s", err, output)
+			}
+			if _, err := os.Stat(rejectedOutput); !os.IsNotExist(err) {
+				t.Fatalf("rejected comparison created output: %v", err)
+			}
+		})
 	})
 	t.Run("database_validation", func(t *testing.T) {
 		for _, arguments := range [][]string{

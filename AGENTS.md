@@ -26,6 +26,7 @@ Parquet. PostgreSQL import planning and execution support ecommerce CSV.
 | PostgreSQL import command | load_command.go |
 | Connection checks, targets, dotenv, and psql execution | postgres_command.go, internal/postgres/client.go |
 | Scenario YAML, pgbench sweeps, measurements, and results | benchmark_command.go, internal/benchmark |
+| Offline saved-run comparisons and compatibility | internal/benchmark/compare.go, docs/benchmark-comparisons.md |
 | Manifest checks and psql script planning | internal/core/load_plan.go |
 | E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
@@ -101,7 +102,9 @@ Direct, shared transaction, and dedicated transaction connection checks passed.
 Read-only pgbench customer-lookup sweeps passed across all three targets at one
 and two clients. Temporary libpq hostaddr overrides avoided intermittent DNS
 failures during that smoke verification; stored credentials were unchanged.
-Custom workloads, broader load controls, saved-run comparisons, and a local
+Offline saved-run comparisons validate configuration and measurement consistency;
+their tests and CLI verification do not require a database or credentials.
+Custom workloads, broader load controls, repetitions, telemetry, and a local
 PostgreSQL/PgBouncer reference fixture remain pending.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV

@@ -76,6 +76,12 @@ sweep. Results distinguish client connections from unavailable server and pooler
 measurements. The built-in workload is read-only; custom SQL and mutable-data
 reset policies are not implemented. See postgres-benchmarking.md for limits.
 
+bench compare loads two saved results without database access. compare.go rejects
+incomplete or incompatible experiments, pairs target/client steps, and reports
+observed TPS, p95, error-rate, and tested-capacity changes. It checks dataset
+identity and measurement consistency, warns about software-version differences,
+and does not claim statistical significance. See benchmark-comparisons.md.
+
 ## Generation and encoding boundaries
 
 | Location | Role |
@@ -136,6 +142,7 @@ checks when schemas change.
 | core/load_postgres_test.go | Opt-in live import, counts, constraints, joins, existing-schema rejection, and count-mismatch rollback. |
 | postgres/client_test.go | Endpoint selection, dotenv precedence, credential handling, client failures, and cancellation. |
 | benchmark/*_test.go | Strict scenarios, dataset identity, percentile fixtures, thresholds, deterministic process fixtures, failure continuation, cancellation, and output preservation. |
+| benchmark/compare_test.go | Offline result validation, compatibility, matching by target/client, delta arithmetic, undefined percentages, software warnings, and comparison output preservation. |
 | generation/config_test.go | Configuration and cancellation after partition failure. |
 | Simulation-specific tests | Price invariants, sampling distribution, and shard creation failures. |
 | formats/csv_test.go | CSV round trips, buffered failure handling, and a writer benchmark. |

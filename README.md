@@ -40,6 +40,11 @@ Edit the scenario's dataset path and schema after import. Results include JSON,
 client logs, throughput, latency percentiles, and threshold status. See
 [PostgreSQL benchmarking](docs/postgres-benchmarking.md).
 
+Compare saved runs offline with
+`gengo bench compare data/before/result.json data/after/result.json --output data/comparison.json`.
+Gengo checks configuration compatibility before reporting measured changes. See
+[benchmark comparisons](docs/benchmark-comparisons.md).
+
 | Model | Output |
 | --- | --- |
 | ecommerce | Customers, addresses, suppliers, categories, products, orders, order items |

@@ -130,6 +130,9 @@ func TestRunSweepsContinueAndSaveMeasurements(t *testing.T) {
 		if err := json.Unmarshal(encoded, &saved); err != nil || saved.FinishedAt == nil || len(saved.Steps) != 6 {
 			t.Fatalf("incomplete saved experiment: %v", err)
 		}
+		if _, err := ReadResult(filepath.Join(output, "result.json")); err != nil {
+			t.Fatalf("runner produced a result that cannot be compared: %v", err)
+		}
 	}
 }
 
