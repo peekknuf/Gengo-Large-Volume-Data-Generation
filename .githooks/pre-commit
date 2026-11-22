@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+
+go_executable=$(git config --get gengo.goExecutable || true)
+if [ -z "$go_executable" ]; then
+    go_executable=go
+fi
+if ! command -v "$go_executable" >/dev/null 2>&1; then
+    echo "Pre-commit verification requires Go 1.25+ on PATH or git config gengo.goExecutable." >&2
+    exit 1
+fi
+
+go_directory=$(dirname "$go_executable")
+if command -v cygpath >/dev/null 2>&1; then
+    go_directory=$(cygpath -u "$go_directory")
+fi
+PATH="$go_directory:$PATH"
+export PATH
+go_path=$(git config --get gengo.goPath || true)
+go_cache=$(git config --get gengo.goCache || true)
+if [ -n "$go_path" ]; then
+    GOPATH=$go_path
+    export GOPATH
+fi
+if [ -n "$go_cache" ]; then
+    GOCACHE=$go_cache
+    export GOCACHE
+fi
+
+echo "Running Gengo pre-commit verification against direct, shared, and dedicated targets."
+exec "$go_executable" run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct,shared,dedicated

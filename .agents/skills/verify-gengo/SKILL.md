@@ -29,6 +29,12 @@ then performs its own explicit live CLI checks. Success means exit code zero,
 `summary.json` status `passed`, database `verified`, and `cleanup_verified: true`.
 Read the summary rather than treating a command's `PASS` line as the whole proof.
 
+The tracked `.githooks/pre-commit` hook runs the all-endpoint smoke check before
+commits. Enable it per clone with `git config --local core.hooksPath .githooks`.
+Portable Go installations can use local `gengo.goExecutable`, `gengo.goPath`, and
+`gengo.goCache` Git settings. Failed verification blocks the commit. The hook
+checks the working tree; it does not create an isolated copy of staged files.
+
 To cover every configured endpoint:
 
 ```sh

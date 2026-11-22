@@ -64,6 +64,15 @@ and build, then generation, import, workloads, saved comparison, and verified
 schema cleanup. Evidence stays in the printed temporary directory. Use its
 explicit offline mode when database verification is not intended.
 
+This checkout uses the tracked `.githooks/pre-commit` hook to run the full live
+verification before each commit. Enable it in a fresh clone with
+`git config --local core.hooksPath .githooks`. Go, psql, pgbench, and the three
+database targets must be available. Optional local Git settings
+`gengo.goExecutable`, `gengo.goPath`, and `gengo.goCache` support portable Go
+installations. Verification failure blocks the commit; do not bypass it to report
+an unverified commit as checked. The hook verifies the working tree, so include
+the intended changes in the index before committing.
+
 TestE2E builds its own binary and exercises all eight model/format combinations.
 Its default target is 0.1 GiB per case. GENGO_TEST_SIZE_GB and GENGO_TEST_TIMEOUT
 adjust fixtures. GENGO_KEEP_OUTPUT=1 retains output, so repeated runs need fresh
