@@ -48,8 +48,10 @@ one point lookup. The built-in workload version is 1. The workload seed is
 separate from the dataset generation seed; both are recorded in results. Seed
 zero is valid. A seed does not make timing or concurrent scheduling reproducible.
 
-Version 1 accepts `customer-lookup` and `custom-sql` with the simple SQL protocol,
-persistent client connections and one pgbench worker thread. For customer lookups,
+Version 1 accepts `customer-lookup` and `custom-sql` with simple, extended, or
+prepared SQL protocols. Persistent connections and one pgbench worker are the
+baseline. See [connection experiments](connection-experiments.md) for reconnects,
+bounded bursts, and their timing contracts. For customer lookups,
 dataset metadata must describe a completed e-commerce dataset with
 a matching dataset identity. Before each target, Gengo checks that database
 customer keys are unique and cover the manifest's contiguous `1..N` range. This
@@ -73,7 +75,8 @@ workload.
 The load model is closed-loop concurrency: each client starts another iteration
 after finishing its previous one. Client count is not a backend connection count
 or a simultaneous executing-query count. For a specified request rate, use
-[arrival-rate tests](arrival-rates.md). Connection churn remains pending.
+[arrival-rate tests](arrival-rates.md). Connection churn and bursts are also
+available through explicit connection modes.
 
 `warmup` and `duration` must be explicit whole-second durations. Warm-up may be
 `0s`; measurement must be at least `1s`. Each is limited to five minutes. Up to 32
@@ -114,7 +117,9 @@ seed, workload version and seed, PostgreSQL and pgbench versions, target labels,
 phase statuses, timings, thresholds, and capacity. It does not store the dotenv
 file or connection URLs. Hostnames may appear in redacted connection diagnostics.
 
-TPS comes from pgbench and excludes its initial connection time. Mean and
+For persistent connections, TPS comes from pgbench and excludes initial
+connection time. Reconnect and burst TPS includes connection time and uses a
+separately labeled field. Mean and
 nearest-rank p50/p95/p99 come from all successfully completed iteration log rows,
 in milliseconds. Gengo checks that success and failure log counts match the
 pgbench summary. Failed iterations do not contribute latency percentiles. The
@@ -175,6 +180,6 @@ interpretation limits.
 
 Custom [read/write experiments](write-workloads.md) now support setup, reset,
 and declared state reuse. Longer repeated measurements, varying endpoint order,
-built-in write presets, backend telemetry, additional
-protocols, and a local PostgreSQL/PgBouncer reference environment remain roadmap
+built-in write presets, backend telemetry, and a local PostgreSQL/PgBouncer
+reference environment remain roadmap
 work.

@@ -20,7 +20,9 @@ Broader execution controls, telemetry, and
 the local database reference environment remain roadmap work.
 
 Custom SQL, read/write state policies, and arrival-rate sweeps now work against
-existing Supabase endpoints. The next delivery priority is connection behavior.
+existing Supabase endpoints. Persistent, reconnect, and burst connection modes
+support simple, extended, and prepared protocols. The next delivery priority is
+repetitions and varying endpoint order.
 Reuse the working sweeps and offline comparisons.
 Repetitions and available Supabase Metrics API collection support these
 experiments. The local reference environment is optional backlog work. See
@@ -95,6 +97,15 @@ Rate sweeps keep clients fixed and pass rate and latency-limit controls to pgben
 metrics.go reconciles scheduled, successful, failed, and skipped work and records
 successful-iteration scheduling lag. Arrival latency includes scheduling delay.
 Rate capacity is stored separately from client capacity. See arrival-rates.md.
+
+connection.go validates connection modes and their measurement contracts.
+Reconnect and burst TPS includes connection time, with average connection time
+recorded separately. Unpaced transaction percentiles exclude each client's own
+connection setup; rate-mode latency includes it as scheduling lag. Bursts run
+one iteration per client with one thread per client and a process deadline.
+Comparisons allow intentional protocol and persistent/reconnect changes with
+warnings, while keeping bursts separate from sustained load. See
+connection-experiments.md.
 
 bench compare loads two saved results without database access. compare.go rejects
 incomplete or incompatible experiments, pairs target/client steps, and reports

@@ -7,8 +7,9 @@ performance-testing tool, with broader Supabase coverage planned. Read
 [product direction](docs/product-direction.md) for agreed scope and delivery status,
 then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
-Current priority is connection behavior experiments against existing Supabase
-connections. Custom SQL, read/write state policies, and arrival-rate sweeps work.
+Current priority is repeated experiments and varying endpoint order against
+existing Supabase connections. Custom SQL, read/write state policies, arrival-rate
+sweeps, and connection behavior experiments work.
 Extend the existing sweeps and saved comparisons.
 Repetitions and available Supabase Metrics API collection support this work. The
 local PostgreSQL/PgBouncer fixture is optional backlog work. Generation budgets
@@ -130,7 +131,15 @@ thresholds. Metrics reconcile scheduled/completed/failed/skipped counts, label
 scheduled-start latency, and record successful-iteration scheduling lag.
 Live low-rate/overload checks passed on all three endpoints. Arrival scheduling
 also passed direct-endpoint write/reset, reuse, and rollback checks. See
-docs/arrival-rates.md. Connection churn and bursts remain pending.
+docs/arrival-rates.md.
+
+Connection modes are persistent, reconnect, and burst; protocols are simple,
+extended, and prepared. All 54 live mode/protocol/target/load combinations passed.
+Direct audit rows prove session reuse/reconnection and bounded burst counts.
+Reconnect TPS includes connection times; unpaced log percentiles exclude each
+client's own setup. Average connection time is separate. Bursts run one iteration
+per client with one thread per client and use duration as a deadline. See
+docs/connection-experiments.md. Repetitions and varying endpoint order remain open.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV
 writers allocate 64 MiB buffers. Process-wide budgets and generation cancellation

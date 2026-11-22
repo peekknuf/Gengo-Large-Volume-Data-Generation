@@ -12,9 +12,13 @@ type loadLevel struct {
 	rate    float64
 }
 
-func validateRateMetrics(metrics *Metrics, rate float64) error {
+func validateRateMetrics(metrics *Metrics, rate float64, mode string) error {
 	if rate == 0 {
-		if metrics.SkippedIterations != 0 || metrics.RequestedIterations != nil || metrics.RateAttainment != nil || metrics.SkippedRate != nil || metrics.ScheduleLagMeanMS != nil || metrics.ScheduleLagMaxMS != nil || metrics.LatencyBasis != "" {
+		basis := ""
+		if mode != "persistent" {
+			basis = "transaction-start-to-completion"
+		}
+		if metrics.SkippedIterations != 0 || (mode != "burst" && metrics.RequestedIterations != nil) || metrics.RateAttainment != nil || metrics.SkippedRate != nil || metrics.ScheduleLagMeanMS != nil || metrics.ScheduleLagMaxMS != nil || metrics.LatencyBasis != basis {
 			return fmt.Errorf("concurrency measurements contain unexpected arrival-rate data")
 		}
 		return nil
@@ -23,7 +27,7 @@ func validateRateMetrics(metrics *Metrics, rate float64) error {
 		return fmt.Errorf("arrival-rate measurement is missing or has invalid scheduled-work metadata")
 	}
 	requested := metrics.CompletedIterations + metrics.FailedIterations + metrics.SkippedIterations
-	if *metrics.RequestedIterations != requested || !finite(*metrics.RateAttainment) || *metrics.RateAttainment <= 0 || math.Abs(*metrics.RateAttainment-metrics.TPS/rate) > 1e-9 || !finite(*metrics.SkippedRate) || *metrics.SkippedRate < 0 || *metrics.SkippedRate > 1 || math.Abs(*metrics.SkippedRate-float64(metrics.SkippedIterations)/float64(requested)) > 1e-12 {
+	if *metrics.RequestedIterations != requested || !finite(*metrics.RateAttainment) || *metrics.RateAttainment <= 0 || math.Abs(*metrics.RateAttainment-metrics.throughput()/rate) > 1e-9 || !finite(*metrics.SkippedRate) || *metrics.SkippedRate < 0 || *metrics.SkippedRate > 1 || math.Abs(*metrics.SkippedRate-float64(metrics.SkippedIterations)/float64(requested)) > 1e-12 {
 		return fmt.Errorf("saved arrival-rate measurements disagree with counts or requested rate")
 	}
 	if !finite(*metrics.ScheduleLagMeanMS) || !finite(*metrics.ScheduleLagMaxMS) || *metrics.ScheduleLagMeanMS < 0 || *metrics.ScheduleLagMaxMS < *metrics.ScheduleLagMeanMS || !finite(metrics.MeanMS) || metrics.MeanMS < *metrics.ScheduleLagMeanMS {
@@ -33,6 +37,9 @@ func validateRateMetrics(metrics *Metrics, rate float64) error {
 }
 
 func loadModel(scenario Scenario) string {
+	if connectionMode(scenario) == "burst" {
+		return "connection-burst"
+	}
 	if len(scenario.ArrivalRates) > 0 {
 		return "poisson-arrival-rate"
 	}

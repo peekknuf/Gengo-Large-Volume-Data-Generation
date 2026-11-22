@@ -82,7 +82,7 @@ func TestLoadScenarioRejectsInvalidInputs(t *testing.T) {
 		{"large_seed", "seed: 0", "seed: 18446744073709551615"},
 		{"schema", "schema: gengo_test", "schema: public;DROP TABLE x"},
 		{"workload", "workload: customer-lookup", "workload: write"},
-		{"protocol", "protocol: simple", "protocol: prepared"},
+		{"protocol", "protocol: simple", "protocol: unknown"},
 		{"target", "targets: [direct, shared, dedicated]", "targets: [unknown]"},
 		{"duplicate_target", "targets: [direct, shared, dedicated]", "targets: [direct, direct]"},
 		{"no_target", "targets: [direct, shared, dedicated]", "targets: []"},

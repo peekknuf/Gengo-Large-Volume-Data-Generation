@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func init() {
 			fmt.Println("17.12")
 			os.Exit(0)
 		}
-		if mode == "custom" || mode == "arrival" {
+		if mode == "custom" || mode == "arrival" || mode == "connection" {
 			if !strings.Contains(arguments, "SELECT current_setting('server_version');") {
 				os.Exit(2)
 			}
@@ -76,9 +77,36 @@ func init() {
 		}
 		os.Exit(0)
 	}
-	requiredArgs := []string{"--no-vacuum", "--exit-on-abort", "--protocol=simple", "--max-tries=1", "--random-seed=0"}
-	if mode != "custom" && mode != "state" && mode != "arrival" {
+	requiredArgs := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--random-seed=0"}
+	if mode == "connection" {
+		requiredArgs = append(requiredArgs, "--protocol="+os.Getenv("GENGO_CONNECTION_PROTOCOL"))
+	} else {
+		requiredArgs = append(requiredArgs, "--protocol=simple")
+	}
+	if mode != "custom" && mode != "state" && mode != "arrival" && mode != "connection" {
 		requiredArgs = append(requiredArgs, "--define=customer_count=3")
+	}
+	burstClients := 0
+	if mode == "connection" {
+		connection := os.Getenv("GENGO_CONNECTION_MODE")
+		if strings.Contains(arguments, "--connect") != (connection != "persistent") {
+			os.Exit(2)
+		}
+		if connection == "burst" {
+			if os.Getenv("GENGO_CONNECTION_WAIT") == "1" {
+				time.Sleep(time.Minute)
+			}
+			for _, argument := range os.Args[1:] {
+				if clients, ok := strings.CutPrefix(argument, "--client="); ok {
+					burstClients, _ = strconv.Atoi(clients)
+				}
+			}
+			if !strings.Contains(arguments, "--jobs="+strconv.Itoa(burstClients)) || !strings.Contains(arguments, "--transactions=1") || strings.Contains(arguments, "--time=") {
+				os.Exit(2)
+			}
+		} else if !strings.Contains(arguments, "--jobs=1") || !strings.Contains(arguments, "--time=2") || strings.Contains(arguments, "--transactions=") {
+			os.Exit(2)
+		}
 	}
 	for _, required := range requiredArgs {
 		if !strings.Contains(arguments, required) {
@@ -111,6 +139,12 @@ func init() {
 			if mode == "arrival" {
 				contents = rateLog
 			}
+			if burstClients > 0 {
+				contents = ""
+				for index := 0; index < burstClients; index++ {
+					contents += fmt.Sprintf("%d 1 1000 0 1700000000 0\n", index)
+				}
+			}
 			if err := os.WriteFile(prefix+".1", []byte(contents), 0600); err != nil {
 				os.Exit(2)
 			}
@@ -118,6 +152,13 @@ func init() {
 	}
 	if mode == "arrival" {
 		fmt.Print(rateSummary)
+	} else if mode == "connection" && os.Getenv("GENGO_CONNECTION_MODE") != "persistent" {
+		summary := reconnectSummary
+		if burstClients > 0 {
+			summary = strings.ReplaceAll(summary, "processed: 4", fmt.Sprintf("processed: %d/%d", burstClients, burstClients))
+			summary = strings.ReplaceAll(summary, "failed transactions: 1 (20.000%)", "failed transactions: 0 (0.000%)")
+		}
+		fmt.Print(summary)
 	} else {
 		fmt.Print(measurementSummary)
 	}

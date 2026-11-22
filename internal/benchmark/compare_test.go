@@ -141,7 +141,7 @@ func TestCompareRejectsIncompatibleExperiments(t *testing.T) {
 		{"duration", func(result *Result) { result.Scenario.Duration = "3s" }},
 		{"thresholds", func(result *Result) { result.Scenario.Thresholds.MaxP95MS = 200 }},
 		{"workload_version", func(result *Result) { result.WorkloadVersion = 2 }},
-		{"protocol", func(result *Result) { result.Scenario.Protocol = "prepared" }},
+		{"protocol", func(result *Result) { result.Scenario.Protocol = "unknown" }},
 		{"load_model", func(result *Result) { result.LoadModel = "arrival-rate" }},
 		{"starting_state", func(result *Result) { result.StartingState = "reset" }},
 		{"concurrency", func(result *Result) {

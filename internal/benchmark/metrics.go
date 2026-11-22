@@ -13,27 +13,31 @@ import (
 )
 
 type Metrics struct {
-	RequestedIterations *int64   `json:"requested_iterations"`
-	CompletedIterations int64    `json:"completed_iterations"`
-	FailedIterations    int64    `json:"failed_iterations"`
-	Timeouts            *int64   `json:"timeouts"`
-	SkippedIterations   int64    `json:"skipped_iterations"`
-	TPS                 float64  `json:"tps_without_initial_connection"`
-	ActiveSeconds       float64  `json:"pgbench_elapsed_seconds_without_initial_connection"`
-	ErrorRate           float64  `json:"error_rate"`
-	MeanMS              float64  `json:"successful_iteration_mean_ms"`
-	P50MS               float64  `json:"successful_iteration_p50_ms"`
-	P95MS               float64  `json:"successful_iteration_p95_ms"`
-	P99MS               float64  `json:"successful_iteration_p99_ms"`
-	InitialConnectionMS float64  `json:"initial_connection_ms"`
-	RateAttainment      *float64 `json:"rate_attainment,omitempty"`
-	SkippedRate         *float64 `json:"skipped_rate,omitempty"`
-	ScheduleLagMeanMS   *float64 `json:"successful_iteration_schedule_lag_mean_ms,omitempty"`
-	ScheduleLagMaxMS    *float64 `json:"successful_iteration_schedule_lag_max_ms,omitempty"`
-	LatencyBasis        string   `json:"latency_basis,omitempty"`
+	RequestedIterations         *int64   `json:"requested_iterations"`
+	CompletedIterations         int64    `json:"completed_iterations"`
+	FailedIterations            int64    `json:"failed_iterations"`
+	Timeouts                    *int64   `json:"timeouts"`
+	SkippedIterations           int64    `json:"skipped_iterations"`
+	TPS                         float64  `json:"tps_without_initial_connection,omitempty"`
+	ActiveSeconds               float64  `json:"pgbench_elapsed_seconds_without_initial_connection,omitempty"`
+	ErrorRate                   float64  `json:"error_rate"`
+	MeanMS                      float64  `json:"successful_iteration_mean_ms"`
+	P50MS                       float64  `json:"successful_iteration_p50_ms"`
+	P95MS                       float64  `json:"successful_iteration_p95_ms"`
+	P99MS                       float64  `json:"successful_iteration_p99_ms"`
+	InitialConnectionMS         float64  `json:"initial_connection_ms,omitempty"`
+	TPSIncludingConnections     *float64 `json:"tps_including_connection_times,omitempty"`
+	SecondsIncludingConnections *float64 `json:"pgbench_elapsed_seconds_including_connection_times,omitempty"`
+	ConnectionMeanMS            *float64 `json:"average_connection_ms,omitempty"`
+	ThroughputBasis             string   `json:"throughput_basis,omitempty"`
+	RateAttainment              *float64 `json:"rate_attainment,omitempty"`
+	SkippedRate                 *float64 `json:"skipped_rate,omitempty"`
+	ScheduleLagMeanMS           *float64 `json:"successful_iteration_schedule_lag_mean_ms,omitempty"`
+	ScheduleLagMaxMS            *float64 `json:"successful_iteration_schedule_lag_max_ms,omitempty"`
+	LatencyBasis                string   `json:"latency_basis,omitempty"`
 }
 
-func readMetrics(summary, prefix string, rate float64) (*Metrics, error) {
+func readMetrics(summary, prefix string, rate float64, mode string) (*Metrics, error) {
 	if regexp.MustCompile(`(?m)^number of transactions actually processed:\s*0\s*$`).MatchString(summary) {
 		return nil, fmt.Errorf("pgbench completed no iterations; increase duration to allow for connection setup")
 	}
@@ -42,6 +46,10 @@ func readMetrics(summary, prefix string, rate float64) (*Metrics, error) {
 		`(?m)^number of failed transactions:\s*(\d+)`,
 		`(?m)^tps = ([0-9.]+) \(without initial connection time\)`,
 		`(?m)^initial connection time = ([0-9.]+) ms`,
+	}
+	if mode != "persistent" {
+		patterns[2] = `(?m)^tps = ([0-9.]+) \(including reconnection times\)`
+		patterns[3] = `(?m)^average connection time = ([0-9.]+) ms`
 	}
 	values := make([]string, len(patterns))
 	for index, pattern := range patterns {
@@ -118,6 +126,15 @@ func readMetrics(summary, prefix string, rate float64) (*Metrics, error) {
 		TPS: tps, ActiveSeconds: float64(completed) / tps, ErrorRate: float64(failed) / float64(completed+failed),
 		MeanMS: sum / float64(completed) / 1000, P50MS: percentile(0.50), P95MS: percentile(0.95), P99MS: percentile(0.99),
 		InitialConnectionMS: connection,
+	}
+	if mode != "persistent" {
+		elapsed := float64(completed) / tps
+		metrics.TPS, metrics.ActiveSeconds, metrics.InitialConnectionMS = 0, 0, 0
+		metrics.TPSIncludingConnections = &tps
+		metrics.SecondsIncludingConnections = &elapsed
+		metrics.ConnectionMeanMS = &connection
+		metrics.ThroughputBasis = "including-connection-times"
+		metrics.LatencyBasis = "transaction-start-to-completion"
 	}
 	if rate > 0 {
 		requested := completed + failed + skipped
@@ -201,7 +218,7 @@ func thresholdFailures(metrics *Metrics, limits Thresholds) []string {
 	if metrics.ErrorRate > limits.MaxErrorRate {
 		failures = append(failures, "error rate exceeds max_error_rate")
 	}
-	if metrics.TPS < limits.MinTPS {
+	if metrics.throughput() < limits.MinTPS {
 		failures = append(failures, "throughput is below min_tps")
 	}
 	if metrics.SkippedRate != nil && *metrics.SkippedRate > limits.MaxSkippedRate {
@@ -209,6 +226,9 @@ func thresholdFailures(metrics *Metrics, limits Thresholds) []string {
 	}
 	if metrics.RateAttainment != nil && *metrics.RateAttainment < limits.MinRateAttainment {
 		failures = append(failures, "achieved rate is below min_rate_attainment")
+	}
+	if metrics.ConnectionMeanMS != nil && limits.MaxConnectionMeanMS > 0 && *metrics.ConnectionMeanMS > limits.MaxConnectionMeanMS {
+		failures = append(failures, "average connection time exceeds max_connection_mean_ms")
 	}
 	return failures
 }

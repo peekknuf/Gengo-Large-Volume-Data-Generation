@@ -135,7 +135,7 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Custom read/write workloads with setup, reset, and explicit state-reuse policies.
 - [ ] Built-in write presets with restoration of Gengo-managed state.
 - [x] Target arrival-rate tests with requested and achieved load measurements.
-- [ ] Connection churn, bursts, and supported protocol comparisons.
+- [x] Connection churn, bursts, and supported protocol comparisons.
 - [ ] Quick/thorough profiles, repetitions, and varying endpoint order.
 - [ ] Available Supabase Metrics API collection alongside client measurements.
 

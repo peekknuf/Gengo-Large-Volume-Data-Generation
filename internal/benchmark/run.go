@@ -96,6 +96,12 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 		result.RateCapacity = make(map[string]float64)
 		result.Unavailable = []string{"separate_timeout_count", "server_query_latency", "pooler_wait", "server_and_pooler_telemetry", "dataset_generation_and_import_timings"}
 	}
+	if connectionMode(plan.Scenario) != "persistent" {
+		result.Unavailable = append(result.Unavailable, "connection_setup_latency_percentiles", "separate_initial_connection_time")
+		if len(plan.Scenario.ArrivalRates) == 0 {
+			result.Unavailable = append(result.Unavailable, "connection_start_to_completion_latency_percentiles")
+		}
+	}
 	finish := func(runErr error) (*Result, error) {
 		finished := time.Now().UTC()
 		result.FinishedAt = &finished
@@ -295,7 +301,16 @@ func runPhase(ctx context.Context, client *postgres.Client, plan Plan, level loa
 		phase.Error = err.Error()
 		return phase
 	}
-	arguments := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--protocol=simple", "--jobs=1", "--client=" + strconv.Itoa(level.clients), "--time=" + strconv.Itoa(int(duration/time.Second)), "--random-seed=" + strconv.FormatUint(*plan.Scenario.Seed, 10), "--file=" + script + "@1"}
+	mode := connectionMode(plan.Scenario)
+	arguments := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--protocol=" + plan.Scenario.Protocol, "--client=" + strconv.Itoa(level.clients), "--random-seed=" + strconv.FormatUint(*plan.Scenario.Seed, 10), "--file=" + script + "@1"}
+	if mode == "burst" {
+		arguments = append(arguments, "--connect", "--jobs="+strconv.Itoa(level.clients), "--transactions=1")
+	} else {
+		arguments = append(arguments, "--jobs=1", "--time="+strconv.Itoa(int(duration/time.Second)))
+		if mode == "reconnect" {
+			arguments = append(arguments, "--connect")
+		}
+	}
 	if level.rate > 0 {
 		limit, _ := time.ParseDuration(plan.Scenario.LatencyLimit)
 		arguments = append(arguments, "--rate="+strconv.FormatFloat(level.rate, 'f', -1, 64), "--latency-limit="+strconv.FormatFloat(float64(limit)/float64(time.Millisecond), 'f', -1, 64))
@@ -307,7 +322,11 @@ func runPhase(ctx context.Context, client *postgres.Client, plan Plan, level loa
 	if measured {
 		arguments = append(arguments, "--log", "--log-prefix="+prefix)
 	}
-	phaseContext, cancel := context.WithTimeout(ctx, duration+30*time.Second)
+	timeout := duration + 30*time.Second
+	if mode == "burst" {
+		timeout = duration
+	}
+	phaseContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var output, diagnostics bytes.Buffer
 	start := time.Now()
@@ -322,8 +341,16 @@ func runPhase(ctx context.Context, client *postgres.Client, plan Plan, level loa
 		return phase
 	}
 	if measured {
-		phase.Metrics, err = readMetrics(output.String(), prefix, level.rate)
+		phase.Metrics, err = readMetrics(output.String(), prefix, level.rate, mode)
 		if err != nil {
+			phase.Error = err.Error()
+			return phase
+		}
+		if mode == "burst" {
+			requested := int64(level.clients)
+			phase.Metrics.RequestedIterations = &requested
+		}
+		if err := validateConnectionMetrics(phase.Metrics, plan.Scenario, level.clients); err != nil {
 			phase.Error = err.Error()
 			return phase
 		}
@@ -355,6 +382,14 @@ func saveResult(directory string, result *Result) error {
 func PrintSummary(writer io.Writer, result *Result) {
 	fmt.Fprintf(writer, "Workload: %s; access: %s; state policy: %s\n", result.Scenario.Workload, accessMode(result.Scenario), result.StartingState)
 	fmt.Fprintf(writer, "Load model: %s\n", result.LoadModel)
+	fmt.Fprintf(writer, "Connection mode: %s; protocol: %s\n", connectionMode(result.Scenario), result.Scenario.Protocol)
+	if connectionMode(result.Scenario) != "persistent" {
+		if len(result.Scenario.ArrivalRates) > 0 {
+			fmt.Fprintln(writer, "TPS and scheduled-start p95 include connection time.")
+		} else {
+			fmt.Fprintln(writer, "TPS includes connection time; p95 excludes each client's own connection setup.")
+		}
+	}
 	if len(result.Scenario.ArrivalRates) > 0 {
 		fmt.Fprintln(writer, "Target      Clients  Rate/s  Status       TPS      p95 ms  Errors  Skipped  Achieved %")
 	} else {
@@ -364,9 +399,12 @@ func PrintSummary(writer io.Writer, result *Result) {
 		if step.Measurement != nil && step.Measurement.Metrics != nil {
 			metrics := step.Measurement.Metrics
 			if step.ArrivalRate > 0 {
-				fmt.Fprintf(writer, "%-11s %7d %7g  %-9s %8.2f %9.2f %7d %8d %10.2f\n", step.Target, step.Concurrency, step.ArrivalRate, step.Status, metrics.TPS, metrics.P95MS, metrics.FailedIterations, metrics.SkippedIterations, *metrics.RateAttainment*100)
+				fmt.Fprintf(writer, "%-11s %7d %7g  %-9s %8.2f %9.2f %7d %8d %10.2f\n", step.Target, step.Concurrency, step.ArrivalRate, step.Status, metrics.throughput(), metrics.P95MS, metrics.FailedIterations, metrics.SkippedIterations, *metrics.RateAttainment*100)
 			} else {
-				fmt.Fprintf(writer, "%-11s %7d  %-9s %8.2f %9.2f %7d\n", step.Target, step.Concurrency, step.Status, metrics.TPS, metrics.P95MS, metrics.FailedIterations)
+				fmt.Fprintf(writer, "%-11s %7d  %-9s %8.2f %9.2f %7d\n", step.Target, step.Concurrency, step.Status, metrics.throughput(), metrics.P95MS, metrics.FailedIterations)
+			}
+			if metrics.ConnectionMeanMS != nil {
+				fmt.Fprintf(writer, "  Mean connection and disconnection: %.2f ms\n", *metrics.ConnectionMeanMS)
 			}
 		} else {
 			fmt.Fprintf(writer, "%-11s %7d  ", step.Target, step.Concurrency)
@@ -388,6 +426,8 @@ func PrintSummary(writer io.Writer, result *Result) {
 		}
 		if len(result.Scenario.ArrivalRates) > 0 {
 			fmt.Fprintf(writer, "%s highest passing tested arrival rate: %g iterations/s\n", target, result.RateCapacity[target])
+		} else if connectionMode(result.Scenario) == "burst" {
+			fmt.Fprintf(writer, "%s highest passing tested burst size: %d clients\n", target, result.Capacity[target])
 		} else {
 			fmt.Fprintf(writer, "%s highest passing tested concurrency: %d\n", target, result.Capacity[target])
 		}

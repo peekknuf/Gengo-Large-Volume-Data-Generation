@@ -59,6 +59,11 @@ rate. [Setup and reset policies](write-workloads.md) also work with arrival rate
 including a fresh reset before measured write traffic. Normal phase timeouts,
 cancellation, and failure continuation remain unchanged.
 
+`connection_mode: reconnect` opens a new client connection for each executed
+iteration. Its TPS includes connection time, and schedule lag includes the
+connection work before SQL starts. Connection bursts use a separate fixed-count
+load model. See [connection experiments](connection-experiments.md).
+
 ## Measurements and thresholds
 
 Results use `load_model: poisson-arrival-rate`. Each step records its

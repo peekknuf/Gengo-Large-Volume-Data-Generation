@@ -51,6 +51,11 @@ Sweep requested iterations per second with a fixed client count using
 `examples/postgres/arrival.yaml`. See [arrival-rate tests](docs/arrival-rates.md)
 for achieved throughput, skipped work, scheduling lag, and tested rate capacity.
 
+Compare persistent clients, reconnects, and bounded connection bursts with
+simple, extended, or prepared SQL protocols. See
+[connection experiments](docs/connection-experiments.md),
+`examples/postgres/reconnect.yaml`, and `examples/postgres/connection-burst.yaml`.
+
 Compare saved runs offline with
 `gengo bench compare data/before/result.json data/after/result.json --output data/comparison.json`.
 Gengo checks configuration compatibility before reporting measured changes. See

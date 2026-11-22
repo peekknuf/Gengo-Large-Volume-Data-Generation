@@ -77,7 +77,7 @@ func TestRateMetrics(t *testing.T) {
 	if err := os.WriteFile(prefix+".1", []byte(rateLog), 0600); err != nil {
 		t.Fatal(err)
 	}
-	metrics, err := readMetrics(rateSummary, prefix, 10)
+	metrics, err := readMetrics(rateSummary, prefix, 10, "persistent")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestRateMetricsRejectIncompleteLogs(t *testing.T) {
 		if err := os.WriteFile(prefix+".1", []byte(test.log), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := readMetrics(test.summary, prefix, 10); err == nil {
+		if _, err := readMetrics(test.summary, prefix, 10, "persistent"); err == nil {
 			t.Fatal("accepted incomplete rate measurement")
 		}
 	}

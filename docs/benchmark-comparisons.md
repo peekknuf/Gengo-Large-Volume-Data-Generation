@@ -19,7 +19,8 @@ the CLI still prints its startup logo to stdout.
 ## Check compatibility
 
 Version 1 supports read-only `customer-lookup` and read-only or read/write
-`custom-sql` workloads, simple protocol, and concurrency or arrival-rate load. Both inputs must
+`custom-sql` workloads, all three SQL protocols, and concurrency, arrival-rate,
+or connection-burst load. Both inputs must
 use the same load model. Arrival-rate results are also supported, with their
 fixed client count, ordered rates, and latency limit checked for compatibility.
 See [arrival-rate tests](arrival-rates.md) for the measurement contract. Both inputs must
@@ -38,6 +39,13 @@ These settings must match:
 - For arrival-rate runs, fixed client count, requested rate levels, and latency limit.
 - Warm-up and measurement durations. Equivalent spellings such as `60s` and `1m` match.
 - Latency, error-rate, and throughput thresholds.
+
+Intentional protocol changes and persistent/reconnect changes are allowed with
+explicit comparison warnings. Each run reference records its connection mode and
+protocol. Reconnect throughput includes connection setup; unpaced transaction
+percentiles exclude each client's own setup. See
+[connection experiments](connection-experiments.md) for timing details. Bursts
+compare only with other bursts, using burst size rather than sustained capacity.
 
 Scenario names, SQL file paths, and local dataset directory paths may differ.
 Custom SQL results require a valid `workload_sha256`. Changed SQL is rejected

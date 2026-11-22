@@ -19,34 +19,36 @@ import (
 )
 
 type Thresholds struct {
-	MaxP95MS          float64 `yaml:"max_p95_ms" json:"max_p95_ms"`
-	MaxErrorRate      float64 `yaml:"max_error_rate" json:"max_error_rate"`
-	MinTPS            float64 `yaml:"min_tps" json:"min_tps"`
-	MaxSkippedRate    float64 `yaml:"max_skipped_rate,omitempty" json:"max_skipped_rate,omitempty"`
-	MinRateAttainment float64 `yaml:"min_rate_attainment,omitempty" json:"min_rate_attainment,omitempty"`
+	MaxP95MS            float64 `yaml:"max_p95_ms" json:"max_p95_ms"`
+	MaxErrorRate        float64 `yaml:"max_error_rate" json:"max_error_rate"`
+	MinTPS              float64 `yaml:"min_tps" json:"min_tps"`
+	MaxSkippedRate      float64 `yaml:"max_skipped_rate,omitempty" json:"max_skipped_rate,omitempty"`
+	MinRateAttainment   float64 `yaml:"min_rate_attainment,omitempty" json:"min_rate_attainment,omitempty"`
+	MaxConnectionMeanMS float64 `yaml:"max_connection_mean_ms,omitempty" json:"max_connection_mean_ms,omitempty"`
 }
 
 type Scenario struct {
-	Version      int        `yaml:"version" json:"version"`
-	Name         string     `yaml:"name" json:"name"`
-	Dataset      string     `yaml:"dataset" json:"dataset"`
-	Schema       string     `yaml:"schema" json:"schema"`
-	Targets      []string   `yaml:"targets" json:"targets"`
-	Workload     string     `yaml:"workload" json:"workload"`
-	SQLFile      string     `yaml:"sql_file,omitempty" json:"sql_file,omitempty"`
-	AccessMode   string     `yaml:"access_mode,omitempty" json:"access_mode,omitempty"`
-	StatePolicy  string     `yaml:"state_policy,omitempty" json:"state_policy,omitempty"`
-	SetupFile    string     `yaml:"setup_file,omitempty" json:"setup_file,omitempty"`
-	ResetFile    string     `yaml:"reset_file,omitempty" json:"reset_file,omitempty"`
-	Seed         *uint64    `yaml:"seed" json:"seed"`
-	Protocol     string     `yaml:"protocol" json:"protocol"`
-	Concurrency  []int      `yaml:"concurrency" json:"concurrency"`
-	Clients      int        `yaml:"clients,omitempty" json:"clients,omitempty"`
-	ArrivalRates []float64  `yaml:"arrival_rates,omitempty" json:"arrival_rates,omitempty"`
-	LatencyLimit string     `yaml:"latency_limit,omitempty" json:"latency_limit,omitempty"`
-	Warmup       string     `yaml:"warmup" json:"warmup"`
-	Duration     string     `yaml:"duration" json:"duration"`
-	Thresholds   Thresholds `yaml:"thresholds" json:"thresholds"`
+	Version        int        `yaml:"version" json:"version"`
+	Name           string     `yaml:"name" json:"name"`
+	Dataset        string     `yaml:"dataset" json:"dataset"`
+	Schema         string     `yaml:"schema" json:"schema"`
+	Targets        []string   `yaml:"targets" json:"targets"`
+	Workload       string     `yaml:"workload" json:"workload"`
+	SQLFile        string     `yaml:"sql_file,omitempty" json:"sql_file,omitempty"`
+	AccessMode     string     `yaml:"access_mode,omitempty" json:"access_mode,omitempty"`
+	StatePolicy    string     `yaml:"state_policy,omitempty" json:"state_policy,omitempty"`
+	SetupFile      string     `yaml:"setup_file,omitempty" json:"setup_file,omitempty"`
+	ResetFile      string     `yaml:"reset_file,omitempty" json:"reset_file,omitempty"`
+	Seed           *uint64    `yaml:"seed" json:"seed"`
+	Protocol       string     `yaml:"protocol" json:"protocol"`
+	ConnectionMode string     `yaml:"connection_mode,omitempty" json:"connection_mode,omitempty"`
+	Concurrency    []int      `yaml:"concurrency" json:"concurrency"`
+	Clients        int        `yaml:"clients,omitempty" json:"clients,omitempty"`
+	ArrivalRates   []float64  `yaml:"arrival_rates,omitempty" json:"arrival_rates,omitempty"`
+	LatencyLimit   string     `yaml:"latency_limit,omitempty" json:"latency_limit,omitempty"`
+	Warmup         string     `yaml:"warmup" json:"warmup"`
+	Duration       string     `yaml:"duration" json:"duration"`
+	Thresholds     Thresholds `yaml:"thresholds" json:"thresholds"`
 }
 
 type Plan struct {
@@ -85,8 +87,11 @@ func LoadScenario(path string) (Plan, error) {
 	if (scenario.Schema != "" || scenario.Workload == "customer-lookup") && !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`).MatchString(scenario.Schema) {
 		return Plan{}, fmt.Errorf("schema must be an ASCII PostgreSQL identifier of 1 to 63 characters")
 	}
-	if (scenario.Workload != "customer-lookup" && scenario.Workload != "custom-sql") || scenario.Protocol != "simple" {
-		return Plan{}, fmt.Errorf("version 1 supports workloads customer-lookup and custom-sql with protocol simple")
+	if scenario.Workload != "customer-lookup" && scenario.Workload != "custom-sql" {
+		return Plan{}, fmt.Errorf("version 1 supports workloads customer-lookup and custom-sql")
+	}
+	if err := validateConnection(scenario); err != nil {
+		return Plan{}, err
 	}
 	var sql string
 	if err := validateStatePolicy(scenario); err != nil {

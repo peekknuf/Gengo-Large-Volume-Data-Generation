@@ -58,6 +58,8 @@ type RunReference struct {
 	Status         string                `json:"status"`
 	PgbenchVersion string                `json:"pgbench_version"`
 	Targets        map[string]TargetInfo `json:"targets"`
+	ConnectionMode string                `json:"connection_mode"`
+	Protocol       string                `json:"protocol"`
 }
 
 type Comparison struct {
@@ -113,7 +115,15 @@ func ReadResult(path string) (*Result, error) {
 		return nil, fmt.Errorf("invalid saved measurement structure")
 	}
 	for _, step := range raw.Steps {
-		required := []string{"completed_iterations", "failed_iterations", "tps_without_initial_connection", "successful_iteration_p95_ms", "error_rate"}
+		required := []string{"completed_iterations", "failed_iterations", "successful_iteration_p95_ms", "error_rate"}
+		if connectionMode(result.Scenario) == "persistent" {
+			required = append(required, "tps_without_initial_connection")
+		} else {
+			required = append(required, "tps_including_connection_times", "pgbench_elapsed_seconds_including_connection_times", "average_connection_ms")
+			if connectionMode(result.Scenario) == "burst" {
+				required = append(required, "requested_iterations")
+			}
+		}
 		if len(result.Scenario.ArrivalRates) > 0 {
 			required = append(required, "requested_iterations", "skipped_iterations", "skipped_rate", "rate_attainment", "successful_iteration_schedule_lag_mean_ms", "successful_iteration_schedule_lag_max_ms")
 		}
@@ -131,8 +141,11 @@ func ReadResult(path string) (*Result, error) {
 }
 
 func validateComparableResult(result *Result) error {
-	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.Scenario.Protocol != "simple" || result.LoadModel != loadModel(result.Scenario) {
-		return fmt.Errorf("comparison supports version-1 customer-lookup and custom-sql results using simple protocol")
+	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.LoadModel != loadModel(result.Scenario) {
+		return fmt.Errorf("comparison supports version-1 customer-lookup and custom-sql results")
+	}
+	if err := validateConnection(result.Scenario); err != nil {
+		return err
 	}
 	if err := validateLoad(result.Scenario); err != nil {
 		return err
@@ -229,14 +242,17 @@ func validateComparableResult(result *Result) error {
 			return fmt.Errorf("cannot compare incomplete or errored load phases")
 		}
 		metrics := step.Measurement.Metrics
-		if metrics.CompletedIterations < 1 || metrics.FailedIterations < 0 || metrics.FailedIterations > math.MaxInt64-metrics.CompletedIterations || !finite(metrics.TPS) || metrics.TPS <= 0 || !finite(metrics.P95MS) || metrics.P95MS < 0 || !finite(metrics.ErrorRate) || metrics.ErrorRate < 0 || metrics.ErrorRate > 1 {
+		if metrics.CompletedIterations < 1 || metrics.FailedIterations < 0 || metrics.FailedIterations > math.MaxInt64-metrics.CompletedIterations || !finite(metrics.throughput()) || metrics.throughput() <= 0 || !finite(metrics.P95MS) || metrics.P95MS < 0 || !finite(metrics.ErrorRate) || metrics.ErrorRate < 0 || metrics.ErrorRate > 1 {
 			return fmt.Errorf("saved result contains invalid measured values")
 		}
 		errorRate := float64(metrics.FailedIterations) / float64(metrics.CompletedIterations+metrics.FailedIterations)
 		if math.Abs(errorRate-metrics.ErrorRate) > 1e-12 {
 			return fmt.Errorf("saved error rate disagrees with iteration counts")
 		}
-		if err := validateRateMetrics(metrics, step.ArrivalRate); err != nil {
+		if err := validateConnectionMetrics(metrics, result.Scenario, step.Concurrency); err != nil {
+			return err
+		}
+		if err := validateRateMetrics(metrics, step.ArrivalRate, connectionMode(result.Scenario)); err != nil {
 			return err
 		}
 		failures := thresholdFailures(metrics, limits)
@@ -326,7 +342,7 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		return nil, fmt.Errorf("incompatible experiments: %s", strings.Join(incompatible, ", "))
 	}
 	reference := func(result *Result) RunReference {
-		return RunReference{Name: result.Scenario.Name, StartedAt: result.StartedAt, Status: result.Status, PgbenchVersion: result.PgbenchVersion, Targets: result.Targets}
+		return RunReference{Name: result.Scenario.Name, StartedAt: result.StartedAt, Status: result.Status, PgbenchVersion: result.PgbenchVersion, Targets: result.Targets, ConnectionMode: connectionMode(result.Scenario), Protocol: result.Scenario.Protocol}
 	}
 	comparison := &Comparison{Version: 1, DatasetID: baseline.DatasetID, Scenario: baseline.Scenario, WorkloadVersion: baseline.WorkloadVersion, LoadModel: baseline.LoadModel, StartingState: baseline.StartingState, Baseline: reference(baseline), Candidate: reference(candidate), Warnings: []string{
 		"Single-run differences do not establish statistical significance or a repeatable improvement.",
@@ -335,6 +351,12 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	comparison.WorkloadSHA256 = baseline.WorkloadSHA256
 	comparison.SetupSHA256 = baseline.SetupSHA256
 	comparison.ResetSHA256 = baseline.ResetSHA256
+	if baseline.Scenario.Protocol != candidate.Scenario.Protocol {
+		comparison.Warnings = append(comparison.Warnings, "SQL protocols differ; this comparison measures an intentional protocol change.")
+	}
+	if connectionMode(baseline.Scenario) != connectionMode(candidate.Scenario) {
+		comparison.Warnings = append(comparison.Warnings, "Connection modes differ; reconnect throughput includes connection setup. Unpaced transaction percentiles exclude each client's own connection setup, while rate-mode latency includes it as schedule lag.")
+	}
 	if baseline.StartingState == "reuse" {
 		comparison.Warnings = append(comparison.Warnings, "State reuse carries writes across phases and targets; matching scripts do not prove equivalent starting data.")
 	}
@@ -350,7 +372,7 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		before, after := step.Measurement.Metrics, other.Measurement.Metrics
 		comparison.Steps = append(comparison.Steps, ComparedStep{
 			Target: step.Target, Concurrency: step.Concurrency, ArrivalRate: step.ArrivalRate, BaselineStatus: step.Status, CandidateStatus: other.Status,
-			TPS: measuredChange(before.TPS, after.TPS), P95MS: measuredChange(before.P95MS, after.P95MS), ErrorRate: measuredChange(before.ErrorRate, after.ErrorRate),
+			TPS: measuredChange(before.throughput(), after.throughput()), P95MS: measuredChange(before.P95MS, after.P95MS), ErrorRate: measuredChange(before.ErrorRate, after.ErrorRate),
 			ErrorRatePercentagePoints: (after.ErrorRate - before.ErrorRate) * 100,
 		})
 		if step.ArrivalRate > 0 {
@@ -408,6 +430,7 @@ func WriteComparison(path string, comparison *Comparison) error {
 }
 
 func PrintComparison(writer io.Writer, comparison *Comparison) {
+	fmt.Fprintf(writer, "Baseline: %s/%s; candidate: %s/%s\n", comparison.Baseline.ConnectionMode, comparison.Baseline.Protocol, comparison.Candidate.ConnectionMode, comparison.Candidate.Protocol)
 	fmt.Fprintln(writer, "Observed changes: positive TPS is higher throughput; positive p95 is higher latency.")
 	if len(comparison.Scenario.ArrivalRates) > 0 {
 		fmt.Fprintln(writer, "Target      Clients  Rate/s  Base TPS   New TPS    TPS %   Base p95   New p95    p95 %   Error pp  Status")
@@ -432,7 +455,11 @@ func PrintComparison(writer io.Writer, comparison *Comparison) {
 	}
 	fmt.Fprintln(writer, "p95 values are milliseconds; error changes are percentage points.")
 	for _, capacity := range comparison.Capacity {
-		fmt.Fprintf(writer, "%s highest passing tested clients: %d baseline, %d candidate (%+d)\n", capacity.Target, capacity.Baseline, capacity.Candidate, capacity.Delta)
+		if connectionMode(comparison.Scenario) == "burst" {
+			fmt.Fprintf(writer, "%s highest passing tested burst size: %d baseline, %d candidate (%+d clients)\n", capacity.Target, capacity.Baseline, capacity.Candidate, capacity.Delta)
+		} else {
+			fmt.Fprintf(writer, "%s highest passing tested clients: %d baseline, %d candidate (%+d)\n", capacity.Target, capacity.Baseline, capacity.Candidate, capacity.Delta)
+		}
 	}
 	for _, capacity := range comparison.RateCapacity {
 		fmt.Fprintf(writer, "%s highest passing tested arrival rate: %g baseline, %g candidate (%+g iterations/s)\n", capacity.Target, capacity.Baseline, capacity.Candidate, capacity.Delta)
