@@ -13,22 +13,27 @@ import (
 )
 
 type Metrics struct {
-	RequestedIterations *int64  `json:"requested_iterations"`
-	CompletedIterations int64   `json:"completed_iterations"`
-	FailedIterations    int64   `json:"failed_iterations"`
-	Timeouts            *int64  `json:"timeouts"`
-	SkippedIterations   int64   `json:"skipped_iterations"`
-	TPS                 float64 `json:"tps_without_initial_connection"`
-	ActiveSeconds       float64 `json:"pgbench_elapsed_seconds_without_initial_connection"`
-	ErrorRate           float64 `json:"error_rate"`
-	MeanMS              float64 `json:"successful_iteration_mean_ms"`
-	P50MS               float64 `json:"successful_iteration_p50_ms"`
-	P95MS               float64 `json:"successful_iteration_p95_ms"`
-	P99MS               float64 `json:"successful_iteration_p99_ms"`
-	InitialConnectionMS float64 `json:"initial_connection_ms"`
+	RequestedIterations *int64   `json:"requested_iterations"`
+	CompletedIterations int64    `json:"completed_iterations"`
+	FailedIterations    int64    `json:"failed_iterations"`
+	Timeouts            *int64   `json:"timeouts"`
+	SkippedIterations   int64    `json:"skipped_iterations"`
+	TPS                 float64  `json:"tps_without_initial_connection"`
+	ActiveSeconds       float64  `json:"pgbench_elapsed_seconds_without_initial_connection"`
+	ErrorRate           float64  `json:"error_rate"`
+	MeanMS              float64  `json:"successful_iteration_mean_ms"`
+	P50MS               float64  `json:"successful_iteration_p50_ms"`
+	P95MS               float64  `json:"successful_iteration_p95_ms"`
+	P99MS               float64  `json:"successful_iteration_p99_ms"`
+	InitialConnectionMS float64  `json:"initial_connection_ms"`
+	RateAttainment      *float64 `json:"rate_attainment,omitempty"`
+	SkippedRate         *float64 `json:"skipped_rate,omitempty"`
+	ScheduleLagMeanMS   *float64 `json:"successful_iteration_schedule_lag_mean_ms,omitempty"`
+	ScheduleLagMaxMS    *float64 `json:"successful_iteration_schedule_lag_max_ms,omitempty"`
+	LatencyBasis        string   `json:"latency_basis,omitempty"`
 }
 
-func readMetrics(summary, prefix string) (*Metrics, error) {
+func readMetrics(summary, prefix string, rate float64) (*Metrics, error) {
 	if regexp.MustCompile(`(?m)^number of transactions actually processed:\s*0\s*$`).MatchString(summary) {
 		return nil, fmt.Errorf("pgbench completed no iterations; increase duration to allow for connection setup")
 	}
@@ -62,12 +67,24 @@ func readMetrics(summary, prefix string) (*Metrics, error) {
 	if err != nil || !finite(connection) || connection < 0 {
 		return nil, fmt.Errorf("invalid pgbench connection timing")
 	}
+	var skipped int64
+	if rate > 0 {
+		match := regexp.MustCompile(`(?m)^number of transactions skipped:\s*(\d+)`).FindStringSubmatch(summary)
+		if len(match) != 2 {
+			return nil, fmt.Errorf("rate summary is missing skipped transaction count")
+		}
+		skipped, err = strconv.ParseInt(match[1], 10, 64)
+		if err != nil || skipped > math.MaxInt64-completed-failed {
+			return nil, fmt.Errorf("invalid skipped iteration count")
+		}
+	}
 	entries, err := os.ReadDir(filepath.Dir(prefix))
 	if err != nil {
 		return nil, fmt.Errorf("pgbench transaction logs are missing")
 	}
 	var latencies []int64
-	var failedLogs, totalBytes int64
+	var logCounts latencyLogCounts
+	var totalBytes int64
 	for _, entry := range entries {
 		if !strings.HasPrefix(entry.Name(), filepath.Base(prefix)+".") {
 			continue
@@ -81,11 +98,11 @@ func readMetrics(summary, prefix string) (*Metrics, error) {
 		if totalBytes > 64<<20 {
 			return nil, fmt.Errorf("transaction logs exceed the 64 MiB analysis limit; use shorter measurements")
 		}
-		if err := readLatencyLog(path, &latencies, &failedLogs); err != nil {
+		if err := readLatencyLog(path, &latencies, &logCounts, rate > 0); err != nil {
 			return nil, err
 		}
 	}
-	if int64(len(latencies)) != completed || failedLogs != failed {
+	if int64(len(latencies)) != completed || logCounts.failed != failed || logCounts.skipped != skipped {
 		return nil, fmt.Errorf("transaction logs disagree with pgbench summary counts")
 	}
 	sort.Slice(latencies, func(first, second int) bool { return latencies[first] < latencies[second] })
@@ -96,15 +113,35 @@ func readMetrics(summary, prefix string) (*Metrics, error) {
 	percentile := func(fraction float64) float64 {
 		return float64(latencies[int(math.Ceil(fraction*float64(len(latencies))))-1]) / 1000
 	}
-	return &Metrics{
+	metrics := &Metrics{
 		CompletedIterations: completed, FailedIterations: failed,
 		TPS: tps, ActiveSeconds: float64(completed) / tps, ErrorRate: float64(failed) / float64(completed+failed),
 		MeanMS: sum / float64(completed) / 1000, P50MS: percentile(0.50), P95MS: percentile(0.95), P99MS: percentile(0.99),
 		InitialConnectionMS: connection,
-	}, nil
+	}
+	if rate > 0 {
+		requested := completed + failed + skipped
+		attainment := tps / rate
+		skippedRate := float64(skipped) / float64(requested)
+		lagMean, lagMax := logCounts.lagSum/float64(completed)/1000, float64(logCounts.lagMax)/1000
+		metrics.RequestedIterations = &requested
+		metrics.SkippedIterations = skipped
+		metrics.RateAttainment = &attainment
+		metrics.SkippedRate = &skippedRate
+		metrics.ScheduleLagMeanMS = &lagMean
+		metrics.ScheduleLagMaxMS = &lagMax
+		metrics.LatencyBasis = "scheduled-start-to-completion"
+	}
+	return metrics, nil
 }
 
-func readLatencyLog(path string, latencies *[]int64, failed *int64) error {
+type latencyLogCounts struct {
+	failed, skipped int64
+	lagSum          float64
+	lagMax          int64
+}
+
+func readLatencyLog(path string, latencies *[]int64, counts *latencyLogCounts, rate bool) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -116,13 +153,37 @@ func readLatencyLog(path string, latencies *[]int64, failed *int64) error {
 		if len(fields) < 6 {
 			return fmt.Errorf("invalid pgbench transaction log row")
 		}
+		var lag int64
+		if rate {
+			if len(fields) != 7 {
+				return fmt.Errorf("rate transaction log requires schedule lag")
+			}
+			var err error
+			lag, err = strconv.ParseInt(fields[6], 10, 64)
+			if err != nil || lag < 0 {
+				return fmt.Errorf("invalid transaction schedule lag")
+			}
+		}
+		if fields[2] == "skipped" && rate {
+			counts.skipped++
+			continue
+		}
 		if fields[2] == "failed" {
-			*failed = *failed + 1
+			counts.failed++
 			continue
 		}
 		latency, err := strconv.ParseInt(fields[2], 10, 64)
 		if err != nil || latency < 0 {
 			return fmt.Errorf("invalid pgbench transaction latency")
+		}
+		if rate {
+			if lag > latency {
+				return fmt.Errorf("schedule lag exceeds scheduled-start latency")
+			}
+			counts.lagSum += float64(lag)
+			if lag > counts.lagMax {
+				counts.lagMax = lag
+			}
 		}
 		if len(*latencies) >= 1_000_000 {
 			return fmt.Errorf("transaction logs exceed one million iterations; use shorter measurements")
@@ -142,6 +203,12 @@ func thresholdFailures(metrics *Metrics, limits Thresholds) []string {
 	}
 	if metrics.TPS < limits.MinTPS {
 		failures = append(failures, "throughput is below min_tps")
+	}
+	if metrics.SkippedRate != nil && *metrics.SkippedRate > limits.MaxSkippedRate {
+		failures = append(failures, "skipped rate exceeds max_skipped_rate")
+	}
+	if metrics.RateAttainment != nil && *metrics.RateAttainment < limits.MinRateAttainment {
+		failures = append(failures, "achieved rate is below min_rate_attainment")
 	}
 	return failures
 }

@@ -47,6 +47,10 @@ For writes, declare `access_mode: read-write` with a reset or reuse policy.
 See [read/write experiments](docs/write-workloads.md) and
 `examples/postgres/custom-write.yaml`.
 
+Sweep requested iterations per second with a fixed client count using
+`examples/postgres/arrival.yaml`. See [arrival-rate tests](docs/arrival-rates.md)
+for achieved throughput, skipped work, scheduling lag, and tested rate capacity.
+
 Compare saved runs offline with
 `gengo bench compare data/before/result.json data/after/result.json --output data/comparison.json`.
 Gengo checks configuration compatibility before reporting measured changes. See

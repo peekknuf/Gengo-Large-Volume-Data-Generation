@@ -24,7 +24,7 @@ func TestReadMetrics(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	metrics, err := readMetrics(measurementSummary, prefix)
+	metrics, err := readMetrics(measurementSummary, prefix, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestReadMetricsRejectsIncompleteMeasurements(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := readMetrics(testCase.summary, prefix); err == nil {
+			if _, err := readMetrics(testCase.summary, prefix, 0); err == nil {
 				t.Fatal("accepted missing or inconsistent measurements")
 			}
 		})
@@ -75,7 +75,7 @@ func TestReadMetricsBoundsLogAnalysis(t *testing.T) {
 	if err := file.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := readMetrics(measurementSummary, prefix); err == nil || !strings.Contains(err.Error(), "64 MiB") {
+	if _, err := readMetrics(measurementSummary, prefix, 0); err == nil || !strings.Contains(err.Error(), "64 MiB") {
 		t.Fatalf("expected bounded log analysis, got %v", err)
 	}
 }

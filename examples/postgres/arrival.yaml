@@ -1,0 +1,18 @@
+version: 1
+name: custom-arrival-rate
+targets: [direct, shared, dedicated]
+workload: custom-sql
+sql_file: custom.sql
+seed: 42
+protocol: simple
+clients: 4
+arrival_rates: [5, 10, 20]
+latency_limit: 500ms
+warmup: 2s
+duration: 30s
+thresholds:
+  max_p95_ms: 250
+  max_error_rate: 0
+  min_tps: 0
+  max_skipped_rate: 0.01
+  min_rate_attainment: 0.9

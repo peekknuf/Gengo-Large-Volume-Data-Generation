@@ -19,7 +19,10 @@ the CLI still prints its startup logo to stdout.
 ## Check compatibility
 
 Version 1 supports read-only `customer-lookup` and read-only or read/write
-`custom-sql` workloads, simple protocol, and closed-loop concurrency. Both inputs must
+`custom-sql` workloads, simple protocol, and concurrency or arrival-rate load. Both inputs must
+use the same load model. Arrival-rate results are also supported, with their
+fixed client count, ordered rates, and latency limit checked for compatibility.
+See [arrival-rate tests](arrival-rates.md) for the measurement contract. Both inputs must
 contain finished, complete sweeps with successful preflights and completed
 measurement phases. A finished experiment whose steps failed performance
 thresholds is valid input. Running, canceled, partial, or execution-error results
@@ -32,6 +35,7 @@ These settings must match:
 - Dataset ID and identity metadata, including the generation seed and row plan.
 - Imported schema and workload seed, including explicit seed zero.
 - Target list and order, and concurrency levels.
+- For arrival-rate runs, fixed client count, requested rate levels, and latency limit.
 - Warm-up and measurement durations. Equivalent spellings such as `60s` and `1m` match.
 - Latency, error-rate, and throughput thresholds.
 
@@ -71,8 +75,8 @@ Error-rate changes use percentage points to remain meaningful when the baseline
 has no errors. For example, an error rate moving from 0 to 0.01 is an increase of
 one percentage point. JSON also records the underlying rates and their changes.
 
-Tested capacity compares the highest passing concurrency in the same configured
-grid. It does not estimate the saturation point between or beyond tested levels.
+Tested capacity compares the highest passing concurrency, or arrival rate, in the
+same configured grid. It does not estimate saturation between or beyond tested levels.
 If every level passes, the experiment has not established the database's limit.
 
 The saved version-1 comparison includes shared scenario settings, dataset ID,

@@ -27,6 +27,7 @@ type Phase struct {
 type Step struct {
 	Target                 string   `json:"target"`
 	Concurrency            int      `json:"concurrency"`
+	ArrivalRate            float64  `json:"arrival_rate,omitempty"`
 	Status                 string   `json:"status"`
 	Warmup                 *Phase   `json:"warmup,omitempty"`
 	Measurement            *Phase   `json:"measurement,omitempty"`
@@ -62,6 +63,7 @@ type Result struct {
 	Targets         map[string]TargetInfo `json:"targets"`
 	Steps           []Step                `json:"steps"`
 	Capacity        map[string]int        `json:"capacity_clients"`
+	RateCapacity    map[string]float64    `json:"capacity_arrival_rate,omitempty"`
 }
 
 func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Writer) (*Result, error) {
@@ -85,9 +87,14 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 	}
 	result := &Result{
 		Version: 1, Status: "running", StartedAt: time.Now().UTC(), Scenario: plan.Scenario,
-		DatasetID: plan.Dataset.DatasetID, DatasetIdentity: plan.Dataset.Identity, WorkloadVersion: 1, LoadModel: "closed-loop-concurrency",
+		DatasetID: plan.Dataset.DatasetID, DatasetIdentity: plan.Dataset.Identity, WorkloadVersion: 1, LoadModel: loadModel(plan.Scenario),
 		StartingState: statePolicy(plan.Scenario), SetupSHA256: sqlHash(plan.SetupSQL), ResetSHA256: sqlHash(plan.ResetSQL), Targets: make(map[string]TargetInfo), Capacity: make(map[string]int), Steps: []Step{},
 		Unavailable: []string{"requested_iteration_count_for_duration_load", "separate_timeout_count", "server_query_latency", "pooler_wait", "client_queue", "server_and_pooler_telemetry", "dataset_generation_and_import_timings"},
+	}
+	if len(plan.Scenario.ArrivalRates) > 0 {
+		result.Capacity = nil
+		result.RateCapacity = make(map[string]float64)
+		result.Unavailable = []string{"separate_timeout_count", "server_query_latency", "pooler_wait", "server_and_pooler_telemetry", "dataset_generation_and_import_timings"}
 	}
 	finish := func(runErr error) (*Result, error) {
 		finished := time.Now().UTC()
@@ -160,7 +167,11 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 			continue
 		}
 		result.Targets[target] = TargetInfo{ServerVersion: serverVersion}
-		result.Capacity[target] = 0
+		if result.RateCapacity != nil {
+			result.RateCapacity[target] = 0
+		} else {
+			result.Capacity[target] = 0
+		}
 		if plan.SetupSQL != "" {
 			setup := runStateScript(ctx, client, filepath.Join(output, "setup.sql"), filepath.Join(output, target+"-setup"))
 			result.Targets[target] = TargetInfo{ServerVersion: serverVersion, Setup: setup}
@@ -171,22 +182,27 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 				return finish(err)
 			}
 		}
-		for _, concurrency := range plan.Scenario.Concurrency {
+		for _, level := range loadLevels(plan.Scenario) {
+			concurrency := level.clients
+			stepPrefix := target + "-" + level.label()
 			if ctx.Err() != nil {
 				return finish(ctx.Err())
 			}
-			step := Step{Target: target, Concurrency: concurrency, Status: "running", Failures: []string{}}
+			step := Step{Target: target, Concurrency: concurrency, ArrivalRate: level.rate, Status: "running", Failures: []string{}}
 			result.Steps = append(result.Steps, step)
 			current := &result.Steps[len(result.Steps)-1]
 			if err := saveResult(output, result); err != nil {
 				return finish(err)
 			}
 			fmt.Fprintf(progress, "%s: %d clients\n", target, concurrency)
+			if level.rate > 0 {
+				fmt.Fprintf(progress, "Requested arrival rate: %g iterations/s\n", level.rate)
+			}
 			reset := func(phase **Phase, label string) error {
 				if statePolicy(plan.Scenario) != "reset-per-phase" {
 					return nil
 				}
-				*phase = runStateScript(ctx, client, filepath.Join(output, "reset.sql"), filepath.Join(output, fmt.Sprintf("%s-c%d-%s", target, concurrency, label)))
+				*phase = runStateScript(ctx, client, filepath.Join(output, "reset.sql"), filepath.Join(output, stepPrefix+"-"+label))
 				if (*phase).Status != "completed" {
 					current.Status = "error"
 					return fmt.Errorf("%s %d clients %s failed: %s", target, concurrency, label, (*phase).Error)
@@ -197,7 +213,7 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 				if err := reset(&current.ResetBeforeWarmup, "reset-before-warmup"); err != nil {
 					return finish(err)
 				}
-				current.Warmup = runPhase(ctx, client, plan, concurrency, plan.Warmup, script, filepath.Join(output, fmt.Sprintf("%s-c%d-warmup", target, concurrency)), false)
+				current.Warmup = runPhase(ctx, client, plan, level, plan.Warmup, script, filepath.Join(output, stepPrefix+"-warmup"), false)
 				if err := saveResult(output, result); err != nil {
 					return finish(err)
 				}
@@ -206,7 +222,7 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 				if err := reset(&current.ResetBeforeMeasurement, "reset-before-measurement"); err != nil {
 					return finish(err)
 				}
-				current.Measurement = runPhase(ctx, client, plan, concurrency, plan.Duration, script, filepath.Join(output, fmt.Sprintf("%s-c%d-measurement", target, concurrency)), true)
+				current.Measurement = runPhase(ctx, client, plan, level, plan.Duration, script, filepath.Join(output, stepPrefix+"-measurement"), true)
 			}
 			if ctx.Err() != nil {
 				current.Status = "canceled"
@@ -222,7 +238,11 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 				if len(current.Failures) != 0 {
 					current.Status = "failed"
 				} else {
-					result.Capacity[target] = concurrency
+					if level.rate > 0 {
+						result.RateCapacity[target] = level.rate
+					} else {
+						result.Capacity[target] = concurrency
+					}
 				}
 			}
 			if current.Status != "passed" {
@@ -269,13 +289,17 @@ func checkDataset(ctx context.Context, client *postgres.Client, plan Plan) (stri
 	return fields[0], nil
 }
 
-func runPhase(ctx context.Context, client *postgres.Client, plan Plan, concurrency int, duration time.Duration, script, directory string, measured bool) *Phase {
+func runPhase(ctx context.Context, client *postgres.Client, plan Plan, level loadLevel, duration time.Duration, script, directory string, measured bool) *Phase {
 	phase := &Phase{Status: "error"}
 	if err := os.Mkdir(directory, 0755); err != nil {
 		phase.Error = err.Error()
 		return phase
 	}
-	arguments := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--protocol=simple", "--jobs=1", "--client=" + strconv.Itoa(concurrency), "--time=" + strconv.Itoa(int(duration/time.Second)), "--random-seed=" + strconv.FormatUint(*plan.Scenario.Seed, 10), "--file=" + script + "@1"}
+	arguments := []string{"--no-vacuum", "--exit-on-abort", "--max-tries=1", "--protocol=simple", "--jobs=1", "--client=" + strconv.Itoa(level.clients), "--time=" + strconv.Itoa(int(duration/time.Second)), "--random-seed=" + strconv.FormatUint(*plan.Scenario.Seed, 10), "--file=" + script + "@1"}
+	if level.rate > 0 {
+		limit, _ := time.ParseDuration(plan.Scenario.LatencyLimit)
+		arguments = append(arguments, "--rate="+strconv.FormatFloat(level.rate, 'f', -1, 64), "--latency-limit="+strconv.FormatFloat(float64(limit)/float64(time.Millisecond), 'f', -1, 64))
+	}
 	if plan.Dataset.DatasetID != "" {
 		arguments = append(arguments, "--define=customer_count="+strconv.FormatInt(plan.Dataset.Identity.Counts["dim_customers"], 10))
 	}
@@ -298,7 +322,7 @@ func runPhase(ctx context.Context, client *postgres.Client, plan Plan, concurren
 		return phase
 	}
 	if measured {
-		phase.Metrics, err = readMetrics(output.String(), prefix)
+		phase.Metrics, err = readMetrics(output.String(), prefix, level.rate)
 		if err != nil {
 			phase.Error = err.Error()
 			return phase
@@ -330,13 +354,26 @@ func saveResult(directory string, result *Result) error {
 
 func PrintSummary(writer io.Writer, result *Result) {
 	fmt.Fprintf(writer, "Workload: %s; access: %s; state policy: %s\n", result.Scenario.Workload, accessMode(result.Scenario), result.StartingState)
-	fmt.Fprintln(writer, "Target      Clients  Status       TPS      p95 ms  Errors")
+	fmt.Fprintf(writer, "Load model: %s\n", result.LoadModel)
+	if len(result.Scenario.ArrivalRates) > 0 {
+		fmt.Fprintln(writer, "Target      Clients  Rate/s  Status       TPS      p95 ms  Errors  Skipped  Achieved %")
+	} else {
+		fmt.Fprintln(writer, "Target      Clients  Status       TPS      p95 ms  Errors")
+	}
 	for _, step := range result.Steps {
 		if step.Measurement != nil && step.Measurement.Metrics != nil {
 			metrics := step.Measurement.Metrics
-			fmt.Fprintf(writer, "%-11s %7d  %-9s %8.2f %9.2f %7d\n", step.Target, step.Concurrency, step.Status, metrics.TPS, metrics.P95MS, metrics.FailedIterations)
+			if step.ArrivalRate > 0 {
+				fmt.Fprintf(writer, "%-11s %7d %7g  %-9s %8.2f %9.2f %7d %8d %10.2f\n", step.Target, step.Concurrency, step.ArrivalRate, step.Status, metrics.TPS, metrics.P95MS, metrics.FailedIterations, metrics.SkippedIterations, *metrics.RateAttainment*100)
+			} else {
+				fmt.Fprintf(writer, "%-11s %7d  %-9s %8.2f %9.2f %7d\n", step.Target, step.Concurrency, step.Status, metrics.TPS, metrics.P95MS, metrics.FailedIterations)
+			}
 		} else {
-			fmt.Fprintf(writer, "%-11s %7d  %-9s        -         -       -\n", step.Target, step.Concurrency, step.Status)
+			fmt.Fprintf(writer, "%-11s %7d  ", step.Target, step.Concurrency)
+			if step.ArrivalRate > 0 {
+				fmt.Fprintf(writer, "%7g  ", step.ArrivalRate)
+			}
+			fmt.Fprintf(writer, "%-9s        -         -       -\n", step.Status)
 		}
 	}
 	for _, target := range result.Scenario.Targets {
@@ -349,6 +386,10 @@ func PrintSummary(writer io.Writer, result *Result) {
 			fmt.Fprintf(writer, "%s preflight: %s\n", target, info.Error)
 			continue
 		}
-		fmt.Fprintf(writer, "%s highest passing tested concurrency: %d\n", target, result.Capacity[target])
+		if len(result.Scenario.ArrivalRates) > 0 {
+			fmt.Fprintf(writer, "%s highest passing tested arrival rate: %g iterations/s\n", target, result.RateCapacity[target])
+		} else {
+			fmt.Fprintf(writer, "%s highest passing tested concurrency: %d\n", target, result.Capacity[target])
+		}
 	}
 }

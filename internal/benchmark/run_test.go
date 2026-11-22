@@ -62,7 +62,7 @@ func init() {
 			fmt.Println("17.12")
 			os.Exit(0)
 		}
-		if mode == "custom" {
+		if mode == "custom" || mode == "arrival" {
 			if !strings.Contains(arguments, "SELECT current_setting('server_version');") {
 				os.Exit(2)
 			}
@@ -77,13 +77,16 @@ func init() {
 		os.Exit(0)
 	}
 	requiredArgs := []string{"--no-vacuum", "--exit-on-abort", "--protocol=simple", "--max-tries=1", "--random-seed=0"}
-	if mode != "custom" && mode != "state" {
+	if mode != "custom" && mode != "state" && mode != "arrival" {
 		requiredArgs = append(requiredArgs, "--define=customer_count=3")
 	}
 	for _, required := range requiredArgs {
 		if !strings.Contains(arguments, required) {
 			os.Exit(2)
 		}
+	}
+	if mode == "arrival" && (!strings.Contains(arguments, "--latency-limit=1000") || (!strings.Contains(arguments, "--rate=2\n") && !strings.Contains(arguments, "--rate=100\n"))) {
+		os.Exit(2)
 	}
 	if mode == "state" {
 		if strings.Contains(arguments, "--log-prefix=") {
@@ -105,12 +108,19 @@ func init() {
 				os.Exit(2)
 			}
 			contents := "0 1 1000 0 1700000000 0\n0 2 2000 0 1700000000 0\n0 3 3000 0 1700000000 0\n0 4 9000 0 1700000000 0\n0 5 failed 0 1700000000 0\n"
+			if mode == "arrival" {
+				contents = rateLog
+			}
 			if err := os.WriteFile(prefix+".1", []byte(contents), 0600); err != nil {
 				os.Exit(2)
 			}
 		}
 	}
-	fmt.Print(measurementSummary)
+	if mode == "arrival" {
+		fmt.Print(rateSummary)
+	} else {
+		fmt.Print(measurementSummary)
+	}
 	os.Exit(0)
 }
 

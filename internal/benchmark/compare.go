@@ -27,12 +27,15 @@ type Change struct {
 type ComparedStep struct {
 	Target                    string  `json:"target"`
 	Concurrency               int     `json:"concurrency"`
+	ArrivalRate               float64 `json:"arrival_rate,omitempty"`
 	BaselineStatus            string  `json:"baseline_status"`
 	CandidateStatus           string  `json:"candidate_status"`
 	TPS                       Change  `json:"tps"`
 	P95MS                     Change  `json:"successful_iteration_p95_ms"`
 	ErrorRate                 Change  `json:"error_rate"`
 	ErrorRatePercentagePoints float64 `json:"error_rate_delta_percentage_points"`
+	SkippedRate               *Change `json:"skipped_rate,omitempty"`
+	RateAttainment            *Change `json:"rate_attainment,omitempty"`
 }
 
 type ComparedCapacity struct {
@@ -40,6 +43,13 @@ type ComparedCapacity struct {
 	Baseline  int    `json:"baseline_clients"`
 	Candidate int    `json:"candidate_clients"`
 	Delta     int    `json:"delta_clients"`
+}
+
+type ComparedRateCapacity struct {
+	Target    string  `json:"target"`
+	Baseline  float64 `json:"baseline_arrival_rate"`
+	Candidate float64 `json:"candidate_arrival_rate"`
+	Delta     float64 `json:"delta_arrival_rate"`
 }
 
 type RunReference struct {
@@ -51,20 +61,21 @@ type RunReference struct {
 }
 
 type Comparison struct {
-	Version         int                `json:"comparison_version"`
-	DatasetID       string             `json:"dataset_id"`
-	Scenario        Scenario           `json:"scenario"`
-	WorkloadVersion int                `json:"workload_version"`
-	WorkloadSHA256  string             `json:"workload_sha256,omitempty"`
-	SetupSHA256     string             `json:"setup_sha256,omitempty"`
-	ResetSHA256     string             `json:"reset_sha256,omitempty"`
-	LoadModel       string             `json:"load_model"`
-	StartingState   string             `json:"starting_state"`
-	Baseline        RunReference       `json:"baseline"`
-	Candidate       RunReference       `json:"candidate"`
-	Steps           []ComparedStep     `json:"steps"`
-	Capacity        []ComparedCapacity `json:"capacity"`
-	Warnings        []string           `json:"warnings"`
+	Version         int                    `json:"comparison_version"`
+	DatasetID       string                 `json:"dataset_id"`
+	Scenario        Scenario               `json:"scenario"`
+	WorkloadVersion int                    `json:"workload_version"`
+	WorkloadSHA256  string                 `json:"workload_sha256,omitempty"`
+	SetupSHA256     string                 `json:"setup_sha256,omitempty"`
+	ResetSHA256     string                 `json:"reset_sha256,omitempty"`
+	LoadModel       string                 `json:"load_model"`
+	StartingState   string                 `json:"starting_state"`
+	Baseline        RunReference           `json:"baseline"`
+	Candidate       RunReference           `json:"candidate"`
+	Steps           []ComparedStep         `json:"steps"`
+	Capacity        []ComparedCapacity     `json:"capacity"`
+	RateCapacity    []ComparedRateCapacity `json:"capacity_arrival_rate,omitempty"`
+	Warnings        []string               `json:"warnings"`
 }
 
 func ReadResult(path string) (*Result, error) {
@@ -102,7 +113,11 @@ func ReadResult(path string) (*Result, error) {
 		return nil, fmt.Errorf("invalid saved measurement structure")
 	}
 	for _, step := range raw.Steps {
-		for _, field := range []string{"completed_iterations", "failed_iterations", "tps_without_initial_connection", "successful_iteration_p95_ms", "error_rate"} {
+		required := []string{"completed_iterations", "failed_iterations", "tps_without_initial_connection", "successful_iteration_p95_ms", "error_rate"}
+		if len(result.Scenario.ArrivalRates) > 0 {
+			required = append(required, "requested_iterations", "skipped_iterations", "skipped_rate", "rate_attainment", "successful_iteration_schedule_lag_mean_ms", "successful_iteration_schedule_lag_max_ms")
+		}
+		for _, field := range required {
 			value, present := step.Measurement.Metrics[field]
 			if !present || string(value) == "null" {
 				return nil, fmt.Errorf("saved measurement is missing required field %s", field)
@@ -116,8 +131,11 @@ func ReadResult(path string) (*Result, error) {
 }
 
 func validateComparableResult(result *Result) error {
-	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.Scenario.Protocol != "simple" || result.LoadModel != "closed-loop-concurrency" {
+	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.Scenario.Protocol != "simple" || result.LoadModel != loadModel(result.Scenario) {
 		return fmt.Errorf("comparison supports version-1 customer-lookup and custom-sql results using simple protocol")
+	}
+	if err := validateLoad(result.Scenario); err != nil {
+		return err
 	}
 	if err := validateSavedState(result); err != nil {
 		return err
@@ -163,7 +181,17 @@ func validateComparableResult(result *Result) error {
 	if !finite(limits.MaxP95MS) || limits.MaxP95MS <= 0 || !finite(limits.MaxErrorRate) || limits.MaxErrorRate < 0 || limits.MaxErrorRate > 1 || !finite(limits.MinTPS) || limits.MinTPS < 0 {
 		return fmt.Errorf("saved result has invalid thresholds")
 	}
-	if len(result.Scenario.Targets) == 0 || len(result.Scenario.Targets) > 4 || len(result.Scenario.Concurrency) == 0 || len(result.Scenario.Concurrency) > 32 || len(result.Targets) != len(result.Scenario.Targets) || len(result.Capacity) != len(result.Scenario.Targets) {
+	rateLoad := len(result.Scenario.ArrivalRates) > 0
+	capacityCount := len(result.Capacity)
+	if rateLoad {
+		capacityCount = len(result.RateCapacity)
+		if len(result.Capacity) != 0 {
+			return fmt.Errorf("arrival-rate result contains client capacity")
+		}
+	} else if len(result.RateCapacity) != 0 {
+		return fmt.Errorf("concurrency result contains arrival-rate capacity")
+	}
+	if len(result.Scenario.Targets) == 0 || len(result.Scenario.Targets) > 4 || len(result.Targets) != len(result.Scenario.Targets) || capacityCount != len(result.Scenario.Targets) {
 		return fmt.Errorf("saved result is missing target, concurrency, or capacity metadata")
 	}
 	expected := make(map[stepKey]bool)
@@ -178,23 +206,21 @@ func validateComparableResult(result *Result) error {
 		if (result.Scenario.SetupFile != "" && !completedStatePhase(info.Setup)) || (result.Scenario.SetupFile == "" && info.Setup != nil) {
 			return fmt.Errorf("saved result has incomplete or unexpected setup phases")
 		}
-		previous := 0
-		for _, concurrency := range result.Scenario.Concurrency {
-			key := stepKey{target, concurrency}
-			if concurrency <= previous || concurrency > 1024 || expected[key] {
+		for _, level := range loadLevels(result.Scenario) {
+			key := stepKey{target, level.clients, level.rate}
+			if expected[key] {
 				return fmt.Errorf("saved result has duplicate targets or invalid concurrency levels")
 			}
-			previous = concurrency
 			expected[key] = true
 		}
 	}
 	if len(result.Steps) != len(expected) {
 		return fmt.Errorf("cannot compare an incomplete load sweep")
 	}
-	capacity := make(map[string]int)
+	capacity := make(map[string]float64)
 	allPassed := true
 	for _, step := range result.Steps {
-		key := stepKey{step.Target, step.Concurrency}
+		key := stepKey{step.Target, step.Concurrency, step.ArrivalRate}
 		if !expected[key] {
 			return fmt.Errorf("saved result contains duplicate or unplanned load steps")
 		}
@@ -210,13 +236,22 @@ func validateComparableResult(result *Result) error {
 		if math.Abs(errorRate-metrics.ErrorRate) > 1e-12 {
 			return fmt.Errorf("saved error rate disagrees with iteration counts")
 		}
+		if err := validateRateMetrics(metrics, step.ArrivalRate); err != nil {
+			return err
+		}
 		failures := thresholdFailures(metrics, limits)
 		status := "passed"
 		if len(failures) > 0 {
 			status = "failed"
 			allPassed = false
-		} else if step.Concurrency > capacity[step.Target] {
-			capacity[step.Target] = step.Concurrency
+		} else {
+			level := float64(step.Concurrency)
+			if rateLoad {
+				level = step.ArrivalRate
+			}
+			if level > capacity[step.Target] {
+				capacity[step.Target] = level
+			}
 		}
 		if step.Status != status || !slices.Equal(step.Failures, failures) {
 			return fmt.Errorf("saved load-step status disagrees with measured thresholds")
@@ -224,7 +259,11 @@ func validateComparableResult(result *Result) error {
 	}
 	for _, target := range result.Scenario.Targets {
 		stored, present := result.Capacity[target]
-		if !present || stored != capacity[target] {
+		storedLevel := float64(stored)
+		if rateLoad {
+			storedLevel, present = result.RateCapacity[target]
+		}
+		if !present || storedLevel != capacity[target] {
 			return fmt.Errorf("saved capacity disagrees with passing measured levels")
 		}
 	}
@@ -237,6 +276,7 @@ func validateComparableResult(result *Result) error {
 type stepKey struct {
 	target      string
 	concurrency int
+	rate        float64
 }
 
 func Compare(baseline, candidate *Result) (*Comparison, error) {
@@ -250,6 +290,9 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		name                string
 		baseline, candidate any
 	}{
+		{"load model", baseline.LoadModel, candidate.LoadModel},
+		{"arrival rates", baseline.Scenario.ArrivalRates, candidate.Scenario.ArrivalRates},
+		{"rate client count", baseline.Scenario.Clients, candidate.Scenario.Clients},
 		{"workload", baseline.Scenario.Workload, candidate.Scenario.Workload},
 		{"workload SQL identity", baseline.WorkloadSHA256, candidate.WorkloadSHA256},
 		{"access mode", accessMode(baseline.Scenario), accessMode(candidate.Scenario)},
@@ -269,6 +312,7 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		}
 	}
 	for _, field := range []struct{ name, baseline, candidate string }{
+		{"latency limit", baseline.Scenario.LatencyLimit, candidate.Scenario.LatencyLimit},
 		{"warm-up duration", baseline.Scenario.Warmup, candidate.Scenario.Warmup},
 		{"measurement duration", baseline.Scenario.Duration, candidate.Scenario.Duration},
 	} {
@@ -299,20 +343,31 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	}
 	byKey := make(map[stepKey]Step, len(candidate.Steps))
 	for _, step := range candidate.Steps {
-		byKey[stepKey{step.Target, step.Concurrency}] = step
+		byKey[stepKey{step.Target, step.Concurrency, step.ArrivalRate}] = step
 	}
 	for _, step := range baseline.Steps {
-		other := byKey[stepKey{step.Target, step.Concurrency}]
+		other := byKey[stepKey{step.Target, step.Concurrency, step.ArrivalRate}]
 		before, after := step.Measurement.Metrics, other.Measurement.Metrics
 		comparison.Steps = append(comparison.Steps, ComparedStep{
-			Target: step.Target, Concurrency: step.Concurrency, BaselineStatus: step.Status, CandidateStatus: other.Status,
+			Target: step.Target, Concurrency: step.Concurrency, ArrivalRate: step.ArrivalRate, BaselineStatus: step.Status, CandidateStatus: other.Status,
 			TPS: measuredChange(before.TPS, after.TPS), P95MS: measuredChange(before.P95MS, after.P95MS), ErrorRate: measuredChange(before.ErrorRate, after.ErrorRate),
 			ErrorRatePercentagePoints: (after.ErrorRate - before.ErrorRate) * 100,
 		})
+		if step.ArrivalRate > 0 {
+			skipped := measuredChange(*before.SkippedRate, *after.SkippedRate)
+			attainment := measuredChange(*before.RateAttainment, *after.RateAttainment)
+			comparison.Steps[len(comparison.Steps)-1].SkippedRate = &skipped
+			comparison.Steps[len(comparison.Steps)-1].RateAttainment = &attainment
+		}
 	}
 	for _, target := range baseline.Scenario.Targets {
-		before, after := baseline.Capacity[target], candidate.Capacity[target]
-		comparison.Capacity = append(comparison.Capacity, ComparedCapacity{Target: target, Baseline: before, Candidate: after, Delta: after - before})
+		if len(baseline.Scenario.ArrivalRates) > 0 {
+			before, after := baseline.RateCapacity[target], candidate.RateCapacity[target]
+			comparison.RateCapacity = append(comparison.RateCapacity, ComparedRateCapacity{Target: target, Baseline: before, Candidate: after, Delta: after - before})
+		} else {
+			before, after := baseline.Capacity[target], candidate.Capacity[target]
+			comparison.Capacity = append(comparison.Capacity, ComparedCapacity{Target: target, Baseline: before, Candidate: after, Delta: after - before})
+		}
 		if baseline.Targets[target].ServerVersion != candidate.Targets[target].ServerVersion {
 			comparison.Warnings = append(comparison.Warnings, "PostgreSQL versions differ for target "+target+".")
 		}
@@ -354,7 +409,11 @@ func WriteComparison(path string, comparison *Comparison) error {
 
 func PrintComparison(writer io.Writer, comparison *Comparison) {
 	fmt.Fprintln(writer, "Observed changes: positive TPS is higher throughput; positive p95 is higher latency.")
-	fmt.Fprintln(writer, "Target      Clients  Base TPS   New TPS    TPS %   Base p95   New p95    p95 %   Error pp  Status")
+	if len(comparison.Scenario.ArrivalRates) > 0 {
+		fmt.Fprintln(writer, "Target      Clients  Rate/s  Base TPS   New TPS    TPS %   Base p95   New p95    p95 %   Error pp  Status")
+	} else {
+		fmt.Fprintln(writer, "Target      Clients  Base TPS   New TPS    TPS %   Base p95   New p95    p95 %   Error pp  Status")
+	}
 	percent := func(value *float64) string {
 		if value == nil {
 			return "n/a"
@@ -362,11 +421,21 @@ func PrintComparison(writer io.Writer, comparison *Comparison) {
 		return fmt.Sprintf("%+.2f", *value)
 	}
 	for _, step := range comparison.Steps {
-		fmt.Fprintf(writer, "%-11s %7d %9.2f %9.2f %8s %10.2f %9.2f %8s %10.3f  %s/%s\n", step.Target, step.Concurrency, step.TPS.Baseline, step.TPS.Candidate, percent(step.TPS.Percent), step.P95MS.Baseline, step.P95MS.Candidate, percent(step.P95MS.Percent), step.ErrorRatePercentagePoints, step.BaselineStatus, step.CandidateStatus)
+		fmt.Fprintf(writer, "%-11s %7d ", step.Target, step.Concurrency)
+		if step.ArrivalRate > 0 {
+			fmt.Fprintf(writer, "%7g ", step.ArrivalRate)
+		}
+		fmt.Fprintf(writer, "%9.2f %9.2f %8s %10.2f %9.2f %8s %10.3f  %s/%s\n", step.TPS.Baseline, step.TPS.Candidate, percent(step.TPS.Percent), step.P95MS.Baseline, step.P95MS.Candidate, percent(step.P95MS.Percent), step.ErrorRatePercentagePoints, step.BaselineStatus, step.CandidateStatus)
+		if step.ArrivalRate > 0 {
+			fmt.Fprintf(writer, "  Skipped rate: %.2f%% to %.2f%%; achieved rate: %.2f%% to %.2f%% of requested\n", step.SkippedRate.Baseline*100, step.SkippedRate.Candidate*100, step.RateAttainment.Baseline*100, step.RateAttainment.Candidate*100)
+		}
 	}
 	fmt.Fprintln(writer, "p95 values are milliseconds; error changes are percentage points.")
 	for _, capacity := range comparison.Capacity {
 		fmt.Fprintf(writer, "%s highest passing tested clients: %d baseline, %d candidate (%+d)\n", capacity.Target, capacity.Baseline, capacity.Candidate, capacity.Delta)
+	}
+	for _, capacity := range comparison.RateCapacity {
+		fmt.Fprintf(writer, "%s highest passing tested arrival rate: %g baseline, %g candidate (%+g iterations/s)\n", capacity.Target, capacity.Baseline, capacity.Candidate, capacity.Delta)
 	}
 	for _, warning := range comparison.Warnings {
 		fmt.Fprintln(writer, "Warning:", warning)

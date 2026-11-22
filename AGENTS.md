@@ -7,9 +7,9 @@ performance-testing tool, with broader Supabase coverage planned. Read
 [product direction](docs/product-direction.md) for agreed scope and delivery status,
 then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
-Current priority is workload experiments against existing Supabase connections:
-custom SQL, read/write workloads with reset policies, arrival-rate controls, and
-connection behavior. Extend the working concurrency sweeps and saved comparisons.
+Current priority is connection behavior experiments against existing Supabase
+connections. Custom SQL, read/write state policies, and arrival-rate sweeps work.
+Extend the existing sweeps and saved comparisons.
 Repetitions and available Supabase Metrics API collection support this work. The
 local PostgreSQL/PgBouncer fixture is optional backlog work. Generation budgets
 and Linux/race verification remain open and do not gate these experiments.
@@ -123,6 +123,14 @@ Live custom sweeps and offline comparisons passed on all three endpoints;
 table-read, read-only write rejection, and SQL-error continuation checks passed.
 Broader load controls, repetitions, telemetry, and a local
 PostgreSQL/PgBouncer reference fixture remain pending.
+
+Poisson arrival-rate sweeps support fixed clients, requested rates, a latency
+limit for skipping overdue work, and explicit skipped-rate and rate-attainment
+thresholds. Metrics reconcile scheduled/completed/failed/skipped counts, label
+scheduled-start latency, and record successful-iteration scheduling lag.
+Live low-rate/overload checks passed on all three endpoints. Arrival scheduling
+also passed direct-endpoint write/reset, reuse, and rollback checks. See
+docs/arrival-rates.md. Connection churn and bursts remain pending.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV
 writers allocate 64 MiB buffers. Process-wide budgets and generation cancellation

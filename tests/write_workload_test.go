@@ -57,6 +57,10 @@ func TestWriteResetLive(t *testing.T) {
 		targets = "direct"
 	}
 	scenario := fmt.Sprintf("version: 1\nname: write-reset\nworkload: custom-sql\nsql_file: query.sql\naccess_mode: read-write\nstate_policy: reset-per-phase\nsetup_file: setup.sql\nreset_file: reset.sql\ntargets: [%s]\nseed: 0\nprotocol: simple\nconcurrency: [1, 2]\nwarmup: 1s\nduration: 3s\nthresholds:\n  max_p95_ms: 1000000000\n  max_error_rate: 0\n  min_tps: 0\n", targets)
+	if os.Getenv("GENGO_POSTGRES_TEST_LOAD_MODEL") == "arrival" {
+		scenario = strings.ReplaceAll(scenario, "concurrency: [1, 2]", "clients: 2\narrival_rates: [10, 20]\nlatency_limit: 1s")
+		scenario += "  min_rate_attainment: 0.01\n  max_skipped_rate: 1\n"
+	}
 	write("scenario.yaml", scenario)
 	bin := binaryPath(t)
 	build := exec.CommandContext(t.Context(), "go", "build", "-o", bin, ".")

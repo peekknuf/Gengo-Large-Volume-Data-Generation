@@ -19,9 +19,9 @@ comparisons. state.go owns setup/reset execution and starting-state policies.
 Broader execution controls, telemetry, and
 the local database reference environment remain roadmap work.
 
-The current delivery priority is custom SQL, read/write workloads with explicit
-reset policies, arrival-rate controls, and connection behavior against existing
-Supabase endpoints. Reuse the working concurrency sweeps and offline comparisons.
+Custom SQL, read/write state policies, and arrival-rate sweeps now work against
+existing Supabase endpoints. The next delivery priority is connection behavior.
+Reuse the working sweeps and offline comparisons.
 Repetitions and available Supabase Metrics API collection support these
 experiments. The local reference environment is optional backlog work. See
 product-direction.md for the agreed order.
@@ -89,6 +89,12 @@ transactions. Setup runs once per target, and explicit reset-per-phase or reuse
 policies govern mutable state. Saved results retain separate lifecycle timings,
 diagnostics, and hashes. See custom-sql.md, write-workloads.md, and
 postgres-benchmarking.md for limits.
+
+load.go validates mutually exclusive concurrency and Poisson arrival-rate sweeps.
+Rate sweeps keep clients fixed and pass rate and latency-limit controls to pgbench.
+metrics.go reconciles scheduled, successful, failed, and skipped work and records
+successful-iteration scheduling lag. Arrival latency includes scheduling delay.
+Rate capacity is stored separately from client capacity. See arrival-rates.md.
 
 bench compare loads two saved results without database access. compare.go rejects
 incomplete or incompatible experiments, pairs target/client steps, and reports

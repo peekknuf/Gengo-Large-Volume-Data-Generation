@@ -6,6 +6,10 @@ creates an example accounts table in the dedicated `gengo_write_example` schema.
 The workload reads an account and increments its balance. Reset restores all
 balances to zero.
 
+These state policies also support [arrival-rate sweeps](arrival-rates.md).
+Replace `concurrency` with fixed `clients`, `arrival_rates`, and `latency_limit`,
+and add the required `min_rate_attainment` threshold.
+
 ```sh
 gengo bench run --scenario examples/postgres/custom-write.yaml \
   --env-file .env --output data/write-run-001

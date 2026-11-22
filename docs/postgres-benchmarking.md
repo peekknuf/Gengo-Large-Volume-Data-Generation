@@ -72,8 +72,8 @@ workload.
 
 The load model is closed-loop concurrency: each client starts another iteration
 after finishing its previous one. Client count is not a backend connection count
-or a simultaneous executing-query count. Rate-driven traffic and connection
-churn are not supported yet.
+or a simultaneous executing-query count. For a specified request rate, use
+[arrival-rate tests](arrival-rates.md). Connection churn remains pending.
 
 `warmup` and `duration` must be explicit whole-second durations. Warm-up may be
 `0s`; measurement must be at least `1s`. Each is limited to five minutes. Up to 32
@@ -128,10 +128,11 @@ means no measured level passed. A target preflight error has no capacity entry.
 These numbers do not establish saturation when the sweep never reaches a failing
 level.
 
-Requested iteration counts are unknown for duration-driven load and serialize as
+Requested iteration counts are unknown for closed-loop duration load and serialize as
 `null`. Separate timeout counts are unavailable and also serialize as `null`.
-Skipped iterations are zero because this runner does not schedule arrival-rate
-traffic. Client-observed iteration latency includes script processing and network
+Skipped iterations are zero for concurrency scenarios. Arrival-rate scenarios
+record scheduled and skipped work separately. Client-observed iteration latency
+includes script processing and network
 effects. It is not isolated server SQL latency. Server query time, pooler waiting,
 client queuing, backend telemetry, and dataset creation/import timings are listed
 as unavailable rather than fabricated.
@@ -174,6 +175,6 @@ interpretation limits.
 
 Custom [read/write experiments](write-workloads.md) now support setup, reset,
 and declared state reuse. Longer repeated measurements, varying endpoint order,
-built-in write presets, arrival rates, backend telemetry, additional
+built-in write presets, backend telemetry, additional
 protocols, and a local PostgreSQL/PgBouncer reference environment remain roadmap
 work.
