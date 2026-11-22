@@ -116,6 +116,9 @@ func init() {
 	if mode == "arrival" && (!strings.Contains(arguments, "--latency-limit=1000") || (!strings.Contains(arguments, "--rate=2\n") && !strings.Contains(arguments, "--rate=100\n"))) {
 		os.Exit(2)
 	}
+	if mode == "repeat-cancel" && strings.Contains(arguments, "rep-2-") {
+		time.Sleep(time.Minute)
+	}
 	if mode == "state" {
 		if strings.Contains(arguments, "--log-prefix=") {
 			stateEvent("measurement")
@@ -144,6 +147,9 @@ func init() {
 				for index := 0; index < burstClients; index++ {
 					contents += fmt.Sprintf("%d 1 1000 0 1700000000 0\n", index)
 				}
+			}
+			if mode == "repeat-threshold" && strings.Contains(prefix, "rep-2-") {
+				contents = strings.ReplaceAll(contents, "9000", "900000")
 			}
 			if err := os.WriteFile(prefix+".1", []byte(contents), 0600); err != nil {
 				os.Exit(2)

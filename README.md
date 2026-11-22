@@ -56,6 +56,11 @@ simple, extended, or prepared SQL protocols. See
 [connection experiments](docs/connection-experiments.md),
 `examples/postgres/reconnect.yaml`, and `examples/postgres/connection-burst.yaml`.
 
+Use `repetitions`, `target_order: rotate`, and `min_pass_rate` to assess variation
+and require repeated passes for capacity. See
+[repeated experiments](docs/repeated-experiments.md) and
+`examples/postgres/repeated.yaml`.
+
 Compare saved runs offline with
 `gengo bench compare data/before/result.json data/after/result.json --output data/comparison.json`.
 Gengo checks configuration compatibility before reporting measured changes. See

@@ -21,8 +21,9 @@ the local database reference environment remain roadmap work.
 
 Custom SQL, read/write state policies, and arrival-rate sweeps now work against
 existing Supabase endpoints. Persistent, reconnect, and burst connection modes
-support simple, extended, and prepared protocols. The next delivery priority is
-repetitions and varying endpoint order.
+support simple, extended, and prepared protocols. Repetitions and rotating
+endpoint order record individual samples plus aggregate variation and capacity.
+Available Supabase metrics and named experiment profiles remain pending.
 Reuse the working sweeps and offline comparisons.
 Repetitions and available Supabase Metrics API collection support these
 experiments. The local reference environment is optional backlog work. See
@@ -106,6 +107,13 @@ one iteration per client with one thread per client and a process deadline.
 Comparisons allow intentional protocol and persistent/reconnect changes with
 warnings, while keeping bursts separate from sustained load. See
 connection-experiments.md.
+
+repetitions.go builds fixed or rotating endpoint rounds and aggregates individual
+samples by target/load. Capacity requires complete coverage, no execution errors,
+and the configured passing fraction. Repeated comparisons use medians, retain
+min/max distributions, and verify saved aggregates against individual samples.
+Setup runs once per target; every repetition repeats warm-up and reset phases.
+See repeated-experiments.md.
 
 bench compare loads two saved results without database access. compare.go rejects
 incomplete or incompatible experiments, pairs target/client steps, and reports

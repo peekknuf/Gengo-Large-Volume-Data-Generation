@@ -49,6 +49,9 @@ type Scenario struct {
 	Warmup         string     `yaml:"warmup" json:"warmup"`
 	Duration       string     `yaml:"duration" json:"duration"`
 	Thresholds     Thresholds `yaml:"thresholds" json:"thresholds"`
+	Repetitions    *int       `yaml:"repetitions,omitempty" json:"repetitions,omitempty"`
+	TargetOrder    string     `yaml:"target_order,omitempty" json:"target_order,omitempty"`
+	MinPassRate    *float64   `yaml:"min_pass_rate,omitempty" json:"min_pass_rate,omitempty"`
 }
 
 type Plan struct {
@@ -142,6 +145,9 @@ func LoadScenario(path string) (Plan, error) {
 		return Plan{}, fmt.Errorf("at least one target is required")
 	}
 	if err := validateLoad(scenario); err != nil {
+		return Plan{}, err
+	}
+	if err := validateRepetitions(scenario); err != nil {
 		return Plan{}, err
 	}
 	warmup, err := time.ParseDuration(scenario.Warmup)

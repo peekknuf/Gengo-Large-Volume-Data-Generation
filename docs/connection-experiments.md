@@ -50,8 +50,8 @@ Bursts use the `concurrency` list as increasing burst sizes, limited to 128
 clients. Each phase starts a fresh pgbench process with `--connect`, one thread
 per client, and exactly one iteration per client. This is a best-effort concurrent
 start, not a guarantee that all connections arrive at the server simultaneously.
-Each level runs one burst. Repeated bursts are separate runs until repetition
-support is added.
+Each sample runs one burst. Use [repetition controls](repeated-experiments.md)
+to repeat each burst size and rotate endpoint order.
 
 Burst scenarios require zero warm-up and do not accept arrival rates. Their
 `duration` is a deadline for the entire burst process, rather than a traffic

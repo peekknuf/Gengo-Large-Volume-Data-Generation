@@ -38,6 +38,10 @@ any load steps. Targets can point to the same database, so write setup scripts
 that can run repeatedly. Setup does not run before every measurement; restoring
 the baseline is the reset script's job.
 
+With [repetitions](repeated-experiments.md), setup still runs once per target for
+the experiment. Each repeated sample runs its own warm-up and reset sequence.
+Declared reuse carries writes across repetitions as well as load levels.
+
 With `reset-per-phase`, one load step runs in this order:
 
 1. Run reset, then warm-up, when `warmup` is greater than `0s`.

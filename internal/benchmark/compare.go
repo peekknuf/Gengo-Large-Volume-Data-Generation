@@ -36,6 +36,9 @@ type ComparedStep struct {
 	ErrorRatePercentagePoints float64 `json:"error_rate_delta_percentage_points"`
 	SkippedRate               *Change `json:"skipped_rate,omitempty"`
 	RateAttainment            *Change `json:"rate_attainment,omitempty"`
+	Repetitions               int     `json:"repetitions"`
+	BaselinePassed            int     `json:"baseline_passed_repetitions"`
+	CandidatePassed           int     `json:"candidate_passed_repetitions"`
 }
 
 type ComparedCapacity struct {
@@ -60,6 +63,8 @@ type RunReference struct {
 	Targets        map[string]TargetInfo `json:"targets"`
 	ConnectionMode string                `json:"connection_mode"`
 	Protocol       string                `json:"protocol"`
+	Aggregates     []Aggregate           `json:"aggregates,omitempty"`
+	Schedule       []Round               `json:"schedule,omitempty"`
 }
 
 type Comparison struct {
@@ -150,6 +155,9 @@ func validateComparableResult(result *Result) error {
 	if err := validateLoad(result.Scenario); err != nil {
 		return err
 	}
+	if err := validateRepetitions(result.Scenario); err != nil {
+		return err
+	}
 	if err := validateSavedState(result); err != nil {
 		return err
 	}
@@ -207,7 +215,7 @@ func validateComparableResult(result *Result) error {
 	if len(result.Scenario.Targets) == 0 || len(result.Scenario.Targets) > 4 || len(result.Targets) != len(result.Scenario.Targets) || capacityCount != len(result.Scenario.Targets) {
 		return fmt.Errorf("saved result is missing target, concurrency, or capacity metadata")
 	}
-	expected := make(map[stepKey]bool)
+	expected := make(map[repeatedKey]bool)
 	for _, target := range result.Scenario.Targets {
 		if target != "direct" && target != "shared" && target != "dedicated" && target != "libpq" {
 			return fmt.Errorf("saved result contains an unsupported target")
@@ -220,20 +228,23 @@ func validateComparableResult(result *Result) error {
 			return fmt.Errorf("saved result has incomplete or unexpected setup phases")
 		}
 		for _, level := range loadLevels(result.Scenario) {
-			key := stepKey{target, level.clients, level.rate}
-			if expected[key] {
-				return fmt.Errorf("saved result has duplicate targets or invalid concurrency levels")
+			for repetition := 1; repetition <= repetitions(result.Scenario); repetition++ {
+				key := repeatedKey{stepKey{target, level.clients, level.rate}, repetition}
+				if expected[key] {
+					return fmt.Errorf("saved result has duplicate targets or invalid concurrency levels")
+				}
+				expected[key] = true
 			}
-			expected[key] = true
 		}
 	}
 	if len(result.Steps) != len(expected) {
 		return fmt.Errorf("cannot compare an incomplete load sweep")
 	}
-	capacity := make(map[string]float64)
-	allPassed := true
 	for _, step := range result.Steps {
-		key := stepKey{step.Target, step.Concurrency, step.ArrivalRate}
+		if repetitions(result.Scenario) > 1 && step.Repetition == 0 {
+			return fmt.Errorf("repeated result is missing repetition identifiers")
+		}
+		key := repeatedKey{stepKey{step.Target, step.Concurrency, step.ArrivalRate}, sampleRepetition(step)}
 		if !expected[key] {
 			return fmt.Errorf("saved result contains duplicate or unplanned load steps")
 		}
@@ -259,34 +270,17 @@ func validateComparableResult(result *Result) error {
 		status := "passed"
 		if len(failures) > 0 {
 			status = "failed"
-			allPassed = false
-		} else {
-			level := float64(step.Concurrency)
-			if rateLoad {
-				level = step.ArrivalRate
-			}
-			if level > capacity[step.Target] {
-				capacity[step.Target] = level
-			}
 		}
 		if step.Status != status || !slices.Equal(step.Failures, failures) {
 			return fmt.Errorf("saved load-step status disagrees with measured thresholds")
 		}
 	}
-	for _, target := range result.Scenario.Targets {
-		stored, present := result.Capacity[target]
-		storedLevel := float64(stored)
-		if rateLoad {
-			storedLevel, present = result.RateCapacity[target]
-		}
-		if !present || storedLevel != capacity[target] {
-			return fmt.Errorf("saved capacity disagrees with passing measured levels")
-		}
-	}
-	if (result.Status == "completed") != allPassed {
-		return fmt.Errorf("saved experiment status disagrees with its load steps")
-	}
-	return nil
+	return validateAggregates(result)
+}
+
+type repeatedKey struct {
+	stepKey
+	repetition int
 }
 
 type stepKey struct {
@@ -306,6 +300,9 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		name                string
 		baseline, candidate any
 	}{
+		{"repetitions", repetitions(baseline.Scenario), repetitions(candidate.Scenario)},
+		{"endpoint ordering", targetOrder(baseline.Scenario), targetOrder(candidate.Scenario)},
+		{"repetition pass rule", minPassRate(baseline.Scenario), minPassRate(candidate.Scenario)},
 		{"load model", baseline.LoadModel, candidate.LoadModel},
 		{"arrival rates", baseline.Scenario.ArrivalRates, candidate.Scenario.ArrivalRates},
 		{"rate client count", baseline.Scenario.Clients, candidate.Scenario.Clients},
@@ -342,12 +339,19 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		return nil, fmt.Errorf("incompatible experiments: %s", strings.Join(incompatible, ", "))
 	}
 	reference := func(result *Result) RunReference {
-		return RunReference{Name: result.Scenario.Name, StartedAt: result.StartedAt, Status: result.Status, PgbenchVersion: result.PgbenchVersion, Targets: result.Targets, ConnectionMode: connectionMode(result.Scenario), Protocol: result.Scenario.Protocol}
+		ref := RunReference{Name: result.Scenario.Name, StartedAt: result.StartedAt, Status: result.Status, PgbenchVersion: result.PgbenchVersion, Targets: result.Targets, ConnectionMode: connectionMode(result.Scenario), Protocol: result.Scenario.Protocol}
+		if repetitions(result.Scenario) > 1 {
+			ref.Aggregates, ref.Schedule = aggregateSteps(result), roundSchedule(result.Scenario)
+		}
+		return ref
 	}
 	comparison := &Comparison{Version: 1, DatasetID: baseline.DatasetID, Scenario: baseline.Scenario, WorkloadVersion: baseline.WorkloadVersion, LoadModel: baseline.LoadModel, StartingState: baseline.StartingState, Baseline: reference(baseline), Candidate: reference(candidate), Warnings: []string{
 		"Single-run differences do not establish statistical significance or a repeatable improvement.",
 		"Target labels do not verify identical endpoints, hardware, pool sizing, or background traffic.",
 	}}
+	if repetitions(baseline.Scenario) > 1 {
+		comparison.Warnings[0] = "Repeated summaries are descriptive; they do not establish statistical significance."
+	}
 	comparison.WorkloadSHA256 = baseline.WorkloadSHA256
 	comparison.SetupSHA256 = baseline.SetupSHA256
 	comparison.ResetSHA256 = baseline.ResetSHA256
@@ -363,21 +367,21 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	if baseline.PgbenchVersion != candidate.PgbenchVersion {
 		comparison.Warnings = append(comparison.Warnings, "pgbench versions differ; client behavior may affect measurements.")
 	}
-	byKey := make(map[stepKey]Step, len(candidate.Steps))
-	for _, step := range candidate.Steps {
+	byKey := make(map[stepKey]Aggregate)
+	for _, step := range aggregateSteps(candidate) {
 		byKey[stepKey{step.Target, step.Concurrency, step.ArrivalRate}] = step
 	}
-	for _, step := range baseline.Steps {
+	for _, step := range aggregateSteps(baseline) {
 		other := byKey[stepKey{step.Target, step.Concurrency, step.ArrivalRate}]
-		before, after := step.Measurement.Metrics, other.Measurement.Metrics
 		comparison.Steps = append(comparison.Steps, ComparedStep{
 			Target: step.Target, Concurrency: step.Concurrency, ArrivalRate: step.ArrivalRate, BaselineStatus: step.Status, CandidateStatus: other.Status,
-			TPS: measuredChange(before.throughput(), after.throughput()), P95MS: measuredChange(before.P95MS, after.P95MS), ErrorRate: measuredChange(before.ErrorRate, after.ErrorRate),
-			ErrorRatePercentagePoints: (after.ErrorRate - before.ErrorRate) * 100,
+			TPS: measuredChange(step.TPS.Median, other.TPS.Median), P95MS: measuredChange(step.P95MS.Median, other.P95MS.Median), ErrorRate: measuredChange(step.ErrorRate.Median, other.ErrorRate.Median),
+			ErrorRatePercentagePoints: (other.ErrorRate.Median - step.ErrorRate.Median) * 100,
+			Repetitions:               step.Expected, BaselinePassed: step.Passed, CandidatePassed: other.Passed,
 		})
 		if step.ArrivalRate > 0 {
-			skipped := measuredChange(*before.SkippedRate, *after.SkippedRate)
-			attainment := measuredChange(*before.RateAttainment, *after.RateAttainment)
+			skipped := measuredChange(step.SkippedRate.Median, other.SkippedRate.Median)
+			attainment := measuredChange(step.RateAttainment.Median, other.RateAttainment.Median)
 			comparison.Steps[len(comparison.Steps)-1].SkippedRate = &skipped
 			comparison.Steps[len(comparison.Steps)-1].RateAttainment = &attainment
 		}
@@ -432,6 +436,9 @@ func WriteComparison(path string, comparison *Comparison) error {
 func PrintComparison(writer io.Writer, comparison *Comparison) {
 	fmt.Fprintf(writer, "Baseline: %s/%s; candidate: %s/%s\n", comparison.Baseline.ConnectionMode, comparison.Baseline.Protocol, comparison.Candidate.ConnectionMode, comparison.Candidate.Protocol)
 	fmt.Fprintln(writer, "Observed changes: positive TPS is higher throughput; positive p95 is higher latency.")
+	if repetitions(comparison.Scenario) > 1 {
+		fmt.Fprintln(writer, "Values compare medians across repetitions. Per-run distributions are retained in comparison JSON.")
+	}
 	if len(comparison.Scenario.ArrivalRates) > 0 {
 		fmt.Fprintln(writer, "Target      Clients  Rate/s  Base TPS   New TPS    TPS %   Base p95   New p95    p95 %   Error pp  Status")
 	} else {
@@ -449,6 +456,9 @@ func PrintComparison(writer io.Writer, comparison *Comparison) {
 			fmt.Fprintf(writer, "%7g ", step.ArrivalRate)
 		}
 		fmt.Fprintf(writer, "%9.2f %9.2f %8s %10.2f %9.2f %8s %10.3f  %s/%s\n", step.TPS.Baseline, step.TPS.Candidate, percent(step.TPS.Percent), step.P95MS.Baseline, step.P95MS.Candidate, percent(step.P95MS.Percent), step.ErrorRatePercentagePoints, step.BaselineStatus, step.CandidateStatus)
+		if step.Repetitions > 1 {
+			fmt.Fprintf(writer, "  Passing repetitions: %d/%d baseline, %d/%d candidate\n", step.BaselinePassed, step.Repetitions, step.CandidatePassed, step.Repetitions)
+		}
 		if step.ArrivalRate > 0 {
 			fmt.Fprintf(writer, "  Skipped rate: %.2f%% to %.2f%%; achieved rate: %.2f%% to %.2f%% of requested\n", step.SkippedRate.Baseline*100, step.SkippedRate.Candidate*100, step.RateAttainment.Baseline*100, step.RateAttainment.Candidate*100)
 		}

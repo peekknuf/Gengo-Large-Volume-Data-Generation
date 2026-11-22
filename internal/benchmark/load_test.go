@@ -173,6 +173,7 @@ func TestRateSweepAndComparison(t *testing.T) {
 	for index := range loaded.Steps {
 		loaded.Steps[index].Concurrency = 2
 	}
+	refreshAggregates(loaded)
 	if _, err := Compare(result, loaded); err == nil || !strings.Contains(err.Error(), "rate client count") {
 		t.Fatalf("different client budget compared: %v", err)
 	}
@@ -180,6 +181,7 @@ func TestRateSweepAndComparison(t *testing.T) {
 	for index := range loaded.Steps {
 		loaded.Steps[index].Concurrency = 1
 	}
+	refreshAggregates(loaded)
 	loaded.RateCapacity["direct"] = 100
 	if _, err := Compare(result, loaded); err == nil {
 		t.Fatal("inconsistent rate capacity compared")

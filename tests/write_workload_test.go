@@ -57,9 +57,14 @@ func TestWriteResetLive(t *testing.T) {
 		targets = "direct"
 	}
 	scenario := fmt.Sprintf("version: 1\nname: write-reset\nworkload: custom-sql\nsql_file: query.sql\naccess_mode: read-write\nstate_policy: reset-per-phase\nsetup_file: setup.sql\nreset_file: reset.sql\ntargets: [%s]\nseed: 0\nprotocol: simple\nconcurrency: [1, 2]\nwarmup: 1s\nduration: 3s\nthresholds:\n  max_p95_ms: 1000000000\n  max_error_rate: 0\n  min_tps: 0\n", targets)
+	repeatCount := 1
 	if os.Getenv("GENGO_POSTGRES_TEST_LOAD_MODEL") == "arrival" {
 		scenario = strings.ReplaceAll(scenario, "concurrency: [1, 2]", "clients: 2\narrival_rates: [10, 20]\nlatency_limit: 1s")
 		scenario += "  min_rate_attainment: 0.01\n  max_skipped_rate: 1\n"
+	}
+	if os.Getenv("GENGO_POSTGRES_TEST_REPETITIONS") == "3" {
+		repeatCount = 3
+		scenario += "repetitions: 3\ntarget_order: rotate\n"
 	}
 	write("scenario.yaml", scenario)
 	bin := binaryPath(t)
@@ -77,7 +82,7 @@ func TestWriteResetLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StartingState != "reset-per-phase" || result.SetupSHA256 == "" || result.ResetSHA256 == "" || len(result.Steps) != 2*len(strings.Split(targets, ",")) {
+	if result.StartingState != "reset-per-phase" || result.SetupSHA256 == "" || result.ResetSHA256 == "" || len(result.Steps) != repeatCount*2*len(strings.Split(targets, ",")) {
 		t.Fatalf("missing state metadata: %+v", result)
 	}
 	rows := strings.Fields(query("SELECT old_n FROM " + namespace + ".audit ORDER BY id;"))
@@ -164,7 +169,7 @@ func TestWriteResetLive(t *testing.T) {
 				}
 			case "measurement":
 				want = "0"
-				if len(result.Steps) != 2 {
+				if len(result.Steps) != 2*repeatCount {
 					t.Fatal("workload error stopped remaining steps")
 				}
 				for _, step := range result.Steps {

@@ -1,0 +1,18 @@
+version: 1
+name: repeated-custom-sql
+targets: [direct, shared, dedicated]
+workload: custom-sql
+sql_file: custom.sql
+seed: 42
+protocol: simple
+connection_mode: persistent
+concurrency: [1, 2]
+repetitions: 3
+target_order: rotate
+min_pass_rate: 1
+warmup: 2s
+duration: 10s
+thresholds:
+  max_p95_ms: 250
+  max_error_rate: 0
+  min_tps: 1

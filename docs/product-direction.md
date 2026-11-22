@@ -81,7 +81,8 @@ that workflow in this order:
    traffic, connection bursts, and protocol comparisons where targets support
    them. Persistent clients remain the baseline.
 
-Add repetitions and vary endpoint order as these experiments expand. Collect
+Repetitions, rotating endpoint order, and aggregate pass rules now support these
+experiments. Collect
 available Supabase Metrics API measurements alongside client results, with
 collection intervals and unavailable measurements recorded. Telemetry supports
 the workload experiments without becoming a prerequisite for running them.
@@ -136,7 +137,8 @@ Concrete abstractions are introduced alongside working implementations.
 - [ ] Built-in write presets with restoration of Gengo-managed state.
 - [x] Target arrival-rate tests with requested and achieved load measurements.
 - [x] Connection churn, bursts, and supported protocol comparisons.
-- [ ] Quick/thorough profiles, repetitions, and varying endpoint order.
+- [x] Repetitions, rotating endpoint order, aggregate statistics, and explicit capacity pass rules.
+- [ ] Named quick/thorough experiment profiles.
 - [ ] Available Supabase Metrics API collection alongside client measurements.
 
 ### Later increments

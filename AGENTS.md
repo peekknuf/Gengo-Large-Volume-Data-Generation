@@ -7,9 +7,9 @@ performance-testing tool, with broader Supabase coverage planned. Read
 [product direction](docs/product-direction.md) for agreed scope and delivery status,
 then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
-Current priority is repeated experiments and varying endpoint order against
-existing Supabase connections. Custom SQL, read/write state policies, arrival-rate
-sweeps, and connection behavior experiments work.
+Current priority is available Supabase metrics alongside experiments and named
+experiment profiles. Custom SQL, read/write state policies, arrival-rate sweeps,
+connection experiments, repetitions, and rotating endpoint order work.
 Extend the existing sweeps and saved comparisons.
 Repetitions and available Supabase Metrics API collection support this work. The
 local PostgreSQL/PgBouncer fixture is optional backlog work. Generation budgets
@@ -35,6 +35,7 @@ Parquet. PostgreSQL import planning and execution support ecommerce CSV.
 | Connection checks, targets, dotenv, and psql execution | postgres_command.go, internal/postgres/client.go |
 | Scenario YAML, pgbench sweeps, measurements, and results | benchmark_command.go, internal/benchmark |
 | Offline saved-run comparisons and compatibility | internal/benchmark/compare.go, docs/benchmark-comparisons.md |
+| Endpoint rounds, repetition statistics, and capacity pass rules | internal/benchmark/repetitions.go, docs/repeated-experiments.md |
 | Manifest checks and psql script planning | internal/core/load_plan.go |
 | E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
@@ -139,7 +140,14 @@ Direct audit rows prove session reuse/reconnection and bounded burst counts.
 Reconnect TPS includes connection times; unpaced log percentiles exclude each
 client's own setup. Average connection time is separate. Bursts run one iteration
 per client with one thread per client and use duration as a deadline. See
-docs/connection-experiments.md. Repetitions and varying endpoint order remain open.
+docs/connection-experiments.md.
+
+Repetitions and fixed/rotating endpoint rounds preserve each sample and report
+min/median/max values. Capacity defaults to all repetitions passing; an explicit
+min_pass_rate can relax threshold failures, while missing samples and execution
+errors never qualify. Repeated burst sweeps passed across all three endpoints;
+direct write audit checks passed reset isolation, reuse, and rollback over three
+repetitions. See docs/repeated-experiments.md. Named profiles remain pending.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV
 writers allocate 64 MiB buffers. Process-wide budgets and generation cancellation

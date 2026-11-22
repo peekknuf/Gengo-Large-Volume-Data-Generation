@@ -39,6 +39,7 @@ These settings must match:
 - For arrival-rate runs, fixed client count, requested rate levels, and latency limit.
 - Warm-up and measurement durations. Equivalent spellings such as `60s` and `1m` match.
 - Latency, error-rate, and throughput thresholds.
+- Repetition count, fixed/rotating endpoint-order policy, and repetition pass rule.
 
 Intentional protocol changes and persistent/reconnect changes are allowed with
 explicit comparison warnings. Each run reference records its connection mode and
@@ -63,6 +64,12 @@ Gengo checks the dataset ID against its identity metadata, verifies iteration
 counts against recorded error rates, and recalculates step status and tested
 capacity from the saved metrics and thresholds. This catches inconsistent result
 files; it does not authenticate them or re-read their raw transaction logs.
+
+For repeated experiments, the reader also checks sample identities, coverage,
+schedule, and aggregate statistics. Comparisons use per-repetition medians and
+retain distributions and passing counts. See
+[repeated experiments](repeated-experiments.md). Original single-run results
+without aggregate metadata remain supported.
 Missing required comparison measurements are rejected, even when their numeric
 type would otherwise default to zero. Unknown fields and unsupported versions
 are rejected. Each input is limited to 4 MiB.
@@ -109,5 +116,6 @@ those conditions automatically.
 Matching configured phase durations also does not guarantee identical active
 measurement intervals. Review the original results' connection setup times and
 active intervals, especially for short remote runs. Repetitions, rotating target
-order, and aggregation remain separate roadmap work. Metrics API collection is
-also deferred and is not required by this offline command.
+order, and aggregation are available as explicit scenario controls. Their
+descriptive summaries do not establish statistical significance. Metrics API
+collection is deferred and is not required by this offline command.

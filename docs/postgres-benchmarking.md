@@ -178,8 +178,9 @@ Saved experiments can be compared offline with
 [benchmark comparisons](benchmark-comparisons.md) for compatibility checks and
 interpretation limits.
 
-Custom [read/write experiments](write-workloads.md) now support setup, reset,
-and declared state reuse. Longer repeated measurements, varying endpoint order,
-built-in write presets, backend telemetry, and a local PostgreSQL/PgBouncer
-reference environment remain roadmap
-work.
+Custom [read/write experiments](write-workloads.md) support setup, reset, and
+declared state reuse. [Repeated experiments](repeated-experiments.md) add warm-up
+and measurement per repetition, rotating endpoint order, aggregate variation,
+and an explicit capacity pass rule. Named experiment profiles, built-in write
+presets, backend telemetry, and a local PostgreSQL/PgBouncer reference environment
+remain roadmap work.
