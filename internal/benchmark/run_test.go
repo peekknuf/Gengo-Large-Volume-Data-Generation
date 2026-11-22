@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/peekknuf/Gengo/internal/postgres"
 )
@@ -21,6 +22,24 @@ func init() {
 		return
 	}
 	arguments := strings.Join(os.Args[1:], "\n")
+	stateEvent := func(event string) {
+		path := os.Getenv("GENGO_STATE_EVENTS")
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			os.Exit(2)
+		}
+		fmt.Fprintln(file, event)
+		file.Close()
+		contents, _ := os.ReadFile(path)
+		failure := os.Getenv("GENGO_STATE_FAIL")
+		if failure == event || (strings.HasPrefix(failure, "reset-") && event == "reset" && failure == fmt.Sprintf("reset-%d", strings.Count(string(contents), "reset\n"))) {
+			fmt.Fprintln(os.Stderr, "state failure "+os.Getenv("PGPASSWORD"))
+			os.Exit(2)
+		}
+		if failure == "cancel" && event == "warmup" {
+			time.Sleep(time.Minute)
+		}
+	}
 	if strings.Contains(arguments, "--version") {
 		if os.Args[1] != "--version" {
 			os.Exit(2)
@@ -29,6 +48,20 @@ func init() {
 		os.Exit(0)
 	}
 	if strings.Contains(arguments, "--set=ON_ERROR_STOP=on") {
+		if mode == "state" {
+			for index, argument := range os.Args[1:] {
+				if argument == "--file" {
+					if !strings.Contains(arguments, "--single-transaction") {
+						os.Exit(2)
+					}
+					path := os.Args[index+2]
+					stateEvent(strings.TrimSuffix(filepath.Base(path), ".sql"))
+					os.Exit(0)
+				}
+			}
+			fmt.Println("17.12")
+			os.Exit(0)
+		}
 		if mode == "custom" {
 			if !strings.Contains(arguments, "SELECT current_setting('server_version');") {
 				os.Exit(2)
@@ -44,12 +77,19 @@ func init() {
 		os.Exit(0)
 	}
 	requiredArgs := []string{"--no-vacuum", "--exit-on-abort", "--protocol=simple", "--max-tries=1", "--random-seed=0"}
-	if mode != "custom" {
+	if mode != "custom" && mode != "state" {
 		requiredArgs = append(requiredArgs, "--define=customer_count=3")
 	}
 	for _, required := range requiredArgs {
 		if !strings.Contains(arguments, required) {
 			os.Exit(2)
+		}
+	}
+	if mode == "state" {
+		if strings.Contains(arguments, "--log-prefix=") {
+			stateEvent("measurement")
+		} else {
+			stateEvent("warmup")
 		}
 	}
 	for _, argument := range os.Args[1:] {

@@ -132,7 +132,8 @@ Concrete abstractions are introduced alongside working implementations.
 ### Current workload increments
 
 - [x] Read-only custom SQL files with workload identity in saved results and comparisons.
-- [ ] Read/write workloads with setup, reset, and explicit state-reuse policies.
+- [x] Custom read/write workloads with setup, reset, and explicit state-reuse policies.
+- [ ] Built-in write presets with restoration of Gengo-managed state.
 - [ ] Target arrival-rate tests with requested and achieved load measurements.
 - [ ] Connection churn, bursts, and supported protocol comparisons.
 - [ ] Quick/thorough profiles, repetitions, and varying endpoint order.

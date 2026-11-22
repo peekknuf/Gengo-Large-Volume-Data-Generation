@@ -3,8 +3,6 @@ package benchmark
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,17 +25,21 @@ type Phase struct {
 }
 
 type Step struct {
-	Target      string   `json:"target"`
-	Concurrency int      `json:"concurrency"`
-	Status      string   `json:"status"`
-	Warmup      *Phase   `json:"warmup,omitempty"`
-	Measurement *Phase   `json:"measurement,omitempty"`
-	Failures    []string `json:"threshold_failures"`
+	Target                 string   `json:"target"`
+	Concurrency            int      `json:"concurrency"`
+	Status                 string   `json:"status"`
+	Warmup                 *Phase   `json:"warmup,omitempty"`
+	Measurement            *Phase   `json:"measurement,omitempty"`
+	ResetBeforeWarmup      *Phase   `json:"reset_before_warmup,omitempty"`
+	ResetBeforeMeasurement *Phase   `json:"reset_before_measurement,omitempty"`
+	ResetAfter             *Phase   `json:"reset_after_step,omitempty"`
+	Failures               []string `json:"threshold_failures"`
 }
 
 type TargetInfo struct {
 	ServerVersion string `json:"server_version,omitempty"`
 	Error         string `json:"error,omitempty"`
+	Setup         *Phase `json:"setup,omitempty"`
 }
 
 type Result struct {
@@ -51,6 +53,8 @@ type Result struct {
 	DatasetIdentity core.DatasetIdentity  `json:"dataset_identity"`
 	WorkloadVersion int                   `json:"workload_version"`
 	WorkloadSHA256  string                `json:"workload_sha256,omitempty"`
+	SetupSHA256     string                `json:"setup_sha256,omitempty"`
+	ResetSHA256     string                `json:"reset_sha256,omitempty"`
 	PgbenchVersion  string                `json:"pgbench_version"`
 	LoadModel       string                `json:"load_model"`
 	StartingState   string                `json:"starting_state"`
@@ -82,7 +86,7 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 	result := &Result{
 		Version: 1, Status: "running", StartedAt: time.Now().UTC(), Scenario: plan.Scenario,
 		DatasetID: plan.Dataset.DatasetID, DatasetIdentity: plan.Dataset.Identity, WorkloadVersion: 1, LoadModel: "closed-loop-concurrency",
-		StartingState: "read-only-reuse", Targets: make(map[string]TargetInfo), Capacity: make(map[string]int), Steps: []Step{},
+		StartingState: statePolicy(plan.Scenario), SetupSHA256: sqlHash(plan.SetupSQL), ResetSHA256: sqlHash(plan.ResetSQL), Targets: make(map[string]TargetInfo), Capacity: make(map[string]int), Steps: []Step{},
 		Unavailable: []string{"requested_iteration_count_for_duration_load", "separate_timeout_count", "server_query_latency", "pooler_wait", "client_queue", "server_and_pooler_telemetry", "dataset_generation_and_import_timings"},
 	}
 	finish := func(runErr error) (*Result, error) {
@@ -108,8 +112,7 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 			return finish(fmt.Errorf("custom SQL plan has no script; load the scenario before running"))
 		}
 		workload = plan.SQL
-		hash := sha256.Sum256([]byte(workload))
-		result.WorkloadSHA256 = hex.EncodeToString(hash[:])
+		result.WorkloadSHA256 = sqlHash(workload)
 	}
 	if err := saveResult(output, result); err != nil {
 		return nil, err
@@ -117,6 +120,13 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 	script := filepath.Join(output, "workload.sql")
 	if err := os.WriteFile(script, []byte(workload), 0644); err != nil {
 		return finish(err)
+	}
+	for _, stateScript := range []struct{ name, sql string }{{"setup.sql", plan.SetupSQL}, {"reset.sql", plan.ResetSQL}} {
+		if stateScript.sql != "" {
+			if err := os.WriteFile(filepath.Join(output, stateScript.name), []byte(stateScript.sql), 0644); err != nil {
+				return finish(err)
+			}
+		}
 	}
 	var version, diagnostics bytes.Buffer
 	versionContext, versionCancel := context.WithTimeout(ctx, 30*time.Second)
@@ -151,6 +161,16 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 		}
 		result.Targets[target] = TargetInfo{ServerVersion: serverVersion}
 		result.Capacity[target] = 0
+		if plan.SetupSQL != "" {
+			setup := runStateScript(ctx, client, filepath.Join(output, "setup.sql"), filepath.Join(output, target+"-setup"))
+			result.Targets[target] = TargetInfo{ServerVersion: serverVersion, Setup: setup}
+			if setup.Status != "completed" {
+				return finish(fmt.Errorf("%s setup failed: %s", target, setup.Error))
+			}
+			if err := saveResult(output, result); err != nil {
+				return finish(err)
+			}
+		}
 		for _, concurrency := range plan.Scenario.Concurrency {
 			if ctx.Err() != nil {
 				return finish(ctx.Err())
@@ -162,14 +182,38 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 				return finish(err)
 			}
 			fmt.Fprintf(progress, "%s: %d clients\n", target, concurrency)
+			reset := func(phase **Phase, label string) error {
+				if statePolicy(plan.Scenario) != "reset-per-phase" {
+					return nil
+				}
+				*phase = runStateScript(ctx, client, filepath.Join(output, "reset.sql"), filepath.Join(output, fmt.Sprintf("%s-c%d-%s", target, concurrency, label)))
+				if (*phase).Status != "completed" {
+					current.Status = "error"
+					return fmt.Errorf("%s %d clients %s failed: %s", target, concurrency, label, (*phase).Error)
+				}
+				return saveResult(output, result)
+			}
 			if plan.Warmup > 0 {
+				if err := reset(&current.ResetBeforeWarmup, "reset-before-warmup"); err != nil {
+					return finish(err)
+				}
 				current.Warmup = runPhase(ctx, client, plan, concurrency, plan.Warmup, script, filepath.Join(output, fmt.Sprintf("%s-c%d-warmup", target, concurrency)), false)
 				if err := saveResult(output, result); err != nil {
 					return finish(err)
 				}
 			}
 			if current.Warmup == nil || current.Warmup.Status == "completed" {
+				if err := reset(&current.ResetBeforeMeasurement, "reset-before-measurement"); err != nil {
+					return finish(err)
+				}
 				current.Measurement = runPhase(ctx, client, plan, concurrency, plan.Duration, script, filepath.Join(output, fmt.Sprintf("%s-c%d-measurement", target, concurrency)), true)
+			}
+			if ctx.Err() != nil {
+				current.Status = "canceled"
+				return finish(ctx.Err())
+			}
+			if err := reset(&current.ResetAfter, "reset-after-step"); err != nil {
+				return finish(err)
 			}
 			current.Status = "error"
 			if current.Measurement != nil && current.Measurement.Status == "completed" {
@@ -285,6 +329,7 @@ func saveResult(directory string, result *Result) error {
 }
 
 func PrintSummary(writer io.Writer, result *Result) {
+	fmt.Fprintf(writer, "Workload: %s; access: %s; state policy: %s\n", result.Scenario.Workload, accessMode(result.Scenario), result.StartingState)
 	fmt.Fprintln(writer, "Target      Clients  Status       TPS      p95 ms  Errors")
 	for _, step := range result.Steps {
 		if step.Measurement != nil && step.Measurement.Metrics != nil {

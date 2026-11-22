@@ -1,0 +1,18 @@
+version: 1
+name: custom-read-write
+targets: [direct, shared, dedicated]
+workload: custom-sql
+sql_file: custom-write.sql
+access_mode: read-write
+state_policy: reset-per-phase
+setup_file: custom-write-setup.sql
+reset_file: custom-write-reset.sql
+seed: 42
+protocol: simple
+concurrency: [1, 2, 4]
+warmup: 2s
+duration: 10s
+thresholds:
+  max_p95_ms: 250
+  max_error_rate: 0
+  min_tps: 1

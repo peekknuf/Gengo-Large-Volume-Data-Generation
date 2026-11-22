@@ -18,13 +18,13 @@ the entire script.
 
 ## Read-only transaction contract
 
-Gengo wraps each iteration in `BEGIN READ ONLY` and `COMMIT`. Reported latency
+By default, Gengo wraps each iteration in `BEGIN READ ONLY` and `COMMIT`. Reported latency
 includes that transaction and all statements. Ordinary persistent writes fail.
 Do not include transaction control, change read-only settings, or use pgbench
 shell commands. Scripts are trusted code; the wrapper is not a sandbox for
 untrusted SQL. Use a database role limited to reads when restrictions must hold
-independently of the script. Write workloads and setup/reset scripts require the
-next state-policy increment.
+independently of the script. For writes and setup/reset scripts, see
+[read/write experiments](write-workloads.md).
 
 Custom SQL requires neither `dataset` nor `schema`. Qualify table names, such as
 `public.orders`, in the SQL. The `schema` field does not set a search path or
@@ -45,7 +45,8 @@ since the script is retained verbatim.
 
 Use `gengo bench compare BASELINE_JSON CANDIDATE_JSON` for offline comparisons.
 Workload kind and script hash must match, along with the existing compatibility
-settings. Changing SQL, comments, or whitespace changes the hash and rejects the
+settings, access mode, state policy, and setup/reset hashes. Changing SQL,
+comments, or whitespace changes the hash and rejects the
 comparison. Moving identical SQL to another path is allowed. Original source
 files need not exist when comparing. Runs without dataset metadata can only
 compare with other runs without it. Hashes detect workload differences; they do

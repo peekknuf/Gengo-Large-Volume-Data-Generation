@@ -32,6 +32,10 @@ type Scenario struct {
 	Targets     []string   `yaml:"targets" json:"targets"`
 	Workload    string     `yaml:"workload" json:"workload"`
 	SQLFile     string     `yaml:"sql_file,omitempty" json:"sql_file,omitempty"`
+	AccessMode  string     `yaml:"access_mode,omitempty" json:"access_mode,omitempty"`
+	StatePolicy string     `yaml:"state_policy,omitempty" json:"state_policy,omitempty"`
+	SetupFile   string     `yaml:"setup_file,omitempty" json:"setup_file,omitempty"`
+	ResetFile   string     `yaml:"reset_file,omitempty" json:"reset_file,omitempty"`
 	Seed        *uint64    `yaml:"seed" json:"seed"`
 	Protocol    string     `yaml:"protocol" json:"protocol"`
 	Concurrency []int      `yaml:"concurrency" json:"concurrency"`
@@ -46,6 +50,8 @@ type Plan struct {
 	Warmup   time.Duration
 	Duration time.Duration
 	SQL      string
+	SetupSQL string
+	ResetSQL string
 }
 
 func LoadScenario(path string) (Plan, error) {
@@ -78,22 +84,37 @@ func LoadScenario(path string) (Plan, error) {
 		return Plan{}, fmt.Errorf("version 1 supports workloads customer-lookup and custom-sql with protocol simple")
 	}
 	var sql string
+	if err := validateStatePolicy(scenario); err != nil {
+		return Plan{}, err
+	}
+	var setupSQL, resetSQL string
+	for _, script := range []struct {
+		path *string
+		sql  *string
+	}{
+		{&scenario.SetupFile, &setupSQL},
+		{&scenario.ResetFile, &resetSQL},
+	} {
+		if *script.path != "" {
+			*script.path, *script.sql, err = loadSQLFile(path, *script.path)
+			if err != nil {
+				return Plan{}, err
+			}
+		}
+	}
 	if scenario.Workload == "custom-sql" {
 		if scenario.SQLFile == "" {
 			return Plan{}, fmt.Errorf("custom-sql requires sql_file")
 		}
-		if !filepath.IsAbs(scenario.SQLFile) {
-			scenario.SQLFile = filepath.Join(filepath.Dir(path), scenario.SQLFile)
-		}
-		scenario.SQLFile, err = filepath.Abs(scenario.SQLFile)
-		if err != nil {
-			return Plan{}, err
-		}
-		contents, err := readSQL(scenario.SQLFile)
+		var contents string
+		scenario.SQLFile, contents, err = loadSQLFile(path, scenario.SQLFile)
 		if err != nil {
 			return Plan{}, err
 		}
 		sql = "BEGIN READ ONLY;\n" + contents + "\nCOMMIT;\n"
+		if scenario.AccessMode == "read-write" {
+			sql = "BEGIN READ WRITE;\n" + contents + "\nCOMMIT;\n"
+		}
 	} else if scenario.SQLFile != "" {
 		return Plan{}, fmt.Errorf("sql_file is only supported for custom-sql")
 	}
@@ -134,7 +155,7 @@ func LoadScenario(path string) (Plan, error) {
 	}
 	if scenario.Dataset == "" {
 		if scenario.Workload == "custom-sql" {
-			return Plan{Scenario: scenario, Warmup: warmup, Duration: duration, SQL: sql}, nil
+			return Plan{Scenario: scenario, Warmup: warmup, Duration: duration, SQL: sql, SetupSQL: setupSQL, ResetSQL: resetSQL}, nil
 		}
 		return Plan{}, fmt.Errorf("dataset directory is required")
 	}
@@ -170,7 +191,19 @@ func LoadScenario(path string) (Plan, error) {
 	if manifest.Version != 1 || !manifest.Complete || manifest.Identity.SchemaVersion != core.SchemaVersion || manifest.Identity.Model != "ecommerce" || manifest.Identity.Counts["dim_customers"] < 1 || manifest.DatasetID != hex.EncodeToString(hash[:]) {
 		return Plan{}, fmt.Errorf("expected a completed ecommerce manifest with valid identity and positive customer count")
 	}
-	return Plan{Scenario: scenario, Dataset: manifest, Warmup: warmup, Duration: duration, SQL: sql}, nil
+	return Plan{Scenario: scenario, Dataset: manifest, Warmup: warmup, Duration: duration, SQL: sql, SetupSQL: setupSQL, ResetSQL: resetSQL}, nil
+}
+
+func loadSQLFile(scenarioPath, sqlPath string) (string, string, error) {
+	if !filepath.IsAbs(sqlPath) {
+		sqlPath = filepath.Join(filepath.Dir(scenarioPath), sqlPath)
+	}
+	path, err := filepath.Abs(sqlPath)
+	if err != nil {
+		return "", "", err
+	}
+	sql, err := readSQL(path)
+	return path, sql, err
 }
 
 func readSQL(path string) (string, error) {

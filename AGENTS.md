@@ -113,6 +113,12 @@ Offline saved-run comparisons validate configuration and measurement consistency
 their tests and CLI verification do not require a database or credentials.
 Read-only custom SQL supports scenario-relative files, optional datasets, and
 SHA-256 workload identity in saved results and comparisons.
+Custom read/write scenarios add setup SQL and reset-per-phase or declared reuse.
+Lifecycle scripts are snapshotted, hashed, and timed separately in state.go;
+setup/reset failures stop the experiment. See docs/write-workloads.md.
+Live write/reset sweeps passed on all three targets. Database audit counts prove
+warm-up isolation and restored baselines; reuse and transactional failure checks
+passed on the direct target.
 Live custom sweeps and offline comparisons passed on all three endpoints;
 table-read, read-only write rejection, and SQL-error continuation checks passed.
 Broader load controls, repetitions, telemetry, and a local

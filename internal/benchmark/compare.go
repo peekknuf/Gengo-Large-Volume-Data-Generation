@@ -56,6 +56,8 @@ type Comparison struct {
 	Scenario        Scenario           `json:"scenario"`
 	WorkloadVersion int                `json:"workload_version"`
 	WorkloadSHA256  string             `json:"workload_sha256,omitempty"`
+	SetupSHA256     string             `json:"setup_sha256,omitempty"`
+	ResetSHA256     string             `json:"reset_sha256,omitempty"`
 	LoadModel       string             `json:"load_model"`
 	StartingState   string             `json:"starting_state"`
 	Baseline        RunReference       `json:"baseline"`
@@ -114,8 +116,11 @@ func ReadResult(path string) (*Result, error) {
 }
 
 func validateComparableResult(result *Result) error {
-	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.Scenario.Protocol != "simple" || result.LoadModel != "closed-loop-concurrency" || result.StartingState != "read-only-reuse" {
-		return fmt.Errorf("comparison supports version-1 read-only customer-lookup and custom-sql results using simple protocol")
+	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.Scenario.Protocol != "simple" || result.LoadModel != "closed-loop-concurrency" {
+		return fmt.Errorf("comparison supports version-1 customer-lookup and custom-sql results using simple protocol")
+	}
+	if err := validateSavedState(result); err != nil {
+		return err
 	}
 	custom := result.Scenario.Workload == "custom-sql"
 	if custom {
@@ -169,6 +174,9 @@ func validateComparableResult(result *Result) error {
 		info, present := result.Targets[target]
 		if !present || info.Error != "" || info.ServerVersion == "" {
 			return fmt.Errorf("cannot compare experiments with failed or missing target preflights")
+		}
+		if (result.Scenario.SetupFile != "" && !completedStatePhase(info.Setup)) || (result.Scenario.SetupFile == "" && info.Setup != nil) {
+			return fmt.Errorf("saved result has incomplete or unexpected setup phases")
 		}
 		previous := 0
 		for _, concurrency := range result.Scenario.Concurrency {
@@ -244,6 +252,10 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	}{
 		{"workload", baseline.Scenario.Workload, candidate.Scenario.Workload},
 		{"workload SQL identity", baseline.WorkloadSHA256, candidate.WorkloadSHA256},
+		{"access mode", accessMode(baseline.Scenario), accessMode(candidate.Scenario)},
+		{"state policy", baseline.StartingState, candidate.StartingState},
+		{"setup SQL identity", baseline.SetupSHA256, candidate.SetupSHA256},
+		{"reset SQL identity", baseline.ResetSHA256, candidate.ResetSHA256},
 		{"dataset identity", baseline.DatasetID, candidate.DatasetID},
 		{"dataset metadata", baseline.DatasetIdentity, candidate.DatasetIdentity},
 		{"schema", baseline.Scenario.Schema, candidate.Scenario.Schema},
@@ -277,6 +289,11 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 		"Target labels do not verify identical endpoints, hardware, pool sizing, or background traffic.",
 	}}
 	comparison.WorkloadSHA256 = baseline.WorkloadSHA256
+	comparison.SetupSHA256 = baseline.SetupSHA256
+	comparison.ResetSHA256 = baseline.ResetSHA256
+	if baseline.StartingState == "reuse" {
+		comparison.Warnings = append(comparison.Warnings, "State reuse carries writes across phases and targets; matching scripts do not prove equivalent starting data.")
+	}
 	if baseline.PgbenchVersion != candidate.PgbenchVersion {
 		comparison.Warnings = append(comparison.Warnings, "pgbench versions differ; client behavior may affect measurements.")
 	}

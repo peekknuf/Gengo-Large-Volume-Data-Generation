@@ -13,8 +13,9 @@ framework, worker pool, writer wrappers, and retail fallback have been removed.
 The project delivers generation, PostgreSQL import planning and execution, and
 direct and pooler connection checks. A versioned YAML customer-lookup scenario
 drives pgbench concurrency sweeps with saved JSON results and a terminal summary.
-Read-only custom SQL scripts support application schemas with optional dataset
-metadata and script hashes in saved results and comparisons.
+Custom SQL scripts support read-only and read/write experiments against application
+schemas with optional dataset metadata and script hashes in saved results and
+comparisons. state.go owns setup/reset execution and starting-state policies.
 Broader execution controls, telemetry, and
 the local database reference environment remain roadmap work.
 
@@ -82,9 +83,11 @@ pgbench. Results and redacted client output remain in a new output directory.
 metrics.go reconciles the pgbench summary with complete transaction logs and
 calculates successful-iteration percentiles. Threshold failures do not stop the
 sweep. Results distinguish client connections from unavailable server and pooler
-measurements. Built-in and custom SQL workloads are read-only. Custom scripts
-are snapshotted from scenario-relative files and wrapped in a read-only
-transaction. Mutable-data reset policies remain pending. See custom-sql.md and
+measurements. Built-in customer lookups are read-only. Custom scripts are
+snapshotted from scenario-relative files and wrapped in read-only or read/write
+transactions. Setup runs once per target, and explicit reset-per-phase or reuse
+policies govern mutable state. Saved results retain separate lifecycle timings,
+diagnostics, and hashes. See custom-sql.md, write-workloads.md, and
 postgres-benchmarking.md for limits.
 
 bench compare loads two saved results without database access. compare.go rejects
