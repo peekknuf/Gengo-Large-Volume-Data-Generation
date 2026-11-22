@@ -113,6 +113,7 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Seeds, reference dates, stable fact partitions, and manifests.
 - [x] Explicit generation configuration throughout generators, with defaults resolved at command boundaries.
 - [x] Windows build, tests, and vet checks, including eight generation combinations.
+- [x] Project-local verification skill with a proven CLI generation/import/workload/comparison smoke check and isolated-schema cleanup.
 - [x] Inactive generator framework and duplicate writer paths removed, with seeded output compatibility checked.
 - [ ] Linux and race-check results verified.
 - [ ] Shared worker and memory budgets for larger dataset generation.

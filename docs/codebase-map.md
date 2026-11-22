@@ -10,6 +10,11 @@ Its package boundaries support incremental work. AGENTS.md provides the shared
 starting point, and CLAUDE.md points to that guide. The unused alternate generator
 framework, worker pool, writer wrappers, and retail fallback have been removed.
 
+The project-local `.agents/skills/verify-gengo` skill drives tests, build, and the
+real CLI through a tiny generation/import/workload/comparison workflow. It uses
+an isolated database schema, retains evidence, and verifies cleanup. Its feature
+map distinguishes the short smoke check from the wider opt-in live test matrix.
+
 The project delivers generation, PostgreSQL import planning and execution, and
 direct and pooler connection checks. A versioned YAML customer-lookup scenario
 drives pgbench concurrency sweeps with saved JSON results and a terminal summary.

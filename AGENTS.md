@@ -58,6 +58,12 @@ go test ./internal/formats -run '^$' -bench BenchmarkWriteSliceCSV -benchmem
 On Windows, build bin/gengo.exe. A local dev.ps1 helper may provide build, test,
 vet, bench, and run commands with the portable Go setup.
 
+For a repeatable CLI and isolated database smoke check, use
+[verify-gengo](.agents/skills/verify-gengo/SKILL.md). Its helper runs tests, vet,
+and build, then generation, import, workloads, saved comparison, and verified
+schema cleanup. Evidence stays in the printed temporary directory. Use its
+explicit offline mode when database verification is not intended.
+
 TestE2E builds its own binary and exercises all eight model/format combinations.
 Its default target is 0.1 GiB per case. GENGO_TEST_SIZE_GB and GENGO_TEST_TIMEOUT
 adjust fixtures. GENGO_KEEP_OUTPUT=1 retains output, so repeated runs need fresh
