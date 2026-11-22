@@ -99,9 +99,9 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] CLI import execution with psql, cancellation, timeouts, and retained import scripts.
 - [x] Live PostgreSQL import validation, including counts, constraints, joins, and failed-load rollback.
 - [ ] Local PostgreSQL and PgBouncer reference environment.
-- [ ] Versioned YAML scenario loading and validation.
-- [ ] Point-lookup preset and pgbench execution.
-- [ ] Concurrency sweep, saved results, and readable report.
+- [x] Versioned YAML scenario loading and validation for read-only customer lookups.
+- [x] Point-lookup preset and pgbench execution using simple protocol.
+- [x] Concurrency sweep, saved JSON results, client latency percentiles, thresholds, and readable report.
 
 ### Subsequent increments
 

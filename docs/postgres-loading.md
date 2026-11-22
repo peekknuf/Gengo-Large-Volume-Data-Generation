@@ -64,7 +64,8 @@ username from the project's Connect panel.
 The dedicated pooler requires a qualifying Supabase plan and enabled service.
 Both poolers use transaction mode. Shared Supavisor transaction mode does not
 support prepared statements. Dedicated PgBouncer supports them on supported
-versions, but workload protocol comparisons are not implemented yet. See
+versions, but workload protocol comparisons are not implemented yet. The
+[benchmark runner](postgres-benchmarking.md) currently uses the simple protocol. See
 [Supabase connection documentation](https://supabase.com/docs/guides/database/connecting-to-postgres).
 
 ## Execute an import
@@ -82,7 +83,7 @@ schema, not one exposed through Supabase's Data API.
 
 Imports accept `direct` or `libpq` targets. For `libpq`, configure an unpooled or
 session connection appropriate for administrative operations. Transaction-pooler
-targets are reserved for connection checks and future workload execution.
+targets are used for connection checks and read-only benchmark execution.
 
 Checks default to a 30-second timeout; imports default to 10 minutes. Override
 these with `--timeout 15s` or `--timeout 20m`. Ctrl+C and execution timeouts stop the
@@ -166,5 +167,6 @@ Without opt-in, these tests skip database access.
 
 The first live verification on 22 November 2026 passed against Supabase
 PostgreSQL 17.12. Direct, shared transaction, and dedicated transaction endpoints
-each passed the connection check. Workload execution remains pending in
-[the product direction](product-direction.md).
+each passed the connection check. Read-only pgbench execution is described in
+[PostgreSQL benchmarking](postgres-benchmarking.md); the remaining scope is tracked
+in [the product direction](product-direction.md).

@@ -34,6 +34,12 @@ Direct, shared transaction, and dedicated transaction connection checks use the
 variables in `.env.example`.
 See [PostgreSQL loading](docs/postgres-loading.md) and [product direction](docs/product-direction.md).
 
+Run a read-only concurrency sweep with
+`gengo bench run --scenario examples/postgres/lookup.yaml --env-file .env --output data/lookup-run-001`.
+Edit the scenario's dataset path and schema after import. Results include JSON,
+client logs, throughput, latency percentiles, and threshold status. See
+[PostgreSQL benchmarking](docs/postgres-benchmarking.md).
+
 | Model | Output |
 | --- | --- |
 | ecommerce | Customers, addresses, suppliers, categories, products, orders, order items |

@@ -25,6 +25,7 @@ Parquet. PostgreSQL import planning and execution support ecommerce CSV.
 | Generic and typed serialization | internal/formats and direct fact encoders in simulation |
 | PostgreSQL import command | load_command.go |
 | Connection checks, targets, dotenv, and psql execution | postgres_command.go, internal/postgres/client.go |
+| Scenario YAML, pgbench sweeps, measurements, and results | benchmark_command.go, internal/benchmark |
 | Manifest checks and psql script planning | internal/core/load_plan.go |
 | E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
@@ -97,7 +98,11 @@ Live PostgreSQL imports passed against Supabase PostgreSQL 17.12. Opt-in tests
 cover counts, constraints, joins, existing-schema rejection, and failed-load
 rollback. Set GENGO_POSTGRES_TEST_ENV_FILE to an absolute dotenv path to run them.
 Direct, shared transaction, and dedicated transaction connection checks passed.
-Workload execution and a local PostgreSQL/PgBouncer reference fixture are pending.
+Read-only pgbench customer-lookup sweeps passed across all three targets at one
+and two clients. Temporary libpq hostaddr overrides avoided intermittent DNS
+failures during that smoke verification; stored credentials were unchanged.
+Custom workloads, broader load controls, saved-run comparisons, and a local
+PostgreSQL/PgBouncer reference fixture remain pending.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV
 writers allocate 64 MiB buffers. Process-wide budgets and generation cancellation

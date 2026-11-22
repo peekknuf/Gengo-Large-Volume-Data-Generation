@@ -11,8 +11,10 @@ starting point, and CLAUDE.md points to that guide. The unused alternate generat
 framework, worker pool, writer wrappers, and retail fallback have been removed.
 
 The project delivers generation, PostgreSQL import planning and execution, and
-direct and pooler connection checks. Workload execution, scenarios, telemetry,
-result comparisons, and a local database reference fixture remain roadmap work.
+direct and pooler connection checks. A versioned YAML customer-lookup scenario
+drives pgbench concurrency sweeps with saved JSON results and a terminal summary.
+Custom workloads, broader execution controls, telemetry, and
+the local database reference environment remain roadmap work.
 
 ## Generation flow
 
@@ -60,6 +62,20 @@ Opt-in live tests exercise psql execution, counts, constraints, joins,
 existing-schema rejection, and failed-load rollback. They passed against Supabase
 PostgreSQL 17.12. A local PostgreSQL and PgBouncer reference fixture remains open.
 
+## PostgreSQL workload execution
+
+benchmark_command.go adds bench run. internal/benchmark/scenario.go validates
+version-1 YAML and dataset metadata. run.go checks database customer keys, then
+runs separate warm-up and measured pgbench processes for each target/load level.
+internal/postgres shares credential-safe process execution between psql and
+pgbench. Results and redacted client output remain in a new output directory.
+
+metrics.go reconciles the pgbench summary with complete transaction logs and
+calculates successful-iteration percentiles. Threshold failures do not stop the
+sweep. Results distinguish client connections from unavailable server and pooler
+measurements. The built-in workload is read-only; custom SQL and mutable-data
+reset policies are not implemented. See postgres-benchmarking.md for limits.
+
 ## Generation and encoding boundaries
 
 | Location | Role |
@@ -88,7 +104,7 @@ checks when schemas change.
 | Encoding | formats plus the domain's direct fact writers. Trace normal callers before consolidation. |
 | Memory budget | generation.Partitions, dimension slices, retail buffers, order/item slices, and Parquet builders. |
 | Import support | load_command.go, postgres_command.go, internal/postgres, schema metadata, core/load_plan.go, and opt-in live integration tests. |
-| Scenario and runner | New scenario and execution code following the product contract. Existing generation.Config describes dataset generation. |
+| Scenario and runner | benchmark_command.go and internal/benchmark own YAML, pgbench execution, measurements, thresholds, and saved results. generation.Config remains specific to dataset generation. |
 | Structured CLI output | main prints a logo to stdout before command execution. Account for it when adding JSON result commands. |
 
 ## Risks before larger experiments
@@ -119,10 +135,11 @@ checks when schemas change.
 | core/load_plan_test.go | Real CSV fixtures, script contents, invalid inputs, schema names, and output reuse. |
 | core/load_postgres_test.go | Opt-in live import, counts, constraints, joins, existing-schema rejection, and count-mismatch rollback. |
 | postgres/client_test.go | Endpoint selection, dotenv precedence, credential handling, client failures, and cancellation. |
+| benchmark/*_test.go | Strict scenarios, dataset identity, percentile fixtures, thresholds, deterministic process fixtures, failure continuation, cancellation, and output preservation. |
 | generation/config_test.go | Configuration and cancellation after partition failure. |
 | Simulation-specific tests | Price invariants, sampling distribution, and shard creation failures. |
 | formats/csv_test.go | CSV round trips, buffered failure handling, and a writer benchmark. |
-| tests/cli_test.go | Normal CLI controls, import planning, database option validation, and opt-in live CLI import. |
+| tests/cli_test.go | Normal CLI controls, import planning, database option validation, and opt-in live CLI import and passing/failing pgbench sweeps. |
 | tests/e2e_test.go | Builds the CLI and exercises all eight generation model/format combinations. |
 
 The import increment passed build, vet, and the full local suite during this

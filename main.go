@@ -89,6 +89,7 @@ Example:
 }
 
 func init() {
+	RootCmd.AddCommand(newBenchmarkCommand())
 	RootCmd.AddCommand(newDatabaseCommand())
 	RootCmd.AddCommand(newLoadCommand())
 	RootCmd.AddCommand(generateCmd)

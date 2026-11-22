@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/peekknuf/Gengo/internal/benchmark"
 	"github.com/peekknuf/Gengo/internal/postgres"
 )
 
@@ -119,6 +121,53 @@ func TestGenerationControls(t *testing.T) {
 		if output, err := run(t, "load", "run", "--dataset", dataset, "--schema", namespace, "--output", filepath.Join(root, "retry-import"), "--env-file", envFile); err == nil || !strings.Contains(string(output), "already exists") {
 			t.Fatalf("existing schema not rejected: %v\n%s", err, output)
 		}
+		t.Run("pgbench_sweep", func(t *testing.T) {
+			scenarioPath := filepath.Join(root, "lookup.yaml")
+			scenario := fmt.Sprintf("version: 1\nname: cli-lookup\ndataset: %q\nschema: %s\ntargets: [direct]\nworkload: customer-lookup\nseed: 0\nprotocol: simple\nconcurrency: [1, 2]\nwarmup: 1s\nduration: 5s\nthresholds:\n  max_p95_ms: 1000000000\n  max_error_rate: 0\n  min_tps: 0\n", dataset, namespace)
+			for _, failing := range []bool{false, true} {
+				contents := scenario
+				if failing {
+					contents = strings.ReplaceAll(contents, "max_p95_ms: 1000000000", "max_p95_ms: 0.000001")
+				}
+				if err := os.WriteFile(scenarioPath, []byte(contents), 0600); err != nil {
+					t.Fatal(err)
+				}
+				results := filepath.Join(root, fmt.Sprintf("benchmark-%t", failing))
+				output, runErr := run(t, "bench", "run", "--scenario", scenarioPath, "--env-file", envFile, "--output", results)
+				if (runErr != nil) != failing {
+					t.Fatalf("unexpected benchmark exit, threshold breach=%t: %v\n%s", failing, runErr, output)
+				}
+				encoded, err := os.ReadFile(filepath.Join(results, "result.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var saved benchmark.Result
+				if err := json.Unmarshal(encoded, &saved); err != nil {
+					t.Fatal(err)
+				}
+				if len(saved.Steps) != 2 || saved.DatasetID == "" || saved.PgbenchVersion == "" || saved.Targets["direct"].ServerVersion == "" || saved.DatasetIdentity.Seed != 0 {
+					t.Fatalf("incomplete benchmark result: %s", encoded)
+				}
+				for _, step := range saved.Steps {
+					if step.Warmup == nil || step.Warmup.Status != "completed" || step.Measurement == nil || step.Measurement.Metrics == nil {
+						t.Fatalf("missing independent phases: %+v", step)
+					}
+					metrics := step.Measurement.Metrics
+					if metrics.CompletedIterations <= 0 || metrics.TPS <= 0 || metrics.P95MS <= 0 || metrics.RequestedIterations != nil || metrics.Timeouts != nil {
+						t.Fatalf("invalid measured data: %+v", metrics)
+					}
+					if failing && (step.Status != "failed" || len(step.Failures) != 1) {
+						t.Fatalf("threshold breach not preserved: %+v", step)
+					}
+				}
+				if !failing && (saved.Status != "completed" || saved.Capacity["direct"] != 2) {
+					t.Fatalf("passing capacity was not saved: %s", encoded)
+				}
+				if failing && (saved.Status != "failed" || saved.Capacity["direct"] != 0) {
+					t.Fatalf("failed capacity was not saved: %s", encoded)
+				}
+			}
+		})
 	})
 	t.Run("exact_rows", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "financial")

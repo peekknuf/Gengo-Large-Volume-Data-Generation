@@ -104,6 +104,14 @@ func (client *Client) Run(ctx context.Context, arguments []string, stdout, stder
 	return client.run(ctx, client.executable, append(options, arguments...), stdout, stderr)
 }
 
+func (client *Client) RunPgbench(ctx context.Context, arguments []string, stdout, stderr io.Writer) error {
+	options := append([]string{}, arguments...)
+	if client.database != "" {
+		options = append(options, "--dbname", client.database)
+	}
+	return client.run(ctx, "pgbench", options, stdout, stderr)
+}
+
 func (client *Client) run(ctx context.Context, executable string, arguments []string, stdout, stderr io.Writer) error {
 	command := exec.CommandContext(ctx, executable, arguments...)
 	command.Env = client.environment
