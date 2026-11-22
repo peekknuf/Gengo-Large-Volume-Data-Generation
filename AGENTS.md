@@ -7,9 +7,10 @@ performance-testing tool, with broader Supabase coverage planned. Read
 [product direction](docs/product-direction.md) for agreed scope and delivery status,
 then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
-Current priority is available Supabase metrics alongside experiments and named
-experiment profiles. Custom SQL, read/write state policies, arrival-rate sweeps,
-connection experiments, repetitions, and rotating endpoint order work.
+Current priority is named quick/thorough experiment profiles. Supabase Metrics API
+snapshots accompany experiments when SUPABASE_API_KEY is configured. Custom SQL,
+read/write state policies, arrival-rate sweeps, connection experiments,
+repetitions, and rotating endpoint order work.
 Extend the existing sweeps and saved comparisons.
 Repetitions and available Supabase Metrics API collection support this work. The
 local PostgreSQL/PgBouncer fixture is optional backlog work. Generation budgets
@@ -138,8 +139,8 @@ warm-up isolation and restored baselines; reuse and transactional failure checks
 passed on the direct target.
 Live custom sweeps and offline comparisons passed on all three endpoints;
 table-read, read-only write rejection, and SQL-error continuation checks passed.
-Broader load controls, repetitions, telemetry, and a local
-PostgreSQL/PgBouncer reference fixture remain pending.
+Arrival rates, connection experiments, repetitions, and available Supabase metrics
+now support these sweeps. The local PostgreSQL/PgBouncer fixture remains optional.
 
 Poisson arrival-rate sweeps support fixed clients, requested rates, a latency
 limit for skipping overdue work, and explicit skipped-rate and rate-attainment
@@ -163,6 +164,13 @@ min_pass_rate can relax threshold failures, while missing samples and execution
 errors never qualify. Repeated burst sweeps passed across all three endpoints;
 direct write audit checks passed reset isolation, reuse, and rollback over three
 repetitions. See docs/repeated-experiments.md. Named profiles remain pending.
+
+Supabase Metrics API collection uses SUPABASE_API_KEY, including sb_secret keys,
+with a project-wide initial snapshot and one-minute scrapes. Results record UTC
+scrape/phase times, availability, and checksummed Prometheus files. Telemetry
+failures do not fail experiments. Use verify-gengo -require-metrics for live
+snapshot/checksum checks and a 65-second periodic-collection proof. See
+docs/supabase-metrics.md.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV
 writers allocate 64 MiB buffers. Process-wide budgets and generation cancellation

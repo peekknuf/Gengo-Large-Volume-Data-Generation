@@ -45,6 +45,15 @@ Credentials come from Gengo's existing dotenv and process-environment handling.
 Process variables take precedence. Pass paths, never passwords or connection
 URLs, on command lines. Do not print or commit `.env`.
 
+For Supabase telemetry, add `-require-metrics`. This requires `SUPABASE_API_KEY`,
+checks snapshot metadata and file checksums for every experiment, and adds a
+65-second read-only direct experiment at one requested iteration per second.
+Require at least two snapshots in `metrics/result.json` to prove periodic
+collection. This mode cannot be combined with `-offline` or `-doctor`.
+Require `metrics_verified: true` in `summary.json` for this mode. The helper also
+checks that the API key and its Basic authentication encoding are absent from
+JSON, logs, and Prometheus snapshots in the evidence directory.
+
 Each run prints `Evidence:` followed by a unique directory in the OS temporary
 directory. An optional `-evidence` path must be a new directory with an existing
 parent. The helper builds one private binary and deletes it during teardown.

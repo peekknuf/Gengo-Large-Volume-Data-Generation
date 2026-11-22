@@ -19,6 +19,7 @@ func init() {
 			fmt.Println("password=" + os.Getenv("PGPASSWORD"))
 			fmt.Println("sslpassword=" + os.Getenv("PGSSLPASSWORD"))
 			fmt.Println("database=" + os.Getenv("PGDATABASE"))
+			fmt.Println("api_key=" + os.Getenv("SUPABASE_API_KEY"))
 		case "fail":
 			fmt.Fprintln(os.Stderr, "connection failed: "+os.Getenv("PGPASSWORD"))
 			os.Exit(2)
@@ -106,6 +107,26 @@ func TestClientEnvironmentAndPasswords(t *testing.T) {
 		if strings.Contains(output.String(), "p@ss:word") || strings.Contains(output.String(), "key-secret") {
 			t.Fatalf("credentials leaked: %s", output.String())
 		}
+	}
+}
+
+func TestClientRedactsSupabaseKey(t *testing.T) {
+	t.Setenv("SUPABASE_API_KEY", "sb_secret_private-test-key")
+	t.Setenv("GENGO_TEST_PSQL_HELPER", "echo")
+	client, err := NewClient("libpq", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.executable, err = os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := client.Run(t.Context(), nil, &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(output.String(), "sb_secret_private-test-key") || !strings.Contains(output.String(), "api_key=[REDACTED]") {
+		t.Fatal("Supabase key was not redacted")
 	}
 }
 

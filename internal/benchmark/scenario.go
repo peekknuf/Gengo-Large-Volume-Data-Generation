@@ -28,30 +28,31 @@ type Thresholds struct {
 }
 
 type Scenario struct {
-	Version        int        `yaml:"version" json:"version"`
-	Name           string     `yaml:"name" json:"name"`
-	Dataset        string     `yaml:"dataset" json:"dataset"`
-	Schema         string     `yaml:"schema" json:"schema"`
-	Targets        []string   `yaml:"targets" json:"targets"`
-	Workload       string     `yaml:"workload" json:"workload"`
-	SQLFile        string     `yaml:"sql_file,omitempty" json:"sql_file,omitempty"`
-	AccessMode     string     `yaml:"access_mode,omitempty" json:"access_mode,omitempty"`
-	StatePolicy    string     `yaml:"state_policy,omitempty" json:"state_policy,omitempty"`
-	SetupFile      string     `yaml:"setup_file,omitempty" json:"setup_file,omitempty"`
-	ResetFile      string     `yaml:"reset_file,omitempty" json:"reset_file,omitempty"`
-	Seed           *uint64    `yaml:"seed" json:"seed"`
-	Protocol       string     `yaml:"protocol" json:"protocol"`
-	ConnectionMode string     `yaml:"connection_mode,omitempty" json:"connection_mode,omitempty"`
-	Concurrency    []int      `yaml:"concurrency" json:"concurrency"`
-	Clients        int        `yaml:"clients,omitempty" json:"clients,omitempty"`
-	ArrivalRates   []float64  `yaml:"arrival_rates,omitempty" json:"arrival_rates,omitempty"`
-	LatencyLimit   string     `yaml:"latency_limit,omitempty" json:"latency_limit,omitempty"`
-	Warmup         string     `yaml:"warmup" json:"warmup"`
-	Duration       string     `yaml:"duration" json:"duration"`
-	Thresholds     Thresholds `yaml:"thresholds" json:"thresholds"`
-	Repetitions    *int       `yaml:"repetitions,omitempty" json:"repetitions,omitempty"`
-	TargetOrder    string     `yaml:"target_order,omitempty" json:"target_order,omitempty"`
-	MinPassRate    *float64   `yaml:"min_pass_rate,omitempty" json:"min_pass_rate,omitempty"`
+	Version         int        `yaml:"version" json:"version"`
+	Name            string     `yaml:"name" json:"name"`
+	Dataset         string     `yaml:"dataset" json:"dataset"`
+	Schema          string     `yaml:"schema" json:"schema"`
+	Targets         []string   `yaml:"targets" json:"targets"`
+	Workload        string     `yaml:"workload" json:"workload"`
+	SQLFile         string     `yaml:"sql_file,omitempty" json:"sql_file,omitempty"`
+	AccessMode      string     `yaml:"access_mode,omitempty" json:"access_mode,omitempty"`
+	StatePolicy     string     `yaml:"state_policy,omitempty" json:"state_policy,omitempty"`
+	SetupFile       string     `yaml:"setup_file,omitempty" json:"setup_file,omitempty"`
+	ResetFile       string     `yaml:"reset_file,omitempty" json:"reset_file,omitempty"`
+	Seed            *uint64    `yaml:"seed" json:"seed"`
+	Protocol        string     `yaml:"protocol" json:"protocol"`
+	ConnectionMode  string     `yaml:"connection_mode,omitempty" json:"connection_mode,omitempty"`
+	Concurrency     []int      `yaml:"concurrency" json:"concurrency"`
+	Clients         int        `yaml:"clients,omitempty" json:"clients,omitempty"`
+	ArrivalRates    []float64  `yaml:"arrival_rates,omitempty" json:"arrival_rates,omitempty"`
+	LatencyLimit    string     `yaml:"latency_limit,omitempty" json:"latency_limit,omitempty"`
+	Warmup          string     `yaml:"warmup" json:"warmup"`
+	Duration        string     `yaml:"duration" json:"duration"`
+	Thresholds      Thresholds `yaml:"thresholds" json:"thresholds"`
+	Repetitions     *int       `yaml:"repetitions,omitempty" json:"repetitions,omitempty"`
+	TargetOrder     string     `yaml:"target_order,omitempty" json:"target_order,omitempty"`
+	MinPassRate     *float64   `yaml:"min_pass_rate,omitempty" json:"min_pass_rate,omitempty"`
+	SupabaseMetrics string     `yaml:"supabase_metrics,omitempty" json:"supabase_metrics,omitempty"`
 }
 
 type Plan struct {
@@ -86,6 +87,9 @@ func LoadScenario(path string) (Plan, error) {
 	}
 	if scenario.Version != 1 || strings.TrimSpace(scenario.Name) == "" || len(scenario.Name) > 100 {
 		return Plan{}, fmt.Errorf("scenario requires version 1 and a name of 1 to 100 characters")
+	}
+	if scenario.SupabaseMetrics != "" && scenario.SupabaseMetrics != "auto" && scenario.SupabaseMetrics != "off" {
+		return Plan{}, fmt.Errorf("supabase_metrics must be auto or off")
 	}
 	if (scenario.Schema != "" || scenario.Workload == "customer-lookup") && !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`).MatchString(scenario.Schema) {
 		return Plan{}, fmt.Errorf("schema must be an ASCII PostgreSQL identifier of 1 to 63 characters")

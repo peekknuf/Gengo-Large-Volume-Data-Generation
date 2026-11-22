@@ -3,6 +3,9 @@
 For application queries, see [custom SQL workloads](custom-sql.md). This guide
 uses the built-in customer lookup to explain shared controls and measurements.
 
+For optional project-wide telemetry using `SUPABASE_API_KEY`, see
+[Supabase metrics collection](supabase-metrics.md).
+
 Build Gengo and install PostgreSQL client tools with `psql` and `pgbench` 17 or
 later on `PATH`. Configure the endpoint variables described in
 [PostgreSQL loading](postgres-loading.md). The workload is read-only, but running

@@ -56,15 +56,17 @@ type ComparedRateCapacity struct {
 }
 
 type RunReference struct {
-	Name           string                `json:"name"`
-	StartedAt      time.Time             `json:"started_at"`
-	Status         string                `json:"status"`
-	PgbenchVersion string                `json:"pgbench_version"`
-	Targets        map[string]TargetInfo `json:"targets"`
-	ConnectionMode string                `json:"connection_mode"`
-	Protocol       string                `json:"protocol"`
-	Aggregates     []Aggregate           `json:"aggregates,omitempty"`
-	Schedule       []Round               `json:"schedule,omitempty"`
+	SupabaseMetricsStatus string                `json:"supabase_metrics_status,omitempty"`
+	SupabaseProjectRef    string                `json:"supabase_project_ref,omitempty"`
+	Name                  string                `json:"name"`
+	StartedAt             time.Time             `json:"started_at"`
+	Status                string                `json:"status"`
+	PgbenchVersion        string                `json:"pgbench_version"`
+	Targets               map[string]TargetInfo `json:"targets"`
+	ConnectionMode        string                `json:"connection_mode"`
+	Protocol              string                `json:"protocol"`
+	Aggregates            []Aggregate           `json:"aggregates,omitempty"`
+	Schedule              []Round               `json:"schedule,omitempty"`
 }
 
 type Comparison struct {
@@ -340,6 +342,9 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	}
 	reference := func(result *Result) RunReference {
 		ref := RunReference{Name: result.Scenario.Name, StartedAt: result.StartedAt, Status: result.Status, PgbenchVersion: result.PgbenchVersion, Targets: result.Targets, ConnectionMode: connectionMode(result.Scenario), Protocol: result.Scenario.Protocol}
+		if telemetry := result.SupabaseMetrics; telemetry != nil {
+			ref.SupabaseMetricsStatus, ref.SupabaseProjectRef = telemetry.Status, telemetry.ProjectRef
+		}
 		if repetitions(result.Scenario) > 1 {
 			ref.Aggregates, ref.Schedule = aggregateSteps(result), roundSchedule(result.Scenario)
 		}
@@ -351,6 +356,9 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	}}
 	if repetitions(baseline.Scenario) > 1 {
 		comparison.Warnings[0] = "Repeated summaries are descriptive; they do not establish statistical significance."
+	}
+	if baseline.SupabaseMetrics != nil || candidate.SupabaseMetrics != nil {
+		comparison.Warnings = append(comparison.Warnings, "Supabase metrics are project-wide snapshots in the original run directories; telemetry is not used for capacity or metric deltas.")
 	}
 	comparison.WorkloadSHA256 = baseline.WorkloadSHA256
 	comparison.SetupSHA256 = baseline.SetupSHA256

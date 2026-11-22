@@ -82,10 +82,13 @@ that workflow in this order:
    them. Persistent clients remain the baseline.
 
 Repetitions, rotating endpoint order, and aggregate pass rules now support these
-experiments. Collect
-available Supabase Metrics API measurements alongside client results, with
-collection intervals and unavailable measurements recorded. Telemetry supports
-the workload experiments without becoming a prerequisite for running them.
+experiments. Available Supabase Metrics API snapshots accompany client results,
+with collection intervals, timestamps, checksums, and unavailable measurements
+recorded. Telemetry supports workload experiments without becoming a prerequisite
+for running them. See [Supabase metrics](supabase-metrics.md).
+
+Next, add named quick/thorough profiles for warm-up, duration, repetitions, load
+steps, and endpoint ordering using the existing experiment controls.
 
 The local PostgreSQL and PgBouncer reference environment remains optional backlog
 work. Shared generation worker and memory budgets and Linux/race verification
@@ -141,7 +144,7 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Connection churn, bursts, and supported protocol comparisons.
 - [x] Repetitions, rotating endpoint order, aggregate statistics, and explicit capacity pass rules.
 - [ ] Named quick/thorough experiment profiles.
-- [ ] Available Supabase Metrics API collection alongside client measurements.
+- [x] Available Supabase Metrics API collection alongside client measurements.
 
 ### Later increments
 

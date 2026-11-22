@@ -99,7 +99,8 @@ func validateSavedState(result *Result) error {
 }
 
 func runStateScript(ctx context.Context, client *postgres.Client, script, directory string) *Phase {
-	phase := &Phase{Status: "error"}
+	phase := &Phase{Status: "error", StartedAt: time.Now().UTC()}
+	defer func() { phase.FinishedAt = time.Now().UTC() }()
 	if err := os.Mkdir(directory, 0755); err != nil {
 		phase.Error = err.Error()
 		return phase

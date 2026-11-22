@@ -81,7 +81,7 @@ func NewClient(target, envFile string) (*Client, error) {
 		if value == "" {
 			continue
 		}
-		if key == "PGPASSWORD" || key == "PGSSLPASSWORD" || strings.HasSuffix(key, "_DATABASE_URL") || (key == "PGDATABASE" && strings.ContainsAny(value, "=:/")) {
+		if key == "SUPABASE_API_KEY" || key == "PGPASSWORD" || key == "PGSSLPASSWORD" || strings.HasSuffix(key, "_DATABASE_URL") || (key == "PGDATABASE" && strings.ContainsAny(value, "=:/")) {
 			client.secrets = append(client.secrets, value)
 			if parsed, err := url.Parse(value); err == nil && parsed.User != nil {
 				if password, present := parsed.User.Password(); present && password != "" {

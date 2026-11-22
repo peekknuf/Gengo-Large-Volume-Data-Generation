@@ -18,10 +18,12 @@ import (
 )
 
 type Phase struct {
-	ElapsedSeconds float64  `json:"client_process_elapsed_seconds"`
-	Status         string   `json:"status"`
-	Error          string   `json:"error,omitempty"`
-	Metrics        *Metrics `json:"metrics,omitempty"`
+	StartedAt      time.Time `json:"started_at,omitempty"`
+	FinishedAt     time.Time `json:"finished_at,omitempty"`
+	ElapsedSeconds float64   `json:"client_process_elapsed_seconds"`
+	Status         string    `json:"status"`
+	Error          string    `json:"error,omitempty"`
+	Metrics        *Metrics  `json:"metrics,omitempty"`
 }
 
 type Step struct {
@@ -45,6 +47,7 @@ type TargetInfo struct {
 }
 
 type Result struct {
+	SupabaseMetrics *SupabaseTelemetry    `json:"supabase_metrics,omitempty"`
 	Version         int                   `json:"result_version"`
 	Status          string                `json:"status"`
 	Error           string                `json:"error,omitempty"`
@@ -106,7 +109,19 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 			result.Unavailable = append(result.Unavailable, "connection_start_to_completion_latency_percentiles")
 		}
 	}
+	stopMetrics := startMetrics(ctx, plan.Scenario, envFile, output)
+	defer stopMetrics()
 	finish := func(runErr error) (*Result, error) {
+		result.SupabaseMetrics = stopMetrics()
+		if result.SupabaseMetrics.Status == "available" || result.SupabaseMetrics.Status == "partial" {
+			for i, measurement := range result.Unavailable {
+				if measurement == "server_and_pooler_telemetry" {
+					result.Unavailable[i] = "additional_server_and_pooler_telemetry"
+				}
+			}
+		} else {
+			result.Unavailable = append(result.Unavailable, "supabase_metrics")
+		}
 		finished := time.Now().UTC()
 		result.FinishedAt = &finished
 		if runErr != nil {
@@ -132,7 +147,7 @@ func Run(ctx context.Context, plan Plan, envFile, output string, progress io.Wri
 		result.WorkloadSHA256 = sqlHash(workload)
 	}
 	if err := saveResult(output, result); err != nil {
-		return nil, err
+		return finish(err)
 	}
 	script := filepath.Join(output, "workload.sql")
 	if err := os.WriteFile(script, []byte(workload), 0644); err != nil {
@@ -312,7 +327,8 @@ func checkDataset(ctx context.Context, client *postgres.Client, plan Plan) (stri
 }
 
 func runPhase(ctx context.Context, client *postgres.Client, plan Plan, level loadLevel, duration time.Duration, script, directory string, measured bool) *Phase {
-	phase := &Phase{Status: "error"}
+	phase := &Phase{Status: "error", StartedAt: time.Now().UTC()}
+	defer func() { phase.FinishedAt = time.Now().UTC() }()
 	if err := os.Mkdir(directory, 0755); err != nil {
 		phase.Error = err.Error()
 		return phase
@@ -397,6 +413,12 @@ func saveResult(directory string, result *Result) error {
 }
 
 func PrintSummary(writer io.Writer, result *Result) {
+	if telemetry := result.SupabaseMetrics; telemetry != nil {
+		fmt.Fprintf(writer, "Supabase metrics: %s; %d scrape attempts; interval %ds; scope %s\n", telemetry.Status, len(telemetry.Samples), telemetry.IntervalSeconds, telemetry.Scope)
+		if telemetry.Reason != "" {
+			fmt.Fprintf(writer, "  %s\n", telemetry.Reason)
+		}
+	}
 	fmt.Fprintf(writer, "Workload: %s; access: %s; state policy: %s\n", result.Scenario.Workload, accessMode(result.Scenario), result.StartingState)
 	fmt.Fprintf(writer, "Load model: %s\n", result.LoadModel)
 	fmt.Fprintf(writer, "Connection mode: %s; protocol: %s\n", connectionMode(result.Scenario), result.Scenario.Protocol)

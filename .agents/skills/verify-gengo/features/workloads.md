@@ -10,6 +10,7 @@ measurements, and verify write/reset effects independently in the database.
 - `bench-write`: reset-per-phase writes, warm-up isolation, reuse, and rollback.
 - `bench-load`: concurrency and Poisson arrival-rate controls.
 - `bench-connect`: persistent, reconnect, burst, and simple/extended/prepared protocols.
+- `bench-metrics`: optional project-wide Supabase Metrics API snapshots.
 
 ## How to get to it (user POV)
 
@@ -21,6 +22,9 @@ Scenarios are versioned YAML; workload and lifecycle files are separate SQL file
 Preconditions: Go/psql/pgbench, direct credentials, and credentials for requested poolers.
 
 - Run `go run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct,shared,dedicated`.
+- Add `-require-metrics` with `SUPABASE_API_KEY` configured to require successful
+  snapshots and verify file checksums. Inspect `metrics/result.json` and its
+  `.prom` files for at least two scrapes during the added 65-second read-only run.
 - Inspect `lookup.yaml`, `baseline/result.json`, and `candidate/result.json`.
   Each experiment has two repetitions per endpoint, one client, simple protocol,
   and rotating endpoint order. Require completed measurements and zero failures.

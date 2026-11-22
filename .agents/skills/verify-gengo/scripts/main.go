@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/peekknuf/Gengo/internal/benchmark"
 	"github.com/peekknuf/Gengo/internal/core"
 	"github.com/peekknuf/Gengo/internal/postgres"
@@ -32,10 +35,12 @@ type verification struct {
 	Status          string   `json:"status"`
 	Database        string   `json:"database"`
 	CleanupVerified bool     `json:"cleanup_verified"`
+	MetricsVerified bool     `json:"metrics_verified"`
 	Error           string   `json:"error,omitempty"`
 	ctx             context.Context
 	binary          string
 	envFile         string
+	requireMetrics  bool
 }
 
 func main() {
@@ -44,14 +49,18 @@ func main() {
 	evidence := flag.String("evidence", "", "New evidence directory; default is a unique OS temporary directory")
 	offline := flag.Bool("offline", false, "Explicitly skip database checks and workloads")
 	doctor := flag.Bool("doctor", false, "Build and check tools/connections without tests or mutations")
+	requireMetrics := flag.Bool("require-metrics", false, "Require live Supabase metrics snapshots and verify their files")
 	flag.Parse()
-	if err := verify(*envFile, *targets, *evidence, *offline, *doctor); err != nil {
+	if err := verify(*envFile, *targets, *evidence, *offline, *doctor, *requireMetrics); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func verify(envFile, targets, evidence string, offline, doctor bool) (err error) {
+func verify(envFile, targets, evidence string, offline, doctor, requireMetrics bool) (err error) {
+	if requireMetrics && (offline || doctor) {
+		return fmt.Errorf("-require-metrics requires the live workload verification")
+	}
 	module, err := os.ReadFile("go.mod")
 	if err != nil || !strings.Contains(string(module), "module github.com/peekknuf/Gengo") {
 		return fmt.Errorf("run from the Gengo repository root")
@@ -71,7 +80,7 @@ func verify(envFile, targets, evidence string, offline, doctor bool) (err error)
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
-	v := &verification{Evidence: evidence, Targets: strings.Split(targets, ","), Status: "running", Database: "skipped", ctx: ctx, envFile: envFile}
+	v := &verification{Evidence: evidence, Targets: strings.Split(targets, ","), Status: "running", Database: "skipped", ctx: ctx, envFile: envFile, requireMetrics: requireMetrics}
 	for _, target := range v.Targets {
 		if target != "direct" && target != "shared" && target != "dedicated" {
 			return fmt.Errorf("targets must be direct,shared,dedicated")
@@ -244,6 +253,24 @@ func verify(envFile, targets, evidence string, offline, doctor bool) (err error)
 	if err = v.write("read.sql", "SELECT 1;\n"); err != nil {
 		return err
 	}
+	if v.requireMetrics {
+		metricsScenario := "version: 1\nname: verification-periodic-metrics\ntargets: [direct]\nworkload: custom-sql\nsql_file: read.sql\nseed: 0\nprotocol: simple\nclients: 1\narrival_rates: [1]\nlatency_limit: 5s\nwarmup: 0s\nduration: 65s\nthresholds:\n  max_p95_ms: 1000000000\n  max_error_rate: 0\n  min_tps: 0\n  max_skipped_rate: 1\n  min_rate_attainment: 0.01\n"
+		if err = v.write("metrics.yaml", metricsScenario); err != nil {
+			return err
+		}
+		metricsResult, metricsErr := v.bench("metrics", "metrics.yaml", 1)
+		if metricsErr != nil {
+			return metricsErr
+		}
+		if len(metricsResult.SupabaseMetrics.Samples) < 2 {
+			return fmt.Errorf("periodic metrics collection did not run")
+		}
+		periodic := metricsResult.SupabaseMetrics.Samples[1]
+		measurement := metricsResult.Steps[0].Measurement
+		if periodic.StartedAt.Before(measurement.StartedAt) || periodic.FinishedAt.After(measurement.FinishedAt) {
+			return fmt.Errorf("periodic metrics snapshot did not overlap measured traffic")
+		}
+	}
 	burst := fmt.Sprintf("version: 1\nname: verification-burst\ntargets: [%s]\nworkload: custom-sql\nsql_file: read.sql\nseed: 0\nprotocol: prepared\nconnection_mode: burst\nconcurrency: [1]\nwarmup: 0s\nduration: 10s\nthresholds:\n  max_p95_ms: 1000000000\n  max_error_rate: 0\n  min_tps: 0\n", targets)
 	if err = v.write("burst.yaml", burst); err != nil {
 		return err
@@ -301,8 +328,51 @@ func verify(envFile, targets, evidence string, offline, doctor bool) (err error)
 	if observed != "0" {
 		return fmt.Errorf("write workload did not restore its baseline")
 	}
+	if v.requireMetrics {
+		if err = v.verifyKeyAbsent(); err != nil {
+			return err
+		}
+		v.MetricsVerified = true
+	}
 	v.Database = "verified"
 	return nil
+}
+
+func (v *verification) verifyKeyAbsent() error {
+	settings := map[string]string{}
+	if v.envFile != "" {
+		var err error
+		settings, err = godotenv.Read(v.envFile)
+		if err != nil {
+			return fmt.Errorf("cannot read environment for credential audit")
+		}
+	}
+	key := settings["SUPABASE_API_KEY"]
+	if value, present := os.LookupEnv("SUPABASE_API_KEY"); present {
+		key = value
+	}
+	if key == "" {
+		return fmt.Errorf("credential audit requires SUPABASE_API_KEY")
+	}
+	return filepath.WalkDir(v.Evidence, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		switch filepath.Ext(path) {
+		case ".json", ".log", ".prom":
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if bytes.Contains(contents, []byte(key)) || bytes.Contains(contents, []byte(base64.StdEncoding.EncodeToString([]byte("service_role:"+key)))) {
+				return fmt.Errorf("Supabase API credential found in verification evidence")
+			}
+		}
+		return nil
+	})
 }
 
 func (v *verification) command(name string, env []string, executable string, args ...string) ([]byte, error) {
@@ -366,6 +436,25 @@ func (v *verification) bench(name, scenario string, expected int) (*benchmark.Re
 	}
 	if result.Status != "completed" || len(result.Steps) != expected {
 		return nil, fmt.Errorf("%s has missing/failed steps", name)
+	}
+	if v.requireMetrics {
+		telemetry := result.SupabaseMetrics
+		if telemetry == nil || telemetry.Status != "available" || len(telemetry.Samples) == 0 || telemetry.IntervalSeconds != 60 || telemetry.Scope != "project" {
+			return nil, fmt.Errorf("%s did not collect live Supabase metrics; inspect result.json", name)
+		}
+		for _, sample := range telemetry.Samples {
+			if sample.Status != "collected" || sample.Series < 1 || sample.StartedAt.IsZero() || sample.FinishedAt.Before(sample.StartedAt) || filepath.Base(sample.File) != sample.File {
+				return nil, fmt.Errorf("%s has an incomplete metrics snapshot", name)
+			}
+			contents, err := os.ReadFile(filepath.Join(v.Evidence, name, sample.File))
+			if err != nil {
+				return nil, err
+			}
+			hash := sha256.Sum256(contents)
+			if hex.EncodeToString(hash[:]) != sample.SHA256 {
+				return nil, fmt.Errorf("%s metrics snapshot checksum differs", name)
+			}
+		}
 	}
 	for _, step := range result.Steps {
 		if step.Status != "passed" || step.Measurement == nil || step.Measurement.Metrics == nil || step.Measurement.Metrics.CompletedIterations < 1 || step.Measurement.Metrics.FailedIterations != 0 {

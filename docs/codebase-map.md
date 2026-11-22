@@ -21,14 +21,14 @@ drives pgbench concurrency sweeps with saved JSON results and a terminal summary
 Custom SQL scripts support read-only and read/write experiments against application
 schemas with optional dataset metadata and script hashes in saved results and
 comparisons. state.go owns setup/reset execution and starting-state policies.
-Broader execution controls, telemetry, and
+Available Supabase metrics accompany these experiments; broader telemetry and
 the local database reference environment remain roadmap work.
 
 Custom SQL, read/write state policies, and arrival-rate sweeps now work against
 existing Supabase endpoints. Persistent, reconnect, and burst connection modes
 support simple, extended, and prepared protocols. Repetitions and rotating
 endpoint order record individual samples plus aggregate variation and capacity.
-Available Supabase metrics and named experiment profiles remain pending.
+Available Supabase metrics now work; named experiment profiles are next.
 Reuse the working sweeps and offline comparisons.
 Repetitions and available Supabase Metrics API collection support these
 experiments. The local reference environment is optional backlog work. See
@@ -119,6 +119,13 @@ and the configured passing fraction. Repeated comparisons use medians, retain
 min/max distributions, and verify saved aggregates against individual samples.
 Setup runs once per target; every repetition repeats warm-up and reset phases.
 See repeated-experiments.md.
+
+telemetry.go collects project-wide Supabase Metrics API snapshots using
+SUPABASE_API_KEY, with automatic project matching, an initial request, and
+one-minute scrapes. Raw Prometheus files retain metric names and labels; result
+metadata records scrape times, checksums, and availability. Phase timestamps
+allow correlation without claiming per-step server latency. Missing telemetry
+never changes capacity. See supabase-metrics.md.
 
 bench compare loads two saved results without database access. compare.go rejects
 incomplete or incompatible experiments, pairs target/client steps, and reports
