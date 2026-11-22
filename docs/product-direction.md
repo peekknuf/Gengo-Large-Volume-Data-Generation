@@ -95,7 +95,9 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] E-commerce schema metadata derived from the current model structs.
 - [x] Manifest-driven CSV import scripts with explicit phase boundaries.
 - [x] CLI checks for generated import plans and failure cases.
-- [ ] Live PostgreSQL import validation, including counts, constraints, and joins.
+- [x] Direct, shared transaction, and dedicated transaction endpoint checks with environment-based credentials.
+- [x] CLI import execution with psql, cancellation, timeouts, and retained import scripts.
+- [x] Live PostgreSQL import validation, including counts, constraints, joins, and failed-load rollback.
 - [ ] Local PostgreSQL and PgBouncer reference environment.
 - [ ] Versioned YAML scenario loading and validation.
 - [ ] Point-lookup preset and pgbench execution.

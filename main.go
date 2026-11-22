@@ -89,6 +89,7 @@ Example:
 }
 
 func init() {
+	RootCmd.AddCommand(newDatabaseCommand())
 	RootCmd.AddCommand(newLoadCommand())
 	RootCmd.AddCommand(generateCmd)
 	generateCmd.Flags().StringVarP(&modelType, "model", "m", "", "Data model to generate (ecommerce, ecommerce-ds, financial, medical)")

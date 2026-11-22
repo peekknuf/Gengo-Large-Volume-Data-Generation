@@ -1,7 +1,7 @@
 # Codebase map for agent-assisted development
 
-Reviewed 21 November 2026, including the e-commerce import planner and the
-subsequent cleanup of inactive generation and serialization paths.
+Updated 22 November 2026 for live PostgreSQL imports and endpoint checks, following
+the e-commerce import planner and cleanup of inactive generation paths.
 
 ## Assessment
 
@@ -10,9 +10,9 @@ Its package boundaries support incremental work. AGENTS.md provides the shared
 starting point, and CLAUDE.md points to that guide. The unused alternate generator
 framework, worker pool, writer wrappers, and retail fallback have been removed.
 
-The project delivers generation and PostgreSQL import-script planning. The
-experiment runner, scenario YAML, telemetry, result comparison, and database
-reference environment are roadmap work.
+The project delivers generation, PostgreSQL import planning and execution, and
+direct and pooler connection checks. Workload execution, scenarios, telemetry,
+result comparisons, and a local database reference fixture remain roadmap work.
 
 ## Generation flow
 
@@ -38,10 +38,12 @@ affect seeded output. Existing tests compare repeated runs of the same code. A
 historical fixture would add coverage for accidental algorithm changes across
 commits.
 
-## PostgreSQL import planning
+## PostgreSQL imports and connection checks
 
-load_command.go adds load plan. core.WriteCSVLoadPlan consumes a completed
-e-commerce CSV manifest and schema.ECommerce metadata.
+load_command.go adds load plan and load run. core.WriteCSVLoadPlan consumes a
+completed e-commerce CSV manifest and schema.ECommerce metadata. load run executes
+the retained scripts through internal/postgres with timeouts and cancellation.
+postgres_command.go adds db check for direct, shared, dedicated, and libpq targets.
 
 Column order and field names come from existing structs. The explicit
 order_timestamp_unix override matches the specialized CSV encoding. Primary and
@@ -54,9 +56,9 @@ through a staging directory. The scripts separate schema creation, copying and
 count verification, primary-key indexes, foreign-key creation, foreign-key
 validation, and statistics collection.
 
-Tests exercise planning and CLI integration. Actual psql execution, transaction
-behavior on a running server, and representative joins still need the local
-PostgreSQL integration fixture.
+Opt-in live tests exercise psql execution, counts, constraints, joins,
+existing-schema rejection, and failed-load rollback. They passed against Supabase
+PostgreSQL 17.12. A local PostgreSQL and PgBouncer reference fixture remains open.
 
 ## Generation and encoding boundaries
 
@@ -85,7 +87,7 @@ checks when schemas change.
 | Model or relationship | Model structs, simulation, orchestration, schema metadata, contracts, and format comparisons. |
 | Encoding | formats plus the domain's direct fact writers. Trace normal callers before consolidation. |
 | Memory budget | generation.Partitions, dimension slices, retail buffers, order/item slices, and Parquet builders. |
-| Import support | Schema metadata, core/load_plan.go, SQL types, and live integration tests. |
+| Import support | load_command.go, postgres_command.go, internal/postgres, schema metadata, core/load_plan.go, and opt-in live integration tests. |
 | Scenario and runner | New scenario and execution code following the product contract. Existing generation.Config describes dataset generation. |
 | Structured CLI output | main prints a logo to stdout before command execution. Account for it when adding JSON result commands. |
 
@@ -97,9 +99,9 @@ checks when schemas change.
    compression add allocations. Rows-per-file is separate from a process budget.
 3. E-commerce retains order/item slices within each partition. An item partition
    can contain up to ten times the configured order partition size.
-4. Active top-level operations create context.Background internally. Worker-group
-   failure cancellation exists. Command cancellation needs a root context carried
-   through generation, loading, and future execution.
+4. PostgreSQL commands observe their parent context, execution timeout, and Ctrl+C.
+   Generation still creates context.Background internally. Worker-group failure
+   cancellation exists; context propagation through generation remains open.
 5. Generic and specialized encoders can diverge in fields, numeric spelling,
    timestamp units, and failure handling. Cross-format checks cover these areas.
 6. Historical seeded fixtures would strengthen compatibility testing before
@@ -115,10 +117,12 @@ checks when schemas change.
 | core/reproducibility_test.go | Repeated seeds, workers 1/2/8, formats, customer correlations, financial boundaries, manifests, and zero counts. |
 | core/output_test.go | Failed generation and destination publication. |
 | core/load_plan_test.go | Real CSV fixtures, script contents, invalid inputs, schema names, and output reuse. |
+| core/load_postgres_test.go | Opt-in live import, counts, constraints, joins, existing-schema rejection, and count-mismatch rollback. |
+| postgres/client_test.go | Endpoint selection, dotenv precedence, credential handling, client failures, and cancellation. |
 | generation/config_test.go | Configuration and cancellation after partition failure. |
 | Simulation-specific tests | Price invariants, sampling distribution, and shard creation failures. |
 | formats/csv_test.go | CSV round trips, buffered failure handling, and a writer benchmark. |
-| tests/cli_test.go | Normal CLI controls and generation-to-import-planner integration. |
+| tests/cli_test.go | Normal CLI controls, import planning, database option validation, and opt-in live CLI import. |
 | tests/e2e_test.go | Builds the CLI and exercises all eight generation model/format combinations. |
 
 The import increment passed build, vet, and the full local suite during this

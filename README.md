@@ -27,6 +27,11 @@ for guarantees, file partitioning, and timestamp units.
 
 Prepare PostgreSQL import scripts for an e-commerce CSV dataset with
 `gengo load plan --dataset data/example --schema gengo --output data/import`.
+Check a connection with `gengo db check --env-file .env --target direct`.
+Execute the import with
+`gengo load run --dataset data/example --schema gengo --output data/import-run --env-file .env`.
+Direct, shared transaction, and dedicated transaction connection checks use the
+variables in `.env.example`.
 See [PostgreSQL loading](docs/postgres-loading.md) and [product direction](docs/product-direction.md).
 
 | Model | Output |

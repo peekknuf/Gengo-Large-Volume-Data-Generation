@@ -6,6 +6,7 @@ require (
 	github.com/apache/arrow-go/v18 v18.4.0
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/charmbracelet/lipgloss v0.9.1
+	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/sync v0.15.0
 )

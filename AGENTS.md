@@ -9,7 +9,7 @@ then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
 Go 1.25 or later is required. The module is github.com/peekknuf/Gengo.
 Generation supports ecommerce, ecommerce-ds, financial, and medical in CSV and
-Parquet. Import planning currently supports ecommerce CSV.
+Parquet. PostgreSQL import planning and execution support ecommerce CSV.
 
 ## Active entry points
 
@@ -24,6 +24,7 @@ Parquet. Import planning currently supports ecommerce CSV.
 | Model fields and serialization tags | internal/models/<model> |
 | Generic and typed serialization | internal/formats and direct fact encoders in simulation |
 | PostgreSQL import command | load_command.go |
+| Connection checks, targets, dotenv, and psql execution | postgres_command.go, internal/postgres/client.go |
 | Manifest checks and psql script planning | internal/core/load_plan.go |
 | E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
@@ -92,10 +93,14 @@ Credentials belong in supported environment or credential sources.
 
 ## Current verification gaps
 
-Live PostgreSQL import and workload execution are pending. Import-planner tests
-cover script preparation, source metadata and headers, and CLI integration.
+Live PostgreSQL imports passed against Supabase PostgreSQL 17.12. Opt-in tests
+cover counts, constraints, joins, existing-schema rejection, and failed-load
+rollback. Set GENGO_POSTGRES_TEST_ENV_FILE to an absolute dotenv path to run them.
+Direct, shared transaction, and dedicated transaction connection checks passed.
+Workload execution and a local PostgreSQL/PgBouncer reference fixture are pending.
 
 Dimensions remain resident. Worker limits are per fact table, and retail CSV
-writers allocate 64 MiB buffers. Process-wide budgets and command-level cancellation
-are further work. cmd/profile launches a fixed 10 GiB generation run, so choose
-profiling inputs deliberately.
+writers allocate 64 MiB buffers. Process-wide budgets and generation cancellation
+are further work; PostgreSQL execution supports context cancellation and Ctrl+C.
+cmd/profile launches a fixed 10 GiB generation run, so choose profiling inputs
+deliberately.

@@ -1,8 +1,10 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/peekknuf/Gengo/internal/postgres"
 )
 
 func TestGenerationControls(t *testing.T) {
@@ -60,6 +64,60 @@ func TestGenerationControls(t *testing.T) {
 		}
 		if out, err := run(t, "load", "plan", "--dataset", dataset); err == nil {
 			t.Fatalf("accepted missing output flag: %s", out)
+		}
+	})
+	t.Run("database_validation", func(t *testing.T) {
+		for _, arguments := range [][]string{
+			{"db", "check", "--target", "unknown"},
+			{"db", "check", "--timeout", "0s"},
+			{"db", "check", "--env-file", filepath.Join(t.TempDir(), "missing")},
+			{"load", "run", "--dataset", "missing", "--output", filepath.Join(t.TempDir(), "import"), "--target", "shared"},
+			{"load", "run", "--dataset", "missing", "--output", filepath.Join(t.TempDir(), "import"), "--target", "dedicated"},
+			{"load", "run", "--dataset", "missing", "--output", filepath.Join(t.TempDir(), "import"), "--timeout", "-1s"},
+			{"load", "run", "--dataset", "missing"},
+		} {
+			if output, err := run(t, arguments...); err == nil {
+				t.Fatalf("accepted invalid database arguments %v: %s", arguments, output)
+			}
+		}
+	})
+	t.Run("load_run_live", func(t *testing.T) {
+		envFile := os.Getenv("GENGO_POSTGRES_TEST_ENV_FILE")
+		if envFile == "" {
+			t.Skip("set GENGO_POSTGRES_TEST_ENV_FILE to opt into live CLI imports")
+		}
+		client, err := postgres.NewClient("direct", envFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		namespace := fmt.Sprintf("gengo_cli_%d", time.Now().UnixNano())
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			var output bytes.Buffer
+			if err := client.Run(ctx, []string{"--command", `DROP SCHEMA IF EXISTS "` + namespace + `" CASCADE;`}, &output, &output); err != nil {
+				t.Errorf("cleanup %s: %v\n%s", namespace, err, output.String())
+			}
+		})
+		root := t.TempDir()
+		dataset := filepath.Join(root, "dataset")
+		if output, err := run(t, "gen", "--model", "ecommerce", "--size", "0.000001", "--format", "csv", "--seed", "0", "--as-of", "2026-11-21", "--output", dataset); err != nil {
+			t.Fatalf("generate: %v\n%s", err, output)
+		}
+		if output, err := run(t, "db", "check", "--env-file", envFile); err != nil || !strings.Contains(string(output), "PostgreSQL connection verified (direct)") {
+			t.Fatalf("connection check: %v\n%s", err, output)
+		}
+		arguments := []string{"load", "run", "--dataset", dataset, "--schema", namespace, "--output", filepath.Join(root, "import"), "--env-file", envFile}
+		if output, err := run(t, arguments...); err != nil || !strings.Contains(string(output), "PostgreSQL import verified in schema "+namespace) {
+			t.Fatalf("live CLI import: %v\n%s", err, output)
+		}
+		var output bytes.Buffer
+		query := fmt.Sprintf("SELECT count(*) FROM pg_constraint WHERE connamespace = '%s'::regnamespace AND contype IN ('p', 'f') AND convalidated;", namespace)
+		if err := client.Run(t.Context(), []string{"-At", "--command", query}, &output, &output); err != nil || strings.TrimSpace(output.String()) != "15" {
+			t.Fatalf("expected 15 validated constraints: %v\n%s", err, output.String())
+		}
+		if output, err := run(t, "load", "run", "--dataset", dataset, "--schema", namespace, "--output", filepath.Join(root, "retry-import"), "--env-file", envFile); err == nil || !strings.Contains(string(output), "already exists") {
+			t.Fatalf("existing schema not rejected: %v\n%s", err, output)
 		}
 	})
 	t.Run("exact_rows", func(t *testing.T) {
