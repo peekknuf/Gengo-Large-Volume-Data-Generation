@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/peekknuf/Gengo/internal/postgres"
 )
 
 func init() {
@@ -55,7 +57,7 @@ func init() {
 	os.Exit(0)
 }
 
-func installClientHelpers(t *testing.T) {
+func installClientHelpers(t *testing.T) string {
 	t.Helper()
 	executable, err := os.Executable()
 	if err != nil {
@@ -67,9 +69,6 @@ func installClientHelpers(t *testing.T) {
 			name += ".exe"
 		}
 		path := filepath.Join(directory, name)
-		if err := os.Link(executable, path); err == nil {
-			continue
-		}
 		source, err := os.Open(executable)
 		if err != nil {
 			t.Fatal(err)
@@ -91,6 +90,38 @@ func installClientHelpers(t *testing.T) {
 		t.Setenv(variable, "postgresql://postgres@invalid.example/postgres")
 	}
 	t.Setenv("PGPASSWORD", "private-helper-password")
+	return directory
+}
+
+func TestClientHelpersReleaseExecutableFiles(t *testing.T) {
+	directory := installClientHelpers(t)
+	t.Setenv("GENGO_BENCH_HELPER", "success")
+	client, err := postgres.NewClient("direct", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	if err := client.Run(t.Context(), nil, &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(output.String()) != "17.12|3|1|3|3" {
+		t.Fatalf("unexpected helper psql output: %s", output.String())
+	}
+	output.Reset()
+	if err := client.RunPgbench(t.Context(), []string{"--version"}, &output, &output); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(output.String()) != "pgbench (PostgreSQL) 17.12" {
+		t.Fatalf("unexpected helper pgbench output: %s", output.String())
+	}
+	for _, name := range []string{"psql", "pgbench"} {
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		if err := os.Remove(filepath.Join(directory, name)); err != nil {
+			t.Fatalf("helper executable remains locked after exit: %v", err)
+		}
+	}
 }
 
 func TestRunSweepsContinueAndSaveMeasurements(t *testing.T) {
