@@ -15,8 +15,7 @@ var (
 	addressTypes      = []string{"shipping", "billing"}
 )
 
-func GenerateCustomers(count int, options ...generation.Config) []ecommerce.Customer {
-	cfg := generation.Options(options)
+func GenerateCustomers(count int, cfg generation.Config) []ecommerce.Customer {
 	rng := cfg.Rand("ecommerce.GenerateCustomers", 0)
 	fake := cfg.Faker("ecommerce.GenerateCustomers")
 	if count <= 0 {
@@ -43,8 +42,7 @@ func GenerateCustomers(count int, options ...generation.Config) []ecommerce.Cust
 	return customers
 }
 
-func GenerateCustomerAddresses(customers []ecommerce.Customer, count int, options ...generation.Config) []ecommerce.CustomerAddress {
-	cfg := generation.Options(options)
+func GenerateCustomerAddresses(customers []ecommerce.Customer, count int, cfg generation.Config) []ecommerce.CustomerAddress {
 	rng := cfg.Rand("ecommerce.GenerateCustomerAddresses", 0)
 	fake := cfg.Faker("ecommerce.GenerateCustomerAddresses")
 	if len(customers) == 0 {
@@ -75,8 +73,7 @@ func GenerateCustomerAddresses(customers []ecommerce.Customer, count int, option
 	return addresses
 }
 
-func GenerateSuppliers(count int, options ...generation.Config) []ecommerce.Supplier {
-	cfg := generation.Options(options)
+func GenerateSuppliers(count int, cfg generation.Config) []ecommerce.Supplier {
 	fake := cfg.Faker("ecommerce.GenerateSuppliers")
 	if count <= 0 {
 		return []ecommerce.Supplier{}
@@ -103,8 +100,7 @@ func GenerateProductCategories() []ecommerce.ProductCategory {
 	return categories
 }
 
-func GenerateProducts(count int, supplierIDs []int, categoryIDs []int, options ...generation.Config) []ecommerce.Product {
-	cfg := generation.Options(options)
+func GenerateProducts(count int, supplierIDs []int, categoryIDs []int, cfg generation.Config) []ecommerce.Product {
 	rng := cfg.Rand("ecommerce.GenerateProducts", 0)
 	fake := cfg.Faker("ecommerce.GenerateProducts")
 	if count <= 0 || len(supplierIDs) == 0 {

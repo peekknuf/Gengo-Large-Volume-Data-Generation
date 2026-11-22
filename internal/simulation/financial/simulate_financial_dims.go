@@ -10,8 +10,7 @@ var (
 	exchangeNames = []string{"NASDAQ", "New York Stock Exchange", "London Stock Exchange", "Tokyo Stock Exchange", "Hong Kong Stock Exchange"}
 )
 
-func GenerateCompanies(count int, options ...generation.Config) []financial.Company {
-	cfg := generation.Options(options)
+func GenerateCompanies(count int, cfg generation.Config) []financial.Company {
 	rng := cfg.Rand("financial.GenerateCompanies", 0)
 	fake := cfg.Faker("financial.GenerateCompanies")
 	if count <= 0 {
@@ -29,8 +28,7 @@ func GenerateCompanies(count int, options ...generation.Config) []financial.Comp
 	return companies
 }
 
-func GenerateExchanges(count int, options ...generation.Config) []financial.Exchange {
-	cfg := generation.Options(options)
+func GenerateExchanges(count int, cfg generation.Config) []financial.Exchange {
 	fake := cfg.Faker("financial.GenerateExchanges")
 	if count <= 0 {
 		return []financial.Exchange{}

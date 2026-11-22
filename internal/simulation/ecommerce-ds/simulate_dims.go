@@ -10,8 +10,7 @@ import (
 )
 
 // GenerateStores generates a number of stores.
-func GenerateStores(count int, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateStores(count int, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateStores", 0)
 	stores := make([]interface{}, count)
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
@@ -53,8 +52,7 @@ func GenerateStores(count int, options ...generation.Config) []interface{} {
 }
 
 // GenerateCallCenters generates a number of call centers.
-func GenerateCallCenters(count int, dates []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateCallCenters(count int, dates []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateCallCenters", 0)
 	centers := make([]interface{}, count)
 
@@ -101,8 +99,7 @@ func GenerateCallCenters(count int, dates []int64, options ...generation.Config)
 }
 
 // GenerateCatalogPages generates a number of catalog pages.
-func GenerateCatalogPages(count int, dates []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateCatalogPages(count int, dates []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateCatalogPages", 0)
 	pages := make([]interface{}, count)
 	departments := []string{"Electronics", "Clothing", "Home", "Sports", "Books", "Toys", "Beauty", "Automotive", "Garden", "Health"}
@@ -133,8 +130,7 @@ func GenerateCatalogPages(count int, dates []int64, options ...generation.Config
 }
 
 // GenerateWebSites generates a number of web sites.
-func GenerateWebSites(count int, dates []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateWebSites(count int, dates []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateWebSites", 0)
 	sites := make([]interface{}, count)
 
@@ -174,8 +170,7 @@ func GenerateWebSites(count int, dates []int64, options ...generation.Config) []
 }
 
 // GenerateWebPages generates a number of web pages.
-func GenerateWebPages(count int, dates, customerKeys []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateWebPages(count int, dates, customerKeys []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateWebPages", 0)
 	pages := make([]interface{}, count)
 	pageTypes := []string{"Product", "Category", "Search", "Checkout", "Account", "Home", "About", "Contact"}
@@ -204,8 +199,7 @@ func GenerateWebPages(count int, dates, customerKeys []int64, options ...generat
 }
 
 // GenerateCustomers generates a number of customers.
-func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateCustomers", 0)
 	customers := make([]interface{}, count)
 	firstNames := []string{"John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Lisa", "James", "Jennifer"}
@@ -245,8 +239,7 @@ func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []i
 }
 
 // GenerateCustomerAddresses generates a number of customer addresses.
-func GenerateCustomerAddresses(count int, dates []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateCustomerAddresses(count int, dates []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateCustomerAddresses", 0)
 	addresses := make([]interface{}, count)
 	cities := []string{"New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose"}
@@ -277,8 +270,7 @@ func GenerateCustomerAddresses(count int, dates []int64, options ...generation.C
 }
 
 // GenerateCustomerDemographics generates a number of customer demographics.
-func GenerateCustomerDemographics(count int, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateCustomerDemographics(count int, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateCustomerDemographics", 0)
 	demos := make([]interface{}, count)
 	genders := []string{"M", "F"}
@@ -311,8 +303,7 @@ func GenerateCustomerDemographics(count int, options ...generation.Config) []int
 }
 
 // GenerateHouseholdDemographics generates a number of household demographics.
-func GenerateHouseholdDemographics(count int, incomeBandSKs []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateHouseholdDemographics(count int, incomeBandSKs []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateHouseholdDemographics", 0)
 	demos := make([]interface{}, count)
 	buyPotentials := []string{"<1000", "1000-5000", "5000-10000", "10000-20000", ">20000"}
@@ -334,8 +325,7 @@ func GenerateHouseholdDemographics(count int, incomeBandSKs []int64, options ...
 }
 
 // GenerateItems generates a number of items.
-func GenerateItems(count int, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateItems(count int, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateItems", 0)
 	items := make([]interface{}, count)
 	categories := []string{"Electronics", "Clothing", "Home", "Sports", "Books", "Toys", "Beauty", "Automotive", "Garden", "Health"}
@@ -424,8 +414,7 @@ func GenerateReasons(count int) []interface{} {
 }
 
 // GenerateShipModes generates a fixed set of shipping modes.
-func GenerateShipModes(count int, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateShipModes(count int, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateShipModes", 0)
 	shipModes := make([]interface{}, count)
 	shipTypes := []string{"Ground", "Air", "Sea", "Rail", "Express", "Overnight", "Standard", "Economy"}
@@ -465,8 +454,7 @@ func GenerateIncomeBands(count int) []interface{} {
 }
 
 // GeneratePromotions generates a number of promotions.
-func GeneratePromotions(count int, dates []int64, itemSKs []int64, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GeneratePromotions(count int, dates []int64, itemSKs []int64, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GeneratePromotions", 0)
 	promotions := make([]interface{}, count)
 	promoTypes := []string{"Discount", "Coupon", "Bundle", "BOGO", "Clearance", "Seasonal", "New Customer", "Loyalty", "Referral", "Flash Sale"}
@@ -504,8 +492,7 @@ func GeneratePromotions(count int, dates []int64, itemSKs []int64, options ...ge
 }
 
 // GenerateWarehouses generates a number of warehouses.
-func GenerateWarehouses(count int, options ...generation.Config) []interface{} {
-	cfg := generation.Options(options)
+func GenerateWarehouses(count int, cfg generation.Config) []interface{} {
 	rng := cfg.Rand("ecommerce-ds.GenerateWarehouses", 0)
 	warehouses := make([]interface{}, count)
 	states := []string{"CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI"}

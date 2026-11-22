@@ -152,8 +152,7 @@ func (s *AliasSampler) Sample(rng *rand.Rand) int {
 	return s.ids[s.alias[i]]
 }
 
-func GenerateECommerceModelData(numOrders, numItemsTotal int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDs []int, outputDir, format string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func GenerateECommerceModelData(numOrders, numItemsTotal int, customerIDs []int, customerAddresses []ecommercemodels.CustomerAddress, productDetails []ecommercemodels.ProductDetails, productIDs []int, outputDir, format string, cfg generation.Config) error {
 	if numOrders < 0 || numItemsTotal < numOrders || int64(numItemsTotal) > 10*int64(numOrders) || numItemsTotal > math.MaxInt32 {
 		return fmt.Errorf("order items require 1 to 10 rows per order and IDs within int32")
 	}

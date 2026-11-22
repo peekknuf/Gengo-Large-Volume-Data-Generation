@@ -8,8 +8,7 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/medical"
 )
 
-func GeneratePatients(count int, options ...generation.Config) []medical.Patient {
-	cfg := generation.Options(options)
+func GeneratePatients(count int, cfg generation.Config) []medical.Patient {
 	fake := cfg.Faker("medical.GeneratePatients")
 	rng := cfg.Rand("medical.patient_dates", 0)
 	start := cfg.AsOf.AddDate(-86, 0, 0).UnixMicro()
@@ -30,8 +29,7 @@ func GeneratePatients(count int, options ...generation.Config) []medical.Patient
 	return patients
 }
 
-func GenerateDoctors(count int, options ...generation.Config) []medical.Doctor {
-	cfg := generation.Options(options)
+func GenerateDoctors(count int, cfg generation.Config) []medical.Doctor {
 	rng := cfg.Rand("medical.GenerateDoctors", 0)
 	fake := cfg.Faker("medical.GenerateDoctors")
 	if count <= 0 {
@@ -49,8 +47,7 @@ func GenerateDoctors(count int, options ...generation.Config) []medical.Doctor {
 	return doctors
 }
 
-func GenerateClinics(count int, options ...generation.Config) []medical.Clinic {
-	cfg := generation.Options(options)
+func GenerateClinics(count int, cfg generation.Config) []medical.Clinic {
 	fake := cfg.Faker("medical.GenerateClinics")
 	if count <= 0 {
 		return []medical.Clinic{}

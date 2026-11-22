@@ -8,7 +8,6 @@ import (
 	"hash/fnv"
 	legacyrand "math/rand"
 	randv2 "math/rand/v2"
-	"runtime"
 	"time"
 
 	gofakeit "github.com/brianvoe/gofakeit/v6"
@@ -64,18 +63,6 @@ func (c Config) Validate() error {
 		return fmt.Errorf("as-of must be midnight UTC")
 	}
 	return nil
-}
-
-// Options preserves existing internal callers that do not supply configuration.
-func Options(options []Config) Config {
-	if len(options) > 0 {
-		return options[0]
-	}
-	c, err := Resolve(nil, "", DefaultRowsPerFile, runtime.GOMAXPROCS(0))
-	if err != nil {
-		panic(err)
-	}
-	return c
 }
 
 // StreamSeed pins FNV-1a of the table name, followed by SplitMix64 mixing.

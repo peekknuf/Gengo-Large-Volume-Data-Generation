@@ -9,6 +9,10 @@ The seed is an unsigned 64-bit integer. Zero is a valid seed. When omitted,
 Gengo chooses a seed once and reports it. The default reference date is today
 in UTC. `--as-of` accepts `YYYY-MM-DD`, from 1941-01-01 through 9999-12-31.
 
+The CLI and profiling command resolve defaults once before generation. Internal
+generation functions require an explicit `generation.Config` and pass it through
+to table generators and writers. They do not choose fresh seeds or dates.
+
 `--size` estimates row counts. Repeat `--rows table=count` to override individual
 counts, using names such as `patients`, `appointments`, `companies`,
 `daily_stock_prices`, `order_headers`, and `store_sales`. Parent dimensions must

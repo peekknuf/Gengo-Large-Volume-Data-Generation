@@ -31,8 +31,7 @@ func generateAppointmentsChunk(startID, count int, patients []medical.Patient, d
 
 type MedicalRowCounts struct{ Patients, Doctors, Clinics, Appointments int }
 
-func GenerateMedicalModelData(counts MedicalRowCounts, patients []medical.Patient, doctors []medical.Doctor, clinics []medical.Clinic, format, outputDir string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func GenerateMedicalModelData(counts MedicalRowCounts, patients []medical.Patient, doctors []medical.Doctor, clinics []medical.Clinic, format, outputDir string, cfg generation.Config) error {
 	return generation.Partitions(context.Background(), counts.Appointments, cfg, func(ctx context.Context, p generation.Partition) error {
 		rows := generateAppointmentsChunk(p.Start+1, p.Count, patients, doctors, clinics, cfg)
 		if err := ctx.Err(); err != nil {

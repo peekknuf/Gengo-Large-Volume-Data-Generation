@@ -3,12 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 
 	"github.com/peekknuf/Gengo/internal/core"
+	"github.com/peekknuf/Gengo/internal/generation"
 )
 
 func main() {
+	cfg, err := generation.Resolve(nil, "", generation.DefaultRowsPerFile, runtime.GOMAXPROCS(0))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "configuration error: %v\n", err)
+		os.Exit(1)
+	}
 	counts, err := core.CalculateECommerceRowCounts(10)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sizing error: %v\n", err)
@@ -32,7 +39,7 @@ func main() {
 	defer pprof.StopCPUProfile()
 
 	fmt.Println("Starting profiled ecommerce 10GB CSV generation...")
-	if err := core.GenerateModelData("ecommerce", counts, "csv", "10"); err != nil {
+	if err := core.GenerateModelData("ecommerce", counts, "csv", "10", cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

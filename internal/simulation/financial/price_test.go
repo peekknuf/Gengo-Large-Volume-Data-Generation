@@ -8,15 +8,21 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/peekknuf/Gengo/internal/generation"
 	"github.com/peekknuf/Gengo/internal/models/financial"
 )
 
 func TestPriceDistribution(t *testing.T) {
+	seed := uint64(0)
+	cfg, err := generation.Resolve(&seed, "2026-11-21", 100000, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	companies := []financial.Company{{CompanyID: 1}, {CompanyID: 2}, {CompanyID: 3}}
 	exchanges := []financial.Exchange{{ExchangeID: 1}}
 	for _, count := range []int{0, 2, 3, 17} {
 		dir := t.TempDir()
-		err := generateAndWriteDailyStockPricesConcurrently(count, companies, exchanges, "csv", dir)
+		err := generateAndWriteDailyStockPricesConcurrently(count, companies, exchanges, "csv", dir, cfg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,10 +60,10 @@ func TestPriceDistribution(t *testing.T) {
 			seen[id] = true
 		}
 	}
-	if err := generateAndWriteDailyStockPricesConcurrently(1, nil, exchanges, "csv", t.TempDir()); err == nil {
+	if err := generateAndWriteDailyStockPricesConcurrently(1, nil, exchanges, "csv", t.TempDir(), cfg); err == nil {
 		t.Fatal("accepted prices without companies")
 	}
-	for _, p := range generateStockPricesForCompanies(companies, exchanges, 10000, 1, 1) {
+	for _, p := range generateStockPricesForCompanies(companies, exchanges, 10000, 1, 1, cfg) {
 		if !(p.LowPrice > 0 && p.LowPrice <= p.OpenPrice && p.OpenPrice <= p.HighPrice && p.LowPrice <= p.ClosePrice && p.ClosePrice <= p.HighPrice) || math.IsInf(p.HighPrice, 0) {
 			t.Fatalf("invalid price %+v", p)
 		}

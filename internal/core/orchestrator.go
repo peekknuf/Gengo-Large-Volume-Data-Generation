@@ -50,8 +50,8 @@ type ECommerceDSRowCounts struct {
 }
 
 // GenerateModelData orchestrates the generation and writing of the relational model.
-func GenerateModelData(modelType string, counts interface{}, format string, outputDir string, options ...generation.Config) error {
-	return GenerateRun(RunPlan{Model: modelType, Rows: counts, Format: format, Config: generation.Options(options)}, outputDir)
+func GenerateModelData(modelType string, counts interface{}, format string, outputDir string, cfg generation.Config) error {
+	return GenerateRun(RunPlan{Model: modelType, Rows: counts, Format: format, Config: cfg}, outputDir)
 }
 
 func GenerateRun(plan RunPlan, outputDir string) error {
@@ -159,8 +159,7 @@ func checkEmptyDestination(path string) error {
 	return nil
 }
 
-func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format string, outputDir string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func generateECommerceDSDataConcurrently(counts ECommerceDSRowCounts, format string, outputDir string, cfg generation.Config) error {
 
 	var items []interface{}
 	var customers []interface{}
@@ -268,8 +267,7 @@ func getSKsFromSlice(slice []interface{}) []int64 {
 	return sks
 }
 
-func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string, outputDir string, cfg generation.Config) error {
 	var writersWg sync.WaitGroup
 	errChan := make(chan error, 10)
 
@@ -378,8 +376,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	return ecommerce.GenerateECommerceModelData(counts.OrderHeaders, counts.OrderItems, customerIDs, customerAddresses, productDetails, productIDsForSampling, outputDir, format, cfg)
 }
 
-func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCounts, format string, outputDir string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCounts, format string, outputDir string, cfg generation.Config) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 3)
 
@@ -423,8 +420,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 	return financialsimulation.GenerateFinancialModelData(counts, companies, exchanges, format, outputDir, cfg)
 }
 
-func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, format string, outputDir string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, format string, outputDir string, cfg generation.Config) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 4)
 

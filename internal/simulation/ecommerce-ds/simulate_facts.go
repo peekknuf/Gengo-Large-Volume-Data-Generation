@@ -382,8 +382,7 @@ func writeSaleShards(parent context.Context, count int, dir, channel, format str
 }
 
 // GenerateStoreSalesOptimized generates store sales using worker-based file sharding
-func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, storeSKs, promoSKs []int64, outputDir string, format string, cfg generation.Config) error {
 	if count <= 0 {
 		return nil
 	}
@@ -720,8 +719,7 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 }
 
 // GenerateCatalogSalesOptimized generates catalog sales using worker-based file sharding
-func GenerateCatalogSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func GenerateCatalogSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string, cfg generation.Config) error {
 	if count <= 0 {
 		return nil
 	}
@@ -1037,8 +1035,7 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 }
 
 // GenerateWebSalesOptimized generates web sales using worker-based file sharding
-func GenerateWebSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func GenerateWebSalesOptimized(ctx context.Context, count int, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, outputDir string, format string, cfg generation.Config) error {
 	if count <= 0 {
 		return nil
 	}

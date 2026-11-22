@@ -111,6 +111,7 @@ Concrete abstractions are introduced alongside working implementations.
 
 - [x] Integrity fixes and exact declared row counts.
 - [x] Seeds, reference dates, stable fact partitions, and manifests.
+- [x] Explicit generation configuration throughout generators, with defaults resolved at command boundaries.
 - [x] Windows build, tests, and vet checks, including eight generation combinations.
 - [x] Inactive generator framework and duplicate writer paths removed, with seeded output compatibility checked.
 - [ ] Linux and race-check results verified.

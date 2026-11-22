@@ -34,8 +34,7 @@ func (s *priceSeries) next(id int64) financial.DailyStockPrice {
 	return row
 }
 
-func generateStockPricesForCompanies(companies []financial.Company, exchanges []financial.Exchange, numPricesPerCompany, extra int, priceIDStart int64, options ...generation.Config) []financial.DailyStockPrice {
-	cfg := generation.Options(options)
+func generateStockPricesForCompanies(companies []financial.Company, exchanges []financial.Exchange, numPricesPerCompany, extra int, priceIDStart int64, cfg generation.Config) []financial.DailyStockPrice {
 	prices := make([]financial.DailyStockPrice, 0, len(companies)*numPricesPerCompany+extra)
 	for i, c := range companies {
 		count := numPricesPerCompany
@@ -50,8 +49,7 @@ func generateStockPricesForCompanies(companies []financial.Company, exchanges []
 	}
 	return prices
 }
-func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []financial.Company, exchanges []financial.Exchange, format, outputDir string, options ...generation.Config) error {
-	cfg := generation.Options(options)
+func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []financial.Company, exchanges []financial.Exchange, format, outputDir string, cfg generation.Config) error {
 	if numPrices < 0 {
 		return fmt.Errorf("stock price count must be nonnegative")
 	}
@@ -118,6 +116,6 @@ func generateAndWriteDailyStockPricesConcurrently(numPrices int, companies []fin
 
 type FinancialRowCounts struct{ Companies, Exchanges, DailyStockPrices int }
 
-func GenerateFinancialModelData(counts FinancialRowCounts, companies []financial.Company, exchanges []financial.Exchange, format, outputDir string, options ...generation.Config) error {
-	return generateAndWriteDailyStockPricesConcurrently(counts.DailyStockPrices, companies, exchanges, format, outputDir, options...)
+func GenerateFinancialModelData(counts FinancialRowCounts, companies []financial.Company, exchanges []financial.Exchange, format, outputDir string, cfg generation.Config) error {
+	return generateAndWriteDailyStockPricesConcurrently(counts.DailyStockPrices, companies, exchanges, format, outputDir, cfg)
 }
