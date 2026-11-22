@@ -1,6 +1,7 @@
 # Gengo product direction
 
 Agreed 21 November 2026.
+Workload experiment priorities updated 22 November 2026.
 
 ## Purpose
 
@@ -21,7 +22,7 @@ identities, experiment scheduling, thresholds, and result formats.
 | Primary outcome | Capacity curves across increasing concurrency, comparing direct and pooled connections with throughput, latency percentiles, errors, and timeouts. |
 | Workloads | Custom SQL files and built-in point-lookup, mixed read/write, and join/aggregation presets. |
 | Connection behavior | Persistent clients first, followed by reconnect-per-transaction traffic and connection bursts. |
-| Targets | Existing local and remote endpoints, plus a repeatable local PostgreSQL and PgBouncer reference environment. |
+| Targets | Existing Supabase direct, shared Supavisor, and dedicated PgBouncer endpoints first. A local PostgreSQL and PgBouncer reference environment is optional later work. |
 | Execution | pgbench for the first version, with Gengo-owned contracts that a future Go runner can reuse. |
 | Load controls | Both concurrency-driven load and target arrival rates. Reports identify the load model and achieved rate. |
 | Telemetry | Client measurements on every run. PostgreSQL and pooler telemetry when access permits, with availability recorded. |
@@ -62,16 +63,41 @@ configuration, and available software versions.
 5. Sweep concurrency with explicit warm-up and measurement periods.
 6. Save a result and compare experiments using identical scenario settings.
 
-Large-scale experiments depend on the existing memory-budget and bounded-streaming
-work. Later increments add the other models, workload presets, arrival-rate
-control, telemetry, connection churn, and richer comparisons.
+## Current delivery priority
+
+Focus on workload experiments against the existing Supabase connections. The
+customer-lookup concurrency sweep and offline comparisons already work. Extend
+that workflow in this order:
+
+1. Add custom SQL files to the existing concurrency sweeps, saved results, and
+   comparisons. Record workload identity so changed SQL cannot silently compare
+   as the same workload.
+2. Add read and write experiments with explicit starting-state policies. Support
+   setup and reset SQL or declared state reuse for custom workloads. Built-in
+   write workloads restore Gengo-managed state.
+3. Add target arrival rates. Distinguish requested rate, achieved throughput,
+   skipped work, errors, and available latency measurements.
+4. Add connection behavior experiments, including reconnect-per-transaction
+   traffic, connection bursts, and protocol comparisons where targets support
+   them. Persistent clients remain the baseline.
+
+Add repetitions and vary endpoint order as these experiments expand. Collect
+available Supabase Metrics API measurements alongside client results, with
+collection intervals and unavailable measurements recorded. Telemetry supports
+the workload experiments without becoming a prerequisite for running them.
+
+The local PostgreSQL and PgBouncer reference environment remains optional backlog
+work. Shared generation worker and memory budgets and Linux/race verification
+remain open, but do not gate current Supabase workload experiments. Generation
+memory limits still matter when choosing larger dataset plans.
 
 ## Supabase expansion
 
 Scenario concepts should accommodate actors, identities, actions, and phases.
 The first concrete action is SQL execution. Later actions can cover authentication,
 object uploads/downloads, Edge Function invocation, and Realtime subscriptions.
-Supavisor becomes another connection target with its own observable behavior.
+Shared Supavisor SQL connections are already supported. Broader Supabase service
+scenarios remain later work.
 
 Future experiments can combine these actions into application workflows under
 increasing load. Transport-specific execution belongs to the relevant runner.
@@ -87,7 +113,7 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Windows build, tests, and vet checks, including eight generation combinations.
 - [x] Inactive generator framework and duplicate writer paths removed, with seeded output compatibility checked.
 - [ ] Linux and race-check results verified.
-- [ ] Shared worker and memory budgets before large-scale experiments.
+- [ ] Shared worker and memory budgets for larger dataset generation.
 
 ### First PostgreSQL increment
 
@@ -98,18 +124,25 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Direct, shared transaction, and dedicated transaction endpoint checks with environment-based credentials.
 - [x] CLI import execution with psql, cancellation, timeouts, and retained import scripts.
 - [x] Live PostgreSQL import validation, including counts, constraints, joins, and failed-load rollback.
-- [ ] Local PostgreSQL and PgBouncer reference environment.
 - [x] Versioned YAML scenario loading and validation for read-only customer lookups.
 - [x] Point-lookup preset and pgbench execution using simple protocol.
 - [x] Concurrency sweep, saved JSON results, client latency percentiles, thresholds, and readable report.
-
-### Subsequent increments
-
-- [ ] Target arrival-rate tests, quick/thorough profiles, and repetitions.
-- [ ] Weighted workloads, hot subsets, and reset handling.
-- [ ] PostgreSQL and pooler telemetry.
-- [ ] Explicit protocol comparisons and connection churn.
 - [x] Offline saved-run comparisons with compatibility checks and observed metric/capacity changes.
+
+### Current workload increments
+
+- [ ] Custom SQL files with workload identity in saved results and comparisons.
+- [ ] Read/write workloads with setup, reset, and explicit state-reuse policies.
+- [ ] Target arrival-rate tests with requested and achieved load measurements.
+- [ ] Connection churn, bursts, and supported protocol comparisons.
+- [ ] Quick/thorough profiles, repetitions, and varying endpoint order.
+- [ ] Available Supabase Metrics API collection alongside client measurements.
+
+### Later increments
+
+- [ ] Optional local PostgreSQL and PgBouncer reference environment.
+- [ ] Weighted workloads and hot subsets.
+- [ ] Additional PostgreSQL and pooler telemetry where access permits.
 - [ ] Configurable stop conditions.
 - [ ] Additional generation models and workload presets.
 - [ ] Native Go execution engine.

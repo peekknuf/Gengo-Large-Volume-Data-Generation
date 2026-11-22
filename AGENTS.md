@@ -7,6 +7,13 @@ performance-testing tool, with broader Supabase coverage planned. Read
 [product direction](docs/product-direction.md) for agreed scope and delivery status,
 then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
+Current priority is workload experiments against existing Supabase connections:
+custom SQL, read/write workloads with reset policies, arrival-rate controls, and
+connection behavior. Extend the working concurrency sweeps and saved comparisons.
+Repetitions and available Supabase Metrics API collection support this work. The
+local PostgreSQL/PgBouncer fixture is optional backlog work. Generation budgets
+and Linux/race verification remain open and do not gate these experiments.
+
 Go 1.25 or later is required. The module is github.com/peekknuf/Gengo.
 Generation supports ecommerce, ecommerce-ds, financial, and medical in CSV and
 Parquet. PostgreSQL import planning and execution support ecommerce CSV.

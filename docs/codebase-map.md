@@ -16,6 +16,13 @@ drives pgbench concurrency sweeps with saved JSON results and a terminal summary
 Custom workloads, broader execution controls, telemetry, and
 the local database reference environment remain roadmap work.
 
+The current delivery priority is custom SQL, read/write workloads with explicit
+reset policies, arrival-rate controls, and connection behavior against existing
+Supabase endpoints. Reuse the working concurrency sweeps and offline comparisons.
+Repetitions and available Supabase Metrics API collection support these
+experiments. The local reference environment is optional backlog work. See
+product-direction.md for the agreed order.
+
 ## Generation flow
 
 | Step | Implementation and responsibility |
