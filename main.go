@@ -57,7 +57,6 @@ Example:
 		}
 		fmt.Println("Starting data model generation process...")
 
-		// --- Get User Input from flags or interactive prompts ---
 		dirFlag := outputDir
 		if dryRun && dirFlag == "" {
 			dirFlag = "data"
@@ -76,13 +75,11 @@ Example:
 
 		fmt.Println("\nStarting generation (this might take a while)...")
 
-		// --- Call the Main Generation Orchestrator ---
 		err = core.GenerateRun(core.RunPlan{Model: model, Rows: counts, Format: outputFormat, Config: cfg}, dir)
 		if err != nil {
 			return err
 		}
 
-		// If no error returned from GenerateModelData
 		fmt.Println("\nProcess completed successfully.")
 		return nil
 	},

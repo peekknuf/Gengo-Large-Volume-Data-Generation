@@ -119,7 +119,6 @@ func getCSVHeaders(v interface{}) []string {
 	return headers
 }
 
-// needsQuoting checks if a field needs CSV quoting
 func needsQuoting(field string) bool {
 	for i := 0; i < len(field); i++ {
 		c := field[i]

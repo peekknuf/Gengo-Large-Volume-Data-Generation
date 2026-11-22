@@ -8,7 +8,6 @@ import (
 	"reflect"
 )
 
-// Validate before allocating dimensions or starting generators that sample parent keys.
 func validateRowPlan(model string, counts any) error {
 	var name string
 	switch counts.(type) {
@@ -33,7 +32,6 @@ func validateRowPlan(model string, counts any) error {
 		if n < 0 {
 			return fmt.Errorf("%s count must be nonnegative", field)
 		}
-		// Non-retail dimension keys and order IDs are int32 in the Parquet schema.
 		if model != "ecommerce-ds" && field != "DailyStockPrices" && field != "Appointments" && n > math.MaxInt32 {
 			return fmt.Errorf("%s count exceeds int32 key range", field)
 		}

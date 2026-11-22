@@ -240,7 +240,6 @@ func readLogicalFile(t *testing.T, path, format string) logicalFile {
 			t.Fatal(err)
 		}
 	}
-	// Canonicalize decimal spelling and timestamp precision for both encodings.
 	for _, row := range result.Rows {
 		for j, v := range row {
 			if date, err := time.Parse(time.RFC3339Nano, v); err == nil {
@@ -257,7 +256,6 @@ func readLogicalFile(t *testing.T, path, format string) logicalFile {
 	return result
 }
 
-// Every generated table has its primary key first, except the retail sales.
 func primaryColumn(table string) int {
 	switch table {
 	case "fact_store_sales":
@@ -268,8 +266,6 @@ func primaryColumn(table string) int {
 	return 0
 }
 
-// CSV verification checks every record. Parquet verification reads only the key
-// column and checks its row count against the footer before publishing the run.
 func inspectOutput(path, format, table string) (rows, first, last int64, err error) {
 	column := primaryColumn(table)
 	accept := func(value string) error {

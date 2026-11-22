@@ -30,7 +30,6 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 		return nil
 	}
 
-	// Handle []interface{} case by getting the type of the first element
 	var elemType reflect.Type
 	var isPointer bool
 
@@ -101,12 +100,10 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 	for i := 0; i < sliceLen; i++ {
 		elemVal := sliceVal.Index(i)
 
-		// Handle []interface{} case - need to extract the actual value from the interface
 		if sliceVal.Type().Elem().Kind() == reflect.Interface {
 			if elemVal.IsNil() {
 				continue
 			}
-			// Get the actual value from the interface
 			actualValue := elemVal.Interface()
 			elemVal = reflect.ValueOf(actualValue)
 			if isPointer {
@@ -116,7 +113,6 @@ func WriteSliceToParquet(data interface{}, targetFilename string) (err error) {
 				elemVal = elemVal.Elem()
 			}
 		} else {
-			// Regular slice case
 			if isPointer {
 				if elemVal.IsNil() {
 					continue
@@ -199,9 +195,9 @@ func buildArrowSchema(structType reflect.Type) (*arrow.Schema, error) {
 		case reflect.Int64:
 			arrowType = arrow.PrimitiveTypes.Int64
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32:
-			arrowType = arrow.PrimitiveTypes.Int32 // Promote uint32 to int32
+			arrowType = arrow.PrimitiveTypes.Int32
 		case reflect.Uint64:
-			arrowType = arrow.PrimitiveTypes.Int64 // Promote uint64 to int64
+			arrowType = arrow.PrimitiveTypes.Int64
 		case reflect.Float32:
 			arrowType = arrow.PrimitiveTypes.Float32
 		case reflect.Float64:

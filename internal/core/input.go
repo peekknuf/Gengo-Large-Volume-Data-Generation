@@ -13,7 +13,6 @@ import (
 )
 
 func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, outputDirFlag string, rowOverrides ...string) (modelType string, counts interface{}, format string, outputDir string, err error) {
-	// --- Model Type ---
 	modelType = modelTypeFlag
 	if modelType == "" {
 		fmt.Print("Enter the data model to generate (ecommerce/ecommerce-ds/financial/medical): ")
@@ -28,7 +27,6 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		return
 	}
 
-	// --- Target Size ---
 	targetGB := targetGBFlag
 	if targetGB == 0 {
 		var targetGBStr string
@@ -48,7 +46,6 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		return
 	}
 
-	// --- Output Format (determined before row counts for format-aware sizing) ---
 	format = formatFlag
 	if format == "" {
 		fmt.Print("Enter the desired output format (csv/parquet): ")
@@ -63,7 +60,6 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		return
 	}
 
-	// --- Calculate Row Counts ---
 	switch modelType {
 	case "ecommerce":
 		var ecommerceCounts ECommerceRowCounts
@@ -131,7 +127,6 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 		fmt.Printf("Reasons:           %s\n", utils.AddUnderscores(ecommerceDSCounts.Reasons))
 		fmt.Printf("Ship Modes:        %s\n", utils.AddUnderscores(ecommerceDSCounts.ShipModes))
 
-		// Calculate business metrics
 		totalSales := ecommerceDSCounts.StoreSales + ecommerceDSCounts.WebSales + ecommerceDSCounts.CatalogSales
 		avgOrdersPerCustomer := float64(totalSales) / float64(max(1, ecommerceDSCounts.Customers))
 
@@ -184,7 +179,6 @@ func GetUserInput(modelTypeFlag string, targetGBFlag float64, formatFlag, output
 	fmt.Println("----------------------------------------")
 	fmt.Printf("Note: Final output size may vary due to data generation specifics and compression.\n\n")
 
-	// --- Output Directory ---
 	outputDir = outputDirFlag
 	if outputDir == "" {
 		fmt.Print("Enter the output directory name (will be created if it doesn't exist): ")

@@ -31,10 +31,9 @@ func (d SaleDimensions) datesForShipment(rng *rand.Rand) (int64, int64) {
 	return d.Dates[sold], d.Dates[shipped]
 }
 
-// Performance optimization constants
 const (
-	bufferSize     = 64 << 20 // 64MB buffer for NVMe optimization (increased from 32MB)
-	flushBatchSize = 50000    // Batch size for periodic flushes (increased from 10K)
+	bufferSize     = 64 << 20
+	flushBatchSize = 50000
 )
 
 // AliasSampler implements O(1) weighted sampling using Vose's alias method
@@ -51,30 +50,24 @@ func NewAliasSampler64(ids []int64) (*AliasSampler, error) {
 		return nil, fmt.Errorf("cannot build sampler from empty ID list")
 	}
 	if n == 1 {
-		// trivial case
 		return &AliasSampler{ids: ids, prob: []float64{1.0}, alias: []int{0}}, nil
 	}
 
-	// --- 1. Build raw weights ---
 	weights := make([]float64, n)
 	var total float64
 	for i := 0; i < n; i++ {
-		// same weighting scheme: 1/sqrt(i+1)
 		w := 1.0 / math.Sqrt(float64(i+1))
 		weights[i] = w
 		total += w
 	}
 
-	// normalize
 	for i := 0; i < n; i++ {
 		weights[i] = weights[i] * float64(n) / total
 	}
 
-	// --- 2. Initialize structures ---
 	prob := make([]float64, n)
 	alias := make([]int, n)
 
-	// two stacks: small and large
 	small := make([]int, 0, n)
 	large := make([]int, 0, n)
 
@@ -86,7 +79,6 @@ func NewAliasSampler64(ids []int64) (*AliasSampler, error) {
 		}
 	}
 
-	// --- 3. Build tables ---
 	for len(small) > 0 && len(large) > 0 {
 		s := small[len(small)-1]
 		small = small[:len(small)-1]
@@ -104,7 +96,6 @@ func NewAliasSampler64(ids []int64) (*AliasSampler, error) {
 		}
 	}
 
-	// whatever remains has prob = 1
 	for _, i := range append(small, large...) {
 		prob[i] = 1.0
 		alias[i] = i
@@ -113,7 +104,7 @@ func NewAliasSampler64(ids []int64) (*AliasSampler, error) {
 	return &AliasSampler{
 		prob:  prob,
 		alias: alias,
-		ids:   append([]int64(nil), ids...), // copy
+		ids:   append([]int64(nil), ids...),
 	}, nil
 }
 
@@ -122,18 +113,14 @@ func (s *AliasSampler) Sample(rng *rand.Rand) int64 {
 	if len(s.ids) == 1 {
 		return s.ids[0]
 	}
-	// pick a column
 	i := rng.Intn(len(s.ids))
-	// biased coin flip
 	if rng.Float64() < s.prob[i] {
 		return s.ids[i]
 	}
 	return s.ids[s.alias[i]]
 }
 
-// appendPrice appends a float-like value with 2 decimal places
-// e.g. 1234 -> "12.34"
-func appendPrice(buf []byte, cents int64) []byte {
+func appendPriceCents(buf []byte, cents int64) []byte {
 	if cents < 0 {
 		buf = append(buf, '-')
 		cents = -cents
@@ -145,13 +132,12 @@ func appendPrice(buf []byte, cents int64) []byte {
 	buf = strconv.AppendInt(buf, intPart, 10)
 	buf = append(buf, '.')
 	if fracPart < 10 {
-		buf = append(buf, '0') // always two digits
+		buf = append(buf, '0')
 	}
 	buf = strconv.AppendInt(buf, fracPart, 10)
 	return buf
 }
 
-// High-performance worker function for generating store sales with direct file writing
 func generateStoreSalesWorker(ctx context.Context, count int, startTicket int64, dims SaleDimensions, itemSampler, customerSampler, storeSampler, promoSampler *AliasSampler, filename string, rng *rand.Rand, format string) (err error) {
 	if count <= 0 {
 		return nil
@@ -169,15 +155,11 @@ func generateStoreSalesWorker(ctx context.Context, count int, startTicket int64,
 	writer := bufio.NewWriterSize(file, bufferSize)
 	defer func() { err = errors.Join(err, writer.Flush()) }()
 
-	// Write header
 	header := "ss_sold_date_sk,ss_sold_time_sk,ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_quantity,ss_wholesale_cost,ss_list_price,ss_sales_price,ss_ext_discount_amt,ss_ext_sales_price,ss_ext_wholesale_cost,ss_ext_list_price,ss_ext_tax,ss_coupon_amt,ss_net_paid,ss_net_paid_inc_tax,ss_net_profit\n"
 	if _, err := writer.WriteString(header); err != nil {
 		return err
 	}
 
-	// Pre-calculate common ranges for better performance
-
-	// Pre-allocate buffer for row construction (increased to 4KB to reduce allocations)
 	rowBuf := make([]byte, 0, 4096)
 
 	for i := 0; i < count; i++ {
@@ -185,27 +167,26 @@ func generateStoreSalesWorker(ctx context.Context, count int, startTicket int64,
 			return ctx.Err()
 		}
 		buyer := dims.Customers[customerSampler.Sample(rng)]
-		rowBuf = rowBuf[:0] // Reset buffer
+		rowBuf = rowBuf[:0]
 
 		quantity := rng.Intn(10) + 1
-		listPriceCents := int64(1000 + rng.Intn(100000))                 // 10.00 to 1010.00
-		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100 // 80-100% of list price
-		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100 // 60-80% of sales price
+		listPriceCents := int64(1000 + rng.Intn(100000))
+		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
+		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
 
-		// Build CSV row with byte-level formatting using weighted sampling and pre-calculated ranges
-		rowBuf = strconv.AppendInt(rowBuf, dims.Dates[rng.Intn(len(dims.Dates))], 10) // date_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Dates[rng.Intn(len(dims.Dates))], 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10) // time_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, itemSampler.Sample(rng), 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, buyer.ID, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, buyer.Demographics, 10) // cdemo_sk
+		rowBuf = strconv.AppendInt(rowBuf, buyer.Demographics, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, buyer.Household, 10) // hdemo_sk
+		rowBuf = strconv.AppendInt(rowBuf, buyer.Household, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, buyer.Address, 10) // addr_sk
+		rowBuf = strconv.AppendInt(rowBuf, buyer.Address, 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, storeSampler.Sample(rng), 10)
 		rowBuf = append(rowBuf, ',')
@@ -215,47 +196,45 @@ func generateStoreSalesWorker(ctx context.Context, count int, startTicket int64,
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, int64(quantity), 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, wholesaleCents)
+		rowBuf = appendPriceCents(rowBuf, wholesaleCents)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, listPriceCents)
+		rowBuf = appendPriceCents(rowBuf, listPriceCents)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, salesPriceCents)
+		rowBuf = appendPriceCents(rowBuf, salesPriceCents)
 		rowBuf = append(rowBuf, ',')
-		// Extended calculations
 		extDiscountAmt := (listPriceCents - salesPriceCents) * int64(quantity)
 		extSalesPrice := salesPriceCents * int64(quantity)
 		extWholesaleCost := wholesaleCents * int64(quantity)
 		extListPrice := listPriceCents * int64(quantity)
-		extTax := extSalesPrice * 8 / 100 // 8% tax
+		extTax := extSalesPrice * 8 / 100
 		couponAmt := int64(0)
-		netPaid := extSalesPrice // Unit sales price already includes the discount.
+		netPaid := extSalesPrice
 		netPaidIncTax := netPaid + extTax
 		netProfit := netPaid - extWholesaleCost
 
-		rowBuf = appendPrice(rowBuf, extDiscountAmt)
+		rowBuf = appendPriceCents(rowBuf, extDiscountAmt)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extSalesPrice)
+		rowBuf = appendPriceCents(rowBuf, extSalesPrice)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extWholesaleCost)
+		rowBuf = appendPriceCents(rowBuf, extWholesaleCost)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extListPrice)
+		rowBuf = appendPriceCents(rowBuf, extListPrice)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extTax)
+		rowBuf = appendPriceCents(rowBuf, extTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, couponAmt)
+		rowBuf = appendPriceCents(rowBuf, couponAmt)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaid)
+		rowBuf = appendPriceCents(rowBuf, netPaid)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncTax)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netProfit)
+		rowBuf = appendPriceCents(rowBuf, netProfit)
 		rowBuf = append(rowBuf, '\n')
 
 		if _, err := writer.Write(rowBuf); err != nil {
 			return err
 		}
 
-		// Periodic flush for better performance
 		if (i+1)%flushBatchSize == 0 {
 			if err := writer.Flush(); err != nil {
 				return err
@@ -348,7 +327,7 @@ func generateStoreSalesWorkerParquet(ctx context.Context, count int, startTicket
 		extWholesaleCost := wholesaleCents * int64(quantity)
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
-		netPaid := extSalesPrice // Unit sales price already includes the discount.
+		netPaid := extSalesPrice
 		netPaidIncTax := netPaid + extTax
 		netProfit := netPaid - extWholesaleCost
 
@@ -409,7 +388,6 @@ func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimens
 		return nil
 	}
 
-	// Create weighted samplers for key dimensions
 	itemSampler, err := NewAliasSampler64(itemSKs)
 	if err != nil {
 		return fmt.Errorf("failed to create item sampler: %w", err)
@@ -436,7 +414,6 @@ func GenerateStoreSalesOptimized(ctx context.Context, count int, dims SaleDimens
 	}, cfg)
 }
 
-// High-performance worker function for generating catalog sales with direct file writing
 func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64, dims SaleDimensions, itemSKs, callCenterSKs, catalogPageSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) (err error) {
 	if count <= 0 {
 		return nil
@@ -454,13 +431,12 @@ func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64
 	writer := bufio.NewWriterSize(file, bufferSize)
 	defer func() { err = errors.Join(err, writer.Flush()) }()
 
-	// Write header
 	header := "cs_sold_date_sk,cs_sold_time_sk,cs_ship_date_sk,cs_bill_customer_sk,cs_bill_cdemo_sk,cs_bill_hdemo_sk,cs_bill_addr_sk,cs_ship_customer_sk,cs_ship_cdemo_sk,cs_ship_hdemo_sk,cs_ship_addr_sk,cs_call_center_sk,cs_catalog_page_sk,cs_ship_mode_sk,cs_warehouse_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_quantity,cs_wholesale_cost,cs_list_price,cs_sales_price,cs_ext_discount_amt,cs_ext_sales_price,cs_ext_wholesale_cost,cs_ext_list_price,cs_ext_tax,cs_coupon_amt,cs_ext_ship_cost,cs_net_paid,cs_net_paid_inc_tax,cs_net_paid_inc_ship,cs_net_paid_inc_ship_tax,cs_net_profit\n"
 	if _, err := writer.WriteString(header); err != nil {
 		return err
 	}
 
-	rowBuf := make([]byte, 0, 4096) // Increased to 4KB to reduce allocations
+	rowBuf := make([]byte, 0, 4096)
 
 	for i := 0; i < count; i++ {
 		if i%1024 == 0 && ctx.Err() != nil {
@@ -476,11 +452,11 @@ func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
 		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
 
-		rowBuf = strconv.AppendInt(rowBuf, sold, 10) // sold_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, sold, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10) // sold_time_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, shipped, 10) // ship_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, shipped, 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, bill.ID, 10)
 		rowBuf = append(rowBuf, ',')
@@ -514,11 +490,11 @@ func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, int64(quantity), 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, wholesaleCents)
+		rowBuf = appendPriceCents(rowBuf, wholesaleCents)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, listPriceCents)
+		rowBuf = appendPriceCents(rowBuf, listPriceCents)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, salesPriceCents)
+		rowBuf = appendPriceCents(rowBuf, salesPriceCents)
 		rowBuf = append(rowBuf, ',')
 
 		extDiscountAmt := (listPriceCents - salesPriceCents) * int64(quantity)
@@ -527,36 +503,36 @@ func generateCatalogSalesWorker(ctx context.Context, count int, startOrder int64
 		extListPrice := listPriceCents * int64(quantity)
 		extTax := extSalesPrice * 8 / 100
 		couponAmt := int64(0)
-		extShipCost := int64(500 + rng.Intn(2000)) // 5.00 to 25.00
-		netPaid := extSalesPrice                   // Unit sales price already includes the discount.
+		extShipCost := int64(500 + rng.Intn(2000))
+		netPaid := extSalesPrice
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
 		netProfit := netPaid - extWholesaleCost
 
-		rowBuf = appendPrice(rowBuf, extDiscountAmt)
+		rowBuf = appendPriceCents(rowBuf, extDiscountAmt)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extSalesPrice)
+		rowBuf = appendPriceCents(rowBuf, extSalesPrice)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extWholesaleCost)
+		rowBuf = appendPriceCents(rowBuf, extWholesaleCost)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extListPrice)
+		rowBuf = appendPriceCents(rowBuf, extListPrice)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extTax)
+		rowBuf = appendPriceCents(rowBuf, extTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, couponAmt)
+		rowBuf = appendPriceCents(rowBuf, couponAmt)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extShipCost)
+		rowBuf = appendPriceCents(rowBuf, extShipCost)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaid)
+		rowBuf = appendPriceCents(rowBuf, netPaid)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncTax)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncShip)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncShip)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncShipTax)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncShipTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netProfit)
+		rowBuf = appendPriceCents(rowBuf, netProfit)
 		rowBuf = append(rowBuf, '\n')
 
 		if _, err := writer.Write(rowBuf); err != nil {
@@ -687,7 +663,7 @@ func generateCatalogSalesWorkerParquet(ctx context.Context, count int, startOrde
 		key15 := itemSKs[rng.Intn(len(itemSKs))]
 		key16 := promoSKs[rng.Intn(len(promoSKs))]
 		extShipCost := int64(500 + rng.Intn(2000))
-		netPaid := extSalesPrice // Unit sales price already includes the discount.
+		netPaid := extSalesPrice
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
@@ -755,7 +731,6 @@ func GenerateCatalogSalesOptimized(ctx context.Context, count int, dims SaleDime
 	}, cfg)
 }
 
-// High-performance worker function for generating web sales with direct file writing
 func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, dims SaleDimensions, itemSKs, webPageSKs, webSiteSKs, shipModeSKs, warehouseSKs, promoSKs []int64, filename string, rng *rand.Rand, format string) (err error) {
 	if count <= 0 {
 		return nil
@@ -773,13 +748,12 @@ func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, di
 	writer := bufio.NewWriterSize(file, bufferSize)
 	defer func() { err = errors.Join(err, writer.Flush()) }()
 
-	// Write header
 	header := "ws_sold_date_sk,ws_sold_time_sk,ws_ship_date_sk,ws_item_sk,ws_bill_customer_sk,ws_bill_cdemo_sk,ws_bill_hdemo_sk,ws_bill_addr_sk,ws_ship_customer_sk,ws_ship_cdemo_sk,ws_ship_hdemo_sk,ws_ship_addr_sk,ws_web_page_sk,ws_web_site_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_promo_sk,ws_order_number,ws_quantity,ws_wholesale_cost,ws_list_price,ws_sales_price,ws_ext_discount_amt,ws_ext_sales_price,ws_ext_wholesale_cost,ws_ext_list_price,ws_ext_tax,ws_coupon_amt,ws_ext_ship_cost,ws_net_paid,ws_net_paid_inc_tax,ws_net_paid_inc_ship,ws_net_paid_inc_ship_tax,ws_net_profit\n"
 	if _, err := writer.WriteString(header); err != nil {
 		return err
 	}
 
-	rowBuf := make([]byte, 0, 4096) // Increased to 4KB to reduce allocations
+	rowBuf := make([]byte, 0, 4096)
 
 	for i := 0; i < count; i++ {
 		if i%1024 == 0 && ctx.Err() != nil {
@@ -795,11 +769,11 @@ func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, di
 		salesPriceCents := listPriceCents * int64(80+rng.Intn(21)) / 100
 		wholesaleCents := salesPriceCents * int64(60+rng.Intn(21)) / 100
 
-		rowBuf = strconv.AppendInt(rowBuf, sold, 10) // sold_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, sold, 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10) // sold_time_sk
+		rowBuf = strconv.AppendInt(rowBuf, dims.Times[rng.Intn(len(dims.Times))], 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = strconv.AppendInt(rowBuf, shipped, 10) // ship_date_sk
+		rowBuf = strconv.AppendInt(rowBuf, shipped, 10)
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, itemSKs[rng.Intn(len(itemSKs))], 10)
 		rowBuf = append(rowBuf, ',')
@@ -833,11 +807,11 @@ func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, di
 		rowBuf = append(rowBuf, ',')
 		rowBuf = strconv.AppendInt(rowBuf, int64(quantity), 10)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, wholesaleCents)
+		rowBuf = appendPriceCents(rowBuf, wholesaleCents)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, listPriceCents)
+		rowBuf = appendPriceCents(rowBuf, listPriceCents)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, salesPriceCents)
+		rowBuf = appendPriceCents(rowBuf, salesPriceCents)
 		rowBuf = append(rowBuf, ',')
 
 		extDiscountAmt := (listPriceCents - salesPriceCents) * int64(quantity)
@@ -847,35 +821,35 @@ func generateWebSalesWorker(ctx context.Context, count int, startOrder int64, di
 		extTax := extSalesPrice * 8 / 100
 		couponAmt := int64(0)
 		extShipCost := int64(500 + rng.Intn(2000))
-		netPaid := extSalesPrice // Unit sales price already includes the discount.
+		netPaid := extSalesPrice
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax
 		netProfit := netPaid - extWholesaleCost
 
-		rowBuf = appendPrice(rowBuf, extDiscountAmt)
+		rowBuf = appendPriceCents(rowBuf, extDiscountAmt)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extSalesPrice)
+		rowBuf = appendPriceCents(rowBuf, extSalesPrice)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extWholesaleCost)
+		rowBuf = appendPriceCents(rowBuf, extWholesaleCost)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extListPrice)
+		rowBuf = appendPriceCents(rowBuf, extListPrice)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extTax)
+		rowBuf = appendPriceCents(rowBuf, extTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, couponAmt)
+		rowBuf = appendPriceCents(rowBuf, couponAmt)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, extShipCost)
+		rowBuf = appendPriceCents(rowBuf, extShipCost)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaid)
+		rowBuf = appendPriceCents(rowBuf, netPaid)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncTax)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncShip)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncShip)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netPaidIncShipTax)
+		rowBuf = appendPriceCents(rowBuf, netPaidIncShipTax)
 		rowBuf = append(rowBuf, ',')
-		rowBuf = appendPrice(rowBuf, netProfit)
+		rowBuf = appendPriceCents(rowBuf, netProfit)
 		rowBuf = append(rowBuf, '\n')
 
 		if _, err := writer.Write(rowBuf); err != nil {
@@ -1006,7 +980,7 @@ func generateWebSalesWorkerParquet(ctx context.Context, count int, startOrder in
 		key15 := warehouseSKs[rng.Intn(len(warehouseSKs))]
 		key16 := promoSKs[rng.Intn(len(promoSKs))]
 		extShipCost := int64(500 + rng.Intn(2000))
-		netPaid := extSalesPrice // Unit sales price already includes the discount.
+		netPaid := extSalesPrice
 		netPaidIncTax := netPaid + extTax
 		netPaidIncShip := netPaid + extShipCost
 		netPaidIncShipTax := netPaidIncShip + extTax

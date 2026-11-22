@@ -279,7 +279,6 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 	var products []ecommercemodels.Product
 	var productCategories []ecommercemodels.ProductCategory
 
-	// --- Concurrent Dimension Generation with Correct Parallelism ---
 	var customersWg, suppliersWg, categoriesWg, productsWg sync.WaitGroup
 	customersWg.Add(1)
 	suppliersWg.Add(1)
@@ -363,7 +362,6 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 		customerIDs[i] = c.CustomerID
 	}
 
-	// Build slice instead of map for product details (optimization #5)
 	maxProductID := 0
 	for _, p := range products {
 		if p.ProductID > maxProductID {
@@ -383,7 +381,7 @@ func generateECommerceDataConcurrently(counts ECommerceRowCounts, format string,
 func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCounts, format string, outputDir string, options ...generation.Config) error {
 	cfg := generation.Options(options)
 	var wg sync.WaitGroup
-	errChan := make(chan error, 3) // 2 dims + 1 fact operation
+	errChan := make(chan error, 3)
 
 	var companies []financialmodels.Company
 	var exchanges []financialmodels.Exchange
@@ -428,7 +426,7 @@ func generateFinancialDataConcurrently(counts financialsimulation.FinancialRowCo
 func generateMedicalDataConcurrently(counts medicalsimulation.MedicalRowCounts, format string, outputDir string, options ...generation.Config) error {
 	cfg := generation.Options(options)
 	var wg sync.WaitGroup
-	errChan := make(chan error, 4) // 3 dims + 1 fact operation
+	errChan := make(chan error, 4)
 
 	var patients []medicalmodels.Patient
 	var doctors []medicalmodels.Doctor

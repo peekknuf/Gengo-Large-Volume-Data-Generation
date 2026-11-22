@@ -17,7 +17,6 @@ import (
 	medical "github.com/peekknuf/Gengo/internal/simulation/medical"
 )
 
-// Tables are in dependency order. Each foreign key names a previously checked table.
 type tableContract struct {
 	name, primary string
 	count         int

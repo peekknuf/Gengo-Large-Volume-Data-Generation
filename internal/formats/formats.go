@@ -10,7 +10,6 @@ import (
 )
 
 // AppendValueToBuilder appends a Go value to the correct Arrow builder.
-// This is kept for the Parquet writer.
 func AppendValueToBuilder(bldr array.Builder, val reflect.Value) error {
 	if val.Kind() == reflect.Ptr {
 		if val.IsNil() {

@@ -1,4 +1,3 @@
--- This example owns only the table in this dedicated schema.
 CREATE SCHEMA IF NOT EXISTS gengo_write_example;
 CREATE TABLE IF NOT EXISTS gengo_write_example.accounts (
     id integer PRIMARY KEY,

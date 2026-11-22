@@ -9,14 +9,12 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/ecommerce"
 )
 
-// --- Static Data for Generators ---
 var (
 	emailProviders    = []string{"gmail.com", "yahoo.com", "outlook.com", "aol.com", "protonmail.com", "hey.com"}
 	productCategories = []string{"Electronics", "Clothing", "Home Goods", "Books", "Sports", "Toys", "Grocery", "Automotive", "Health", "Beauty"}
 	addressTypes      = []string{"shipping", "billing"}
 )
 
-// generateCustomers creates a slice of Customer structs.
 func GenerateCustomers(count int, options ...generation.Config) []ecommerce.Customer {
 	cfg := generation.Options(options)
 	rng := cfg.Rand("ecommerce.GenerateCustomers", 0)
@@ -69,7 +67,7 @@ func GenerateCustomerAddresses(customers []ecommerce.Customer, count int, option
 				City:        addrInfo.City,
 				State:       addrInfo.State,
 				Zip:         addrInfo.Zip,
-				Country:     "United States", // Simplified for now
+				Country:     "United States",
 			})
 			addressIDCounter++
 		}

@@ -11,7 +11,6 @@ import (
 	"github.com/peekknuf/Gengo/internal/models/financial"
 )
 
-// A company's RNG and previous close continue across every file boundary.
 type priceSeries struct {
 	rng       *rand.Rand
 	lastClose float64
@@ -35,7 +34,6 @@ func (s *priceSeries) next(id int64) financial.DailyStockPrice {
 	return row
 }
 
-// Retained for the price invariant regression fixture.
 func generateStockPricesForCompanies(companies []financial.Company, exchanges []financial.Exchange, numPricesPerCompany, extra int, priceIDStart int64, options ...generation.Config) []financial.DailyStockPrice {
 	cfg := generation.Options(options)
 	prices := make([]financial.DailyStockPrice, 0, len(companies)*numPricesPerCompany+extra)

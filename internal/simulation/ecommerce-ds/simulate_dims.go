@@ -35,7 +35,7 @@ func GenerateStores(count int, options ...generation.Config) []interface{} {
 			S_Zip:            fmt.Sprintf("%05d", rng.Intn(99999)+1),
 			S_Country:        "USA",
 			S_GmtOffset:      -5.0,
-			S_TaxPrecentage:  0.08 + rng.Float64()*0.05,
+			S_TaxPercentage:  0.08 + rng.Float64()*0.05,
 			S_FloorSpace:     1000 + rng.Intn(4000),
 			S_Hours:          "8am-10pm",
 			S_Manager:        fmt.Sprintf("Manager %d", i+1),
@@ -213,7 +213,7 @@ func GenerateCustomers(count int, dates []int64, cdemoSKs, hdemoSKs, addrSKs []i
 
 	for i := 0; i < count; i++ {
 		if len(cdemoSKs) == 0 || len(hdemoSKs) == 0 || len(addrSKs) == 0 {
-			continue // Skip if required dependencies are not available
+			continue
 		}
 
 		firstName := firstNames[rng.Intn(len(firstNames))]
@@ -319,7 +319,7 @@ func GenerateHouseholdDemographics(count int, incomeBandSKs []int64, options ...
 
 	for i := 0; i < count; i++ {
 		if len(incomeBandSKs) == 0 {
-			continue // Skip if no income bands available
+			continue
 		}
 
 		demos[i] = ecommerceds.HouseholdDemographics{
@@ -413,7 +413,6 @@ func GenerateReasons(count int) []interface{} {
 				R_ReasonDesc: reasonDescs[i],
 			}
 		} else {
-			// If we need more reasons than we have predefined
 			reasons[i] = ecommerceds.Reason{
 				R_ReasonSK:   int64(i + 1),
 				R_ReasonID:   fmt.Sprintf("reason_%d", i+1),
@@ -474,7 +473,7 @@ func GeneratePromotions(count int, dates []int64, itemSKs []int64, options ...ge
 
 	for i := 0; i < count; i++ {
 		if len(itemSKs) == 0 {
-			continue // Skip if no items available
+			continue
 		}
 
 		start := rng.Intn(len(dates))
@@ -596,7 +595,7 @@ func GenerateTimeDim() []interface{} {
 					T_Hour:       h,
 					T_Minute:     m,
 					T_Second:     s,
-					T_TimezoneID: 1, // Default timezone
+					T_TimezoneID: 1,
 					T_AmPm:       amPm,
 					T_Shift:      shift,
 					T_SubShift:   subShift,
@@ -667,7 +666,6 @@ func GenerateDateDim(startYear, endYear int) []interface{} {
 	return dateDims
 }
 
-// Helper functions for date dimension
 func isLeapYear(year int) bool {
 	if year%4 != 0 {
 		return false
