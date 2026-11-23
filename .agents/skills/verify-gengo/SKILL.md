@@ -45,6 +45,16 @@ Credentials come from Gengo's existing dotenv and process-environment handling.
 Process variables take precedence. Pass paths, never passwords or connection
 URLs, on command lines. Do not print or commit `.env`.
 
+For the full named profiles, add `-profiles`. It increases the fixture to 1,000
+customers and runs default quick and thorough customer lookups after the smoke
+checks. Across three targets this adds about 12 minutes. Inspect
+`profile-quick/result.json`, `profile-thorough/result.json`, and
+`profiles_verified: true` in the summary. Threshold failures are reported in
+profile results and allow the next profile to run; execution failures still fail
+verification. This option cannot be combined with `-offline` or `-doctor`.
+Afterward, use `-report-profiles PATH_TO_EVIDENCE` to create an interactive
+`profile-report.html` and its source JSON without database access.
+
 For Supabase telemetry, add `-require-metrics`. This requires `SUPABASE_API_KEY`,
 checks snapshot metadata and file checksums for every experiment, and adds a
 65-second read-only direct experiment at one requested iteration per second.

@@ -11,6 +11,7 @@ measurements, and verify write/reset effects independently in the database.
 - `bench-load`: concurrency and Poisson arrival-rate controls.
 - `bench-connect`: persistent, reconnect, burst, and simple/extended/prepared protocols.
 - `bench-metrics`: optional project-wide Supabase Metrics API snapshots.
+- `bench-profiles`: quick/thorough defaults, explicit overrides, saved identities.
 
 ## How to get to it (user POV)
 
@@ -22,6 +23,11 @@ Scenarios are versioned YAML; workload and lifecycle files are separate SQL file
 Preconditions: Go/psql/pgbench, direct credentials, and credentials for requested poolers.
 
 - Run `go run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct,shared,dedicated`.
+- Add `-profiles` to execute both named profiles without overrides on a seeded
+  1,000-customer fixture. Inspect `profile-quick/result.json` and
+  `profile-thorough/result.json` for 9 and 36 samples respectively with three
+  targets. Thorough must rotate endpoint order across three repetitions. This
+  takes about 12 minutes beyond the short smoke check.
 - Add `-require-metrics` with `SUPABASE_API_KEY` configured to require successful
   snapshots and verify file checksums. Inspect `metrics/result.json` and its
   `.prom` files for at least two scrapes during the added 65-second read-only run.

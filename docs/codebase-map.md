@@ -28,7 +28,7 @@ Custom SQL, read/write state policies, and arrival-rate sweeps now work against
 existing Supabase endpoints. Persistent, reconnect, and burst connection modes
 support simple, extended, and prepared protocols. Repetitions and rotating
 endpoint order record individual samples plus aggregate variation and capacity.
-Available Supabase metrics now work; named experiment profiles are next.
+Available Supabase metrics and named quick/thorough experiment profiles now work.
 Reuse the working sweeps and offline comparisons.
 Repetitions and available Supabase Metrics API collection support these
 experiments. The local reference environment is optional backlog work. See
@@ -126,6 +126,12 @@ one-minute scrapes. Raw Prometheus files retain metric names and labels; result
 metadata records scrape times, checksums, and availability. Phase timestamps
 allow correlation without claiming per-step server latency. Missing telemetry
 never changes capacity. See supabase-metrics.md.
+
+profiles.go resolves versioned quick/thorough defaults before scenario validation.
+Explicit YAML fields override defaults, including zero warm-up; arrival-rate
+sweeps keep their explicit rates without injected concurrency. Saved results
+retain profile identity and resolved controls, and comparisons validate those
+controls without reapplying defaults. See experiment-profiles.md.
 
 bench compare loads two saved results without database access. compare.go rejects
 incomplete or incompatible experiments, pairs target/client steps, and reports

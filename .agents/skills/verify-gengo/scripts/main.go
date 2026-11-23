@@ -29,18 +29,20 @@ import (
 )
 
 type verification struct {
-	Evidence        string   `json:"evidence"`
-	Schema          string   `json:"schema"`
-	Targets         []string `json:"targets"`
-	Status          string   `json:"status"`
-	Database        string   `json:"database"`
-	CleanupVerified bool     `json:"cleanup_verified"`
-	MetricsVerified bool     `json:"metrics_verified"`
-	Error           string   `json:"error,omitempty"`
-	ctx             context.Context
-	binary          string
-	envFile         string
-	requireMetrics  bool
+	Evidence         string   `json:"evidence"`
+	Schema           string   `json:"schema"`
+	Targets          []string `json:"targets"`
+	Status           string   `json:"status"`
+	Database         string   `json:"database"`
+	CleanupVerified  bool     `json:"cleanup_verified"`
+	MetricsVerified  bool     `json:"metrics_verified"`
+	ProfilesVerified bool     `json:"profiles_verified"`
+	Error            string   `json:"error,omitempty"`
+	ctx              context.Context
+	binary           string
+	envFile          string
+	requireMetrics   bool
+	profiles         bool
 }
 
 func main() {
@@ -50,16 +52,25 @@ func main() {
 	offline := flag.Bool("offline", false, "Explicitly skip database checks and workloads")
 	doctor := flag.Bool("doctor", false, "Build and check tools/connections without tests or mutations")
 	requireMetrics := flag.Bool("require-metrics", false, "Require live Supabase metrics snapshots and verify their files")
+	profiles := flag.Bool("profiles", false, "Run full quick and thorough profiles on a seeded 1000-customer fixture")
+	reportProfiles := flag.String("report-profiles", "", "Create an HTML/JSON report from completed profile results in an evidence directory")
 	flag.Parse()
-	if err := verify(*envFile, *targets, *evidence, *offline, *doctor, *requireMetrics); err != nil {
+	if *reportProfiles != "" {
+		if err := writeProfileReport(*reportProfiles); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if err := verify(*envFile, *targets, *evidence, *offline, *doctor, *requireMetrics, *profiles); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func verify(envFile, targets, evidence string, offline, doctor, requireMetrics bool) (err error) {
-	if requireMetrics && (offline || doctor) {
-		return fmt.Errorf("-require-metrics requires the live workload verification")
+func verify(envFile, targets, evidence string, offline, doctor, requireMetrics, profiles bool) (err error) {
+	if (requireMetrics || profiles) && (offline || doctor) {
+		return fmt.Errorf("-require-metrics and -profiles require live workload verification")
 	}
 	module, err := os.ReadFile("go.mod")
 	if err != nil || !strings.Contains(string(module), "module github.com/peekknuf/Gengo") {
@@ -80,7 +91,7 @@ func verify(envFile, targets, evidence string, offline, doctor, requireMetrics b
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
-	v := &verification{Evidence: evidence, Targets: strings.Split(targets, ","), Status: "running", Database: "skipped", ctx: ctx, envFile: envFile, requireMetrics: requireMetrics}
+	v := &verification{Evidence: evidence, Targets: strings.Split(targets, ","), Status: "running", Database: "skipped", ctx: ctx, envFile: envFile, requireMetrics: requireMetrics, profiles: profiles}
 	for _, target := range v.Targets {
 		if target != "direct" && target != "shared" && target != "dedicated" {
 			return fmt.Errorf("targets must be direct,shared,dedicated")
@@ -163,7 +174,13 @@ func verify(envFile, targets, evidence string, offline, doctor, requireMetrics b
 	}
 	dataset := filepath.Join(evidence, "dataset")
 	args := []string{"gen", "--model", "ecommerce", "--size", "0.0001", "--format", "csv", "--seed", "0", "--as-of", "2026-11-21", "--workers", "2", "--rows-per-file", "4", "--output", dataset}
-	for _, row := range strings.Fields("customers=3 customer_addresses=5 suppliers=2 products=4 product_categories=10 order_headers=7 order_items=39") {
+	customerCount := 3
+	addressCount := 5
+	if profiles {
+		customerCount = 1000
+		addressCount = 1000
+	}
+	for _, row := range strings.Fields(fmt.Sprintf("customers=%d customer_addresses=%d suppliers=2 products=4 product_categories=10 order_headers=7 order_items=39", customerCount, addressCount)) {
 		args = append(args, "--rows", row)
 	}
 	if _, err = v.cli("dry-run", append(args, "--dry-run")...); err != nil {
@@ -328,6 +345,12 @@ func verify(envFile, targets, evidence string, offline, doctor, requireMetrics b
 	if observed != "0" {
 		return fmt.Errorf("write workload did not restore its baseline")
 	}
+	if v.profiles {
+		if err = v.profileExperiments(); err != nil {
+			return err
+		}
+		v.ProfilesVerified = true
+	}
 	if v.requireMetrics {
 		if err = v.verifyKeyAbsent(); err != nil {
 			return err
@@ -335,6 +358,39 @@ func verify(envFile, targets, evidence string, offline, doctor, requireMetrics b
 		v.MetricsVerified = true
 	}
 	v.Database = "verified"
+	return nil
+}
+
+func (v *verification) profileExperiments() error {
+	for _, profile := range []struct {
+		name                string
+		levels, repetitions int
+	}{{"quick", 3, 1}, {"thorough", 4, 3}} {
+		scenario := fmt.Sprintf("version: 1\nname: profile-%s\nprofile: %s\ndataset: dataset\nschema: %s\ntargets: [%s]\nworkload: customer-lookup\nseed: 0\nprotocol: simple\nthresholds:\n  max_p95_ms: 250\n  max_error_rate: 0\n  min_tps: 1\n", profile.name, profile.name, v.Schema, strings.Join(v.Targets, ","))
+		name := "profile-" + profile.name
+		if err := v.write(name+".yaml", scenario); err != nil {
+			return err
+		}
+		_, runErr := v.cli(name, "bench", "run", "--scenario", filepath.Join(v.Evidence, name+".yaml"), "--env-file", v.envFile, "--output", filepath.Join(v.Evidence, name))
+		result, err := benchmark.ReadResult(filepath.Join(v.Evidence, name, "result.json"))
+		if err != nil {
+			return errors.Join(runErr, err)
+		}
+		if len(result.Steps) != len(v.Targets)*profile.levels*profile.repetitions || result.Scenario.Profile != profile.name || result.Scenario.ProfileVersion != 1 {
+			return fmt.Errorf("%s profile coverage is incomplete", name)
+		}
+		for _, step := range result.Steps {
+			if step.Measurement == nil || step.Measurement.Status != "completed" || (step.Status != "passed" && step.Status != "failed") {
+				return fmt.Errorf("%s has execution failures", name)
+			}
+		}
+		if runErr != nil && result.Status != "failed" {
+			return runErr
+		}
+		if err := v.checkMetrics(name, result); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -437,24 +493,8 @@ func (v *verification) bench(name, scenario string, expected int) (*benchmark.Re
 	if result.Status != "completed" || len(result.Steps) != expected {
 		return nil, fmt.Errorf("%s has missing/failed steps", name)
 	}
-	if v.requireMetrics {
-		telemetry := result.SupabaseMetrics
-		if telemetry == nil || telemetry.Status != "available" || len(telemetry.Samples) == 0 || telemetry.IntervalSeconds != 60 || telemetry.Scope != "project" {
-			return nil, fmt.Errorf("%s did not collect live Supabase metrics; inspect result.json", name)
-		}
-		for _, sample := range telemetry.Samples {
-			if sample.Status != "collected" || sample.Series < 1 || sample.StartedAt.IsZero() || sample.FinishedAt.Before(sample.StartedAt) || filepath.Base(sample.File) != sample.File {
-				return nil, fmt.Errorf("%s has an incomplete metrics snapshot", name)
-			}
-			contents, err := os.ReadFile(filepath.Join(v.Evidence, name, sample.File))
-			if err != nil {
-				return nil, err
-			}
-			hash := sha256.Sum256(contents)
-			if hex.EncodeToString(hash[:]) != sample.SHA256 {
-				return nil, fmt.Errorf("%s metrics snapshot checksum differs", name)
-			}
-		}
+	if err := v.checkMetrics(name, result); err != nil {
+		return nil, err
 	}
 	for _, step := range result.Steps {
 		if step.Status != "passed" || step.Measurement == nil || step.Measurement.Metrics == nil || step.Measurement.Metrics.CompletedIterations < 1 || step.Measurement.Metrics.FailedIterations != 0 {
@@ -462,6 +502,29 @@ func (v *verification) bench(name, scenario string, expected int) (*benchmark.Re
 		}
 	}
 	return result, nil
+}
+
+func (v *verification) checkMetrics(name string, result *benchmark.Result) error {
+	if v.requireMetrics {
+		telemetry := result.SupabaseMetrics
+		if telemetry == nil || telemetry.Status != "available" || len(telemetry.Samples) == 0 || telemetry.IntervalSeconds != 60 || telemetry.Scope != "project" {
+			return fmt.Errorf("%s did not collect live Supabase metrics; inspect result.json", name)
+		}
+		for _, sample := range telemetry.Samples {
+			if sample.Status != "collected" || sample.Series < 1 || sample.StartedAt.IsZero() || sample.FinishedAt.Before(sample.StartedAt) || filepath.Base(sample.File) != sample.File {
+				return fmt.Errorf("%s has an incomplete metrics snapshot", name)
+			}
+			contents, err := os.ReadFile(filepath.Join(v.Evidence, name, sample.File))
+			if err != nil {
+				return err
+			}
+			hash := sha256.Sum256(contents)
+			if hex.EncodeToString(hash[:]) != sample.SHA256 {
+				return fmt.Errorf("%s metrics snapshot checksum differs", name)
+			}
+		}
+	}
+	return nil
 }
 
 func verifyCSV(dir string, manifest core.Manifest) error {

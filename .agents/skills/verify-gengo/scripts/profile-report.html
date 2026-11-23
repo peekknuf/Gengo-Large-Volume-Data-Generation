@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gengo profile results</title>
+<style>
+:root {color-scheme:light dark;--foreground:light-dark(#20232b,#ebedf1);--muted:light-dark(#626874,#a3a9b6);--border:light-dark(#dadde4,#363c49);--card:light-dark(#f4f6fa,#202630);--chart-1:light-dark(#155ed7,#79a7ff);--chart-2:light-dark(#13845a,#59c69c);--chart-3:light-dark(#b65a13,#f0ae71);--radius:12px;--font-sans:system-ui,sans-serif}
+body{margin:0;color:var(--foreground);font:14px/1.5 var(--font-sans)}h1{font-size:20px;margin:0 0 8px}h2{font-size:15px;margin:0 0 8px}p{margin:8px 0;color:var(--muted)}select{font:inherit;color:inherit;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 12px}label{display:flex;align-items:center;gap:12px;margin:16px 0}.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.panel{padding:16px;background:var(--card);border-radius:var(--radius)}svg{width:100%;height:220px;overflow:visible}svg text{fill:var(--muted);font:11px var(--font-sans)}.legend{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}.table{overflow-x:auto;margin-top:16px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:var(--muted);font-weight:500}.small{font-size:12px}details{margin:16px 0}summary{cursor:pointer}@media(max-width:560px){.charts{grid-template-columns:1fr}}
+</style></head><body><main data-results="{{.}}">
+<h1>Customer lookup results</h1><p id="scope"></p>
+<label>Experiment profile <select id="profile"><option value="thorough">Thorough</option><option value="quick">Quick</option></select></label>
+<p id="settings"></p><div class="legend" id="legend"></div>
+<div class="charts"><section class="panel"><h2>Throughput · iterations/second</h2><svg id="tps" viewBox="0 0 330 220" role="img" aria-label="Throughput by client count"></svg></section><section class="panel"><h2>Successful-iteration p95 · ms</h2><svg id="latency" viewBox="0 0 330 220" role="img" aria-label="Latency by client count"></svg></section></div>
+<p class="small">Points show the median across repetitions. Vertical whiskers show the observed minimum and maximum. Quick has one sample per point.</p>
+<p id="outcome"></p><div class="table"><table><thead><tr><th>Endpoint</th><th>Clients</th><th>TPS</th><th>p95 ms</th><th>Passed</th><th>Errors</th></tr></thead><tbody id="rows"></tbody></table></div>
+<details><summary>Scope and interpretation</summary><p>This small indexed customer dataset measures this customer-lookup workload from the machine running Gengo. It does not establish production database capacity. Results include network effects and other project activity.</p><p>The profiles use different durations, warm-ups, repetitions, and maximum load. Cross-profile differences are descriptive and do not establish a regression or statistical significance. A median p95 is a median of per-repetition percentiles, not a pooled percentile.</p><p id="thresholds"></p><p>A highest passing tested client count is a lower bound within this sweep; saturation may be above it. Supabase telemetry is project-wide and is not a per-step server measurement.</p><p id="source"></p></details>
+</main><script>
+const runs = JSON.parse(document.querySelector('main').dataset.results);
+const names = {direct: 'Direct', shared: 'Shared Supavisor', dedicated: 'Dedicated PgBouncer'};
+const colors = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'];
+
+function svgElement(name, attributes, text) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function chart(id, field, run) {
+  const svg = document.getElementById(id);
+  svg.replaceChildren();
+  const rows = run.aggregates, levels = run.scenario.concurrency;
+  const maxY = Math.max(...rows.map(row => row[field].max), 1) * 1.12;
+  const minX = Math.min(...levels), maxX = Math.max(...levels);
+  const x = value => 45 + (value - minX) / Math.max(1, maxX - minX) * 265;
+  const y = value => 180 - value / maxY * 155;
+  for (let tick = 0; tick <= 4; tick++) {
+    const value = maxY * tick / 4;
+    svg.append(
+      svgElement('line', {x1: 45, y1: y(value), x2: 310, y2: y(value), stroke: 'var(--border)'}),
+      svgElement('text', {x: 39, y: y(value) + 4, 'text-anchor': 'end'}, value.toFixed(0))
+    );
+  }
+  for (const value of levels) svg.append(svgElement('text', {x: x(value), y: 199, 'text-anchor': 'middle'}, value));
+  svg.append(svgElement('text', {x: 175, y: 218, 'text-anchor': 'middle'}, 'Concurrent clients'));
+  run.scenario.targets.forEach((target, index) => {
+    const data = rows.filter(row => row.target === target), color = colors[index % colors.length];
+    svg.append(svgElement('polyline', {
+      points: data.map(row => `${x(row.concurrency)},${y(row[field].median)}`).join(' '),
+      fill: 'none', stroke: color, 'stroke-width': 2
+    }));
+    for (const row of data) {
+      const xx = x(row.concurrency), values = row[field];
+      svg.append(svgElement('line', {x1: xx, y1: y(values.min), x2: xx, y2: y(values.max), stroke: color, 'stroke-width': 2}));
+      const dot = svgElement('circle', {cx: xx, cy: y(values.median), r: 4, fill: color});
+      dot.append(svgElement('title', {}, `${names[target]} · ${row.concurrency} clients: ${values.median.toFixed(2)} [${values.min.toFixed(2)}, ${values.max.toFixed(2)}]`));
+      svg.append(dot);
+    }
+  });
+}
+
+function render() {
+  const key = document.getElementById('profile').value, run = runs[key], scenario = run.scenario;
+  const customers = run.dataset_identity.counts.dim_customers;
+  document.getElementById('scope').textContent = `${customers.toLocaleString()} customers · seeded point lookups · ${scenario.protocol} protocol · ${new Date(run.started_at).toLocaleString()}`;
+  document.getElementById('settings').textContent = `${scenario.warmup} warm-up + ${scenario.duration} measurement per sample · ${scenario.repetitions} repetition(s) · ${scenario.target_order} endpoint order`;
+  document.getElementById('legend').replaceChildren(...scenario.targets.map((name, index) => {
+    const entry = document.createElement('span'), dot = document.createElement('i');
+    dot.className = 'dot';
+    dot.style.background = colors[index % colors.length];
+    entry.append(dot, document.createTextNode(names[name] || name));
+    return entry;
+  }));
+  chart('tps', 'tps', run);
+  chart('latency', 'successful_iteration_p95_ms', run);
+  document.getElementById('rows').replaceChildren(...run.aggregates.map(aggregate => {
+    const row = document.createElement('tr');
+    const errors = run.steps.filter(step => step.target === aggregate.target && step.concurrency === aggregate.concurrency)
+      .reduce((sum, step) => sum + step.measurement.metrics.failed_iterations, 0);
+    const cells = [names[aggregate.target] || aggregate.target, aggregate.concurrency,
+      aggregate.tps.median.toFixed(2), aggregate.successful_iteration_p95_ms.median.toFixed(2),
+      `${aggregate.passed_repetitions}/${aggregate.expected_repetitions}`, errors];
+    for (const value of cells) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.append(cell);
+    }
+    return row;
+  }));
+  const failed = run.steps.filter(step => step.status !== 'passed').length;
+  document.getElementById('outcome').textContent = `${run.steps.length - failed}/${run.steps.length} samples passed. Supabase telemetry: ${run.supabase_metrics?.status || 'not recorded'} (${run.supabase_metrics?.samples.length || 0} snapshots).`;
+  document.getElementById('thresholds').textContent = `Thresholds: p95 ≤ ${scenario.thresholds.max_p95_ms} ms, error rate ≤ ${scenario.thresholds.max_error_rate}, throughput ≥ ${scenario.thresholds.min_tps} iterations/second. The default pass rule requires every repetition to pass.`;
+  document.getElementById('source').textContent = `Source: profile-${key}/result.json. Dataset ${run.dataset_id}. Profile version ${scenario.profile_version}.`;
+}
+
+document.getElementById('profile').addEventListener('change', render);
+render();
+</script></body></html>

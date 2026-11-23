@@ -413,6 +413,9 @@ func saveResult(directory string, result *Result) error {
 }
 
 func PrintSummary(writer io.Writer, result *Result) {
+	if result.Scenario.Profile != "" {
+		fmt.Fprintf(writer, "Profile: %s (version %d); warm-up %s; measurement %s; repetitions %d; target order %s\n", result.Scenario.Profile, result.Scenario.ProfileVersion, result.Scenario.Warmup, result.Scenario.Duration, repetitions(result.Scenario), targetOrder(result.Scenario))
+	}
 	if telemetry := result.SupabaseMetrics; telemetry != nil {
 		fmt.Fprintf(writer, "Supabase metrics: %s; %d scrape attempts; interval %ds; scope %s\n", telemetry.Status, len(telemetry.Samples), telemetry.IntervalSeconds, telemetry.Scope)
 		if telemetry.Reason != "" {

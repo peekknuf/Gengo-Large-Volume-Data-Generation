@@ -7,8 +7,9 @@ performance-testing tool, with broader Supabase coverage planned. Read
 [product direction](docs/product-direction.md) for agreed scope and delivery status,
 then [codebase map](docs/codebase-map.md) for active paths and known gaps.
 
-Current priority is named quick/thorough experiment profiles. Supabase Metrics API
-snapshots accompany experiments when SUPABASE_API_KEY is configured. Custom SQL,
+Named quick/thorough experiment profiles now supply versioned defaults with
+explicit overrides. Supabase Metrics API snapshots accompany experiments when
+SUPABASE_API_KEY is configured. Custom SQL,
 read/write state policies, arrival-rate sweeps, connection experiments,
 repetitions, and rotating endpoint order work.
 Extend the existing sweeps and saved comparisons.
@@ -37,6 +38,7 @@ Parquet. PostgreSQL import planning and execution support ecommerce CSV.
 | Scenario YAML, pgbench sweeps, measurements, and results | benchmark_command.go, internal/benchmark |
 | Offline saved-run comparisons and compatibility | internal/benchmark/compare.go, docs/benchmark-comparisons.md |
 | Endpoint rounds, repetition statistics, and capacity pass rules | internal/benchmark/repetitions.go, docs/repeated-experiments.md |
+| Named quick/thorough defaults and overrides | internal/benchmark/profiles.go, docs/experiment-profiles.md |
 | Manifest checks and psql script planning | internal/core/load_plan.go |
 | E-commerce column and relationship metadata | internal/schema/ecommerce.go |
 
@@ -163,7 +165,14 @@ min/median/max values. Capacity defaults to all repetitions passing; an explicit
 min_pass_rate can relax threshold failures, while missing samples and execution
 errors never qualify. Repeated burst sweeps passed across all three endpoints;
 direct write audit checks passed reset isolation, reuse, and rollback over three
-repetitions. See docs/repeated-experiments.md. Named profiles remain pending.
+repetitions. See docs/repeated-experiments.md.
+
+Quick/thorough profiles resolve omitted warm-up, duration, repetition, endpoint
+order, and concurrency settings before validation. Explicit overrides remain
+authoritative; results record profile name/version and resolved controls.
+verify-gengo -profiles runs both full defaults on the same 1,000-customer fixture
+across requested endpoints. See docs/experiment-profiles.md. Built-in write
+presets with managed state restoration remain open.
 
 Supabase Metrics API collection uses SUPABASE_API_KEY, including sb_secret keys,
 with a project-wide initial snapshot and one-minute scrapes. Results record UTC

@@ -1,0 +1,13 @@
+version: 1
+name: ecommerce-quick
+profile: quick
+dataset: ../../data/ecommerce
+schema: gengo
+targets: [direct, shared, dedicated]
+workload: customer-lookup
+seed: 42
+protocol: simple
+thresholds:
+  max_p95_ms: 250
+  max_error_rate: 0
+  min_tps: 1

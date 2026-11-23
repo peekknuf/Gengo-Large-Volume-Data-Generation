@@ -28,6 +28,8 @@ type Thresholds struct {
 }
 
 type Scenario struct {
+	Profile         string     `yaml:"profile,omitempty" json:"profile,omitempty"`
+	ProfileVersion  int        `yaml:"-" json:"profile_version,omitempty"`
 	Version         int        `yaml:"version" json:"version"`
 	Name            string     `yaml:"name" json:"name"`
 	Dataset         string     `yaml:"dataset" json:"dataset"`
@@ -75,7 +77,11 @@ func LoadScenario(path string) (Plan, error) {
 	if err != nil || info.Size() > 1<<20 {
 		return Plan{}, fmt.Errorf("scenario must be at most 1 MiB")
 	}
-	decoder := yaml.NewDecoder(io.LimitReader(file, 1<<20))
+	contents, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
+	if err != nil || len(contents) > 1<<20 {
+		return Plan{}, fmt.Errorf("cannot read scenario within the 1 MiB limit")
+	}
+	decoder := yaml.NewDecoder(bytes.NewReader(contents))
 	decoder.KnownFields(true)
 	var scenario Scenario
 	if err := decoder.Decode(&scenario); err != nil {
@@ -84,6 +90,15 @@ func LoadScenario(path string) (Plan, error) {
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return Plan{}, fmt.Errorf("scenario must contain one YAML document")
+	}
+	if scenario.Profile != "" {
+		var fields map[string]yaml.Node
+		if err := yaml.Unmarshal(contents, &fields); err != nil {
+			return Plan{}, fmt.Errorf("cannot read profile overrides")
+		}
+		if err := resolveProfile(&scenario, fields); err != nil {
+			return Plan{}, err
+		}
 	}
 	if scenario.Version != 1 || strings.TrimSpace(scenario.Name) == "" || len(scenario.Name) > 100 {
 		return Plan{}, fmt.Errorf("scenario requires version 1 and a name of 1 to 100 characters")

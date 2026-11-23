@@ -148,6 +148,9 @@ func ReadResult(path string) (*Result, error) {
 }
 
 func validateComparableResult(result *Result) error {
+	if err := validateSavedProfile(result.Scenario); err != nil {
+		return err
+	}
 	if result.Version != 1 || result.Scenario.Version != 1 || result.WorkloadVersion != 1 || (result.Scenario.Workload != "customer-lookup" && result.Scenario.Workload != "custom-sql") || result.LoadModel != loadModel(result.Scenario) {
 		return fmt.Errorf("comparison supports version-1 customer-lookup and custom-sql results")
 	}
@@ -359,6 +362,9 @@ func Compare(baseline, candidate *Result) (*Comparison, error) {
 	}
 	if baseline.SupabaseMetrics != nil || candidate.SupabaseMetrics != nil {
 		comparison.Warnings = append(comparison.Warnings, "Supabase metrics are project-wide snapshots in the original run directories; telemetry is not used for capacity or metric deltas.")
+	}
+	if baseline.Scenario.Profile != candidate.Scenario.Profile || baseline.Scenario.ProfileVersion != candidate.Scenario.ProfileVersion {
+		comparison.Warnings = append(comparison.Warnings, "Profile identities differ; resolved workload and measurement settings match.")
 	}
 	comparison.WorkloadSHA256 = baseline.WorkloadSHA256
 	comparison.SetupSHA256 = baseline.SetupSHA256

@@ -87,8 +87,11 @@ with collection intervals, timestamps, checksums, and unavailable measurements
 recorded. Telemetry supports workload experiments without becoming a prerequisite
 for running them. See [Supabase metrics](supabase-metrics.md).
 
-Next, add named quick/thorough profiles for warm-up, duration, repetitions, load
-steps, and endpoint ordering using the existing experiment controls.
+Named quick/thorough profiles now supply versioned defaults for warm-up,
+duration, repetitions, load steps, and endpoint ordering. Explicit scenario
+overrides and resolved saved settings keep comparisons reproducible. See
+[experiment profiles](experiment-profiles.md). Built-in write presets with
+managed state restoration remain open.
 
 The local PostgreSQL and PgBouncer reference environment remains optional backlog
 work. Shared generation worker and memory budgets and Linux/race verification
@@ -143,7 +146,7 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Target arrival-rate tests with requested and achieved load measurements.
 - [x] Connection churn, bursts, and supported protocol comparisons.
 - [x] Repetitions, rotating endpoint order, aggregate statistics, and explicit capacity pass rules.
-- [ ] Named quick/thorough experiment profiles.
+- [x] Named quick/thorough experiment profiles.
 - [x] Available Supabase Metrics API collection alongside client measurements.
 
 ### Later increments
