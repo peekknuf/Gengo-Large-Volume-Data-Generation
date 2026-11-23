@@ -29,5 +29,5 @@ if [ -n "$go_cache" ]; then
     export GOCACHE
 fi
 
-echo "Running Gengo pre-commit verification against direct, shared, and dedicated targets."
-exec "$go_executable" run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct,shared,dedicated
+echo "Running routine Gengo pre-commit verification against the direct target."
+exec "$go_executable" run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct

@@ -67,10 +67,16 @@ and build, then generation, import, workloads, saved comparison, and verified
 schema cleanup. Evidence stays in the printed temporary directory. Use its
 explicit offline mode when database verification is not intended.
 
-This checkout uses the tracked `.githooks/pre-commit` hook to run the full live
+Routine verification uses one direct endpoint, a tiny dataset, and short
+workloads, while retaining the full correctness suite for all models and formats.
+Dataset scaling, full profiles, required telemetry, and endpoint comparisons are
+explicit experiments. The next dataset experiment uses 10k, 100k, and 1m customers
+on one endpoint, followed by a join or aggregation workload.
+
+This checkout uses the tracked `.githooks/pre-commit` hook to run routine live
 verification before each commit. Enable it in a fresh clone with
-`git config --local core.hooksPath .githooks`. Go, psql, pgbench, and the three
-database targets must be available. Optional local Git settings
+`git config --local core.hooksPath .githooks`. Go, psql, pgbench, and the direct
+database target must be available. Optional local Git settings
 `gengo.goExecutable`, `gengo.goPath`, and `gengo.goCache` support portable Go
 installations. Verification failure blocks the commit; do not bypass it to report
 an unverified commit as checked. The hook verifies the working tree, so include

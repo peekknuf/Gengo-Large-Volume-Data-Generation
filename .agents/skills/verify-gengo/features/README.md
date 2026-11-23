@@ -5,6 +5,11 @@ the helper prints its evidence directory. The standard preconditions are Go 1.25
 the repository root, `psql` and `pgbench` on PATH, and a dotenv file with a direct
 connection plus any requested pooler targets. Credentials are never fixtures.
 
+Routine verification uses only direct, a tiny fixture, and short workloads.
+Use the default helper command; select poolers explicitly for endpoint work.
+Larger dataset scaling and full profile/telemetry checks are separate experiments,
+as described in SKILL.md. Keep the full all-model/format correctness suite.
+
 The default helper covers the five features below through real commands and
 independent observations. `-offline` covers only generation and import planning.
 The automated smoke runs tiny workloads; it does not establish production capacity.

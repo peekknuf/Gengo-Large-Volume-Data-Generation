@@ -93,6 +93,29 @@ overrides and resolved saved settings keep comparisons reproducible. See
 [experiment profiles](experiment-profiles.md). Built-in write presets with
 managed state restoration remain open.
 
+## Verification and performance experiments
+
+Routine verification uses one direct endpoint, a tiny dataset, and short
+workloads. It retains the full model/format correctness suite and the real CLI
+generation/import/workload/comparison workflow with verified schema cleanup.
+The pre-commit hook follows this routine path.
+
+The next performance experiment varies dataset size on one endpoint: 10,000,
+100,000, and 1 million customers, with the same seeded workload and explicit row
+plans. Follow point lookups with a join or aggregation workload so generated
+relationships and dataset size affect the measured work. Keep workload settings
+fixed when attributing differences to dataset size, and record generation/import
+time separately from workload measurements. Scale related tables with declared
+ratios for join workloads, and retain the complete row plan and dataset identity.
+Existing `bench compare` requires matching dataset identities; cross-size analysis
+will need separate reporting. This experiment remains planned.
+
+Endpoint comparisons are explicit experiments for pooling, connection churn,
+bursts, protocols, or behavior under higher load. Keep endpoint support and its
+opt-in coverage. Similar results from the small 1-to-8-client lookup test do not
+establish equivalent behavior for other workloads. Full profiles and required
+telemetry collection are also separate from routine verification.
+
 The local PostgreSQL and PgBouncer reference environment remains optional backlog
 work. Shared generation worker and memory budgets and Linux/race verification
 remain open, but do not gate current Supabase workload experiments. Generation
@@ -148,6 +171,7 @@ Concrete abstractions are introduced alongside working implementations.
 - [x] Repetitions, rotating endpoint order, aggregate statistics, and explicit capacity pass rules.
 - [x] Named quick/thorough experiment profiles.
 - [x] Available Supabase Metrics API collection alongside client measurements.
+- [ ] Single-endpoint dataset-size experiments at 10k/100k/1m customers, followed by a join or aggregation workload.
 
 ### Later increments
 

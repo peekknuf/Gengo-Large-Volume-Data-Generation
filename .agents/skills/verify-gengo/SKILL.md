@@ -1,6 +1,6 @@
 ---
 name: verify-gengo
-description: Build, test, and drive Gengo's real CLI through generation, PostgreSQL imports, benchmarks, saved comparisons, and cleanup. Use after generation or workload changes and for an end-to-end smoke check against configured database targets.
+description: Verify Gengo through tests and a tiny direct-endpoint CLI smoke check. Use after generation or workload changes; larger datasets, full profiles, telemetry checks, and endpoint comparisons are explicit experiments.
 ---
 
 # Verify Gengo
@@ -8,6 +8,27 @@ description: Build, test, and drive Gengo's real CLI through generation, Postgre
 Read [the feature map](features/README.md) before choosing coverage. The primary
 surface is the short-lived `gengo` CLI. There is no server or browser to launch.
 Run from the repository root. Use Go 1.25 or later and the pinned `go.mod`.
+
+## Choose the scope
+
+Routine verification uses one direct endpoint, the tiny three-customer fixture,
+and short workloads. Run the default command below after changes and before
+commits. Keep the full correctness suite across all four models and both formats.
+
+Dataset scaling is a separate performance experiment: use one endpoint, the same
+seed and workload, and explicit row plans at 10k, 100k, and 1m customers. Add a
+join or aggregation workload to exercise relationships beyond point lookups.
+Generation and import time contribute to the experiment's total cost. This is
+the next planned experiment, not an existing helper mode.
+
+Compare endpoints explicitly when investigating pooling, connection churn,
+bursts, protocol behavior, or behavior under higher load. The similar low-load
+lookup results do not establish equivalence under those conditions. Pooler
+coverage remains available through `-targets direct,shared,dedicated` and the
+opt-in live matrix; routine direct verification does not establish that coverage.
+
+Full `-profiles` and `-require-metrics` runs are also explicit checks. Do not add
+them or larger datasets to routine verification unless the task calls for them.
 
 ## Launch
 
@@ -29,13 +50,13 @@ then performs its own explicit live CLI checks. Success means exit code zero,
 `summary.json` status `passed`, database `verified`, and `cleanup_verified: true`.
 Read the summary rather than treating a command's `PASS` line as the whole proof.
 
-The tracked `.githooks/pre-commit` hook runs the all-endpoint smoke check before
-commits. Enable it per clone with `git config --local core.hooksPath .githooks`.
+The tracked `.githooks/pre-commit` hook runs this routine direct-endpoint smoke
+check before commits. Enable it per clone with `git config --local core.hooksPath .githooks`.
 Portable Go installations can use local `gengo.goExecutable`, `gengo.goPath`, and
 `gengo.goCache` Git settings. Failed verification blocks the commit. The hook
 checks the working tree; it does not create an isolated copy of staged files.
 
-To cover every configured endpoint:
+When endpoint comparison or coverage is needed, select all configured endpoints:
 
 ```sh
 go run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct,shared,dedicated
@@ -74,7 +95,7 @@ There is no persistent process to stop after success.
 When anything looks off, run this read-only database check first:
 
 ```sh
-go run ./.agents/skills/verify-gengo/scripts -doctor -env-file .env -targets direct,shared,dedicated
+go run ./.agents/skills/verify-gengo/scripts -doctor -env-file .env
 ```
 
 It builds the current checkout, checks CLI help and client versions, and runs

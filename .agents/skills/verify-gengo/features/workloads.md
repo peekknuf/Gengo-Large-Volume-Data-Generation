@@ -22,7 +22,9 @@ Scenarios are versioned YAML; workload and lifecycle files are separate SQL file
 
 Preconditions: Go/psql/pgbench, direct credentials, and credentials for requested poolers.
 
-- Run `go run ./.agents/skills/verify-gengo/scripts -env-file .env -targets direct,shared,dedicated`.
+- For routine checks, run `go run ./.agents/skills/verify-gengo/scripts -env-file .env`.
+  This uses direct only and a three-customer fixture. Select
+  `-targets direct,shared,dedicated` explicitly for pooler or endpoint coverage.
 - Add `-profiles` to execute both named profiles without overrides on a seeded
   1,000-customer fixture. Inspect `profile-quick/result.json` and
   `profile-thorough/result.json` for 9 and 36 samples respectively with three

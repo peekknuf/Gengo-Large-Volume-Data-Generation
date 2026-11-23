@@ -18,7 +18,8 @@ dedicated, and libpq. `--timeout` bounds the check.
 
 Preconditions: Go, psql, and pgbench on PATH, and supported credentials configured.
 
-- Run `go run ./.agents/skills/verify-gengo/scripts -doctor -env-file .env -targets direct,shared,dedicated`.
+- Run `go run ./.agents/skills/verify-gengo/scripts -doctor -env-file .env`.
+  Add `-targets direct,shared,dedicated` when checking pooler endpoints explicitly.
   Require zero exit status and inspect each `doctor-*.log` for the returned server
   version and connection-check value 1. `doctor-query.sql/log` records a second
   direct query.
